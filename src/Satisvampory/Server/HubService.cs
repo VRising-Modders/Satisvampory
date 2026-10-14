@@ -301,8 +301,7 @@ namespace Satisvampory.Server
                 {
                     Name = name,
                     Kind = edits.Custom.ContainsKey(name) ? "Custom" : edits.Edited.ContainsKey(name) ? "Edited" : "Built-in",
-                    Members = s.Catalog.Members(name).Select(s.Catalog.NameOf).OrderBy(x => x).Take(80).ToList(),
-                });
+                }.Fill(s.Catalog.Members(name).Select(i => (s.Catalog.NameOf(i), i.Guid)).OrderBy(x => x.Item1).Take(80)));
             return msg;
         }
 
@@ -336,6 +335,14 @@ namespace Satisvampory.Server
                 case 5:
                     if (!BeltOps.Move(graph, Id(), q.Index, q.To)) throw new RequestRefusedException("That member is gone; the belt changed.");
                     break;
+                case 7:
+                {
+                    var picked = TargetResolver.Resolve(_ctx, q.PickIndex, q.PickGeneration, q.PickType, out var why)
+                        ?? throw new RequestRefusedException(why);
+                    if (s.World.Find(picked) == null) throw new RequestRefusedException("That is not on this island.");
+                    Must(s.Edits.AddBeltMembers(s.Role, Id(), new[] { picked }));
+                    break;
+                }
                 case 6:
                 {
                     var r = BeltOps.Duplicate(graph, Id(), q.Name, out _);
@@ -526,5 +533,14 @@ namespace Satisvampory.Server
 
         string Label(ServerActions.Island island, PlotId plot) =>
             Labels.Plot(_ctx.Save, island.Castles, ProgenitorWorld.PlotOf(island.Standing), plot);
+    }
+
+    internal static class CategoryMsgFill
+    {
+        internal static CategoryMsg Fill(this CategoryMsg m, IEnumerable<(string Name, int Guid)> items)
+        {
+            foreach (var (name, guid) in items) { m.Members.Add(name); m.Items.Add(guid); }
+            return m;
+        }
     }
 }

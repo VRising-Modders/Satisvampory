@@ -49,10 +49,9 @@ namespace Satisvampory.Client
         List<OverrideMsg> _overrideDraft = new();
 
         // Belts and categories
-        IUiOrderedList _belts = null!;
+        const int BeltsPage = 0, CategoriesPage = 1;
+        IUiMasterDetail _beltsMd = null!;
         IUiInput _beltName = null!, _beltText = null!;
-        IUiLabel _beltDetail = null!;
-        IUiOrderedList _categories = null!;
         IUiInput _catName = null!, _catItem = null!;
         BeltsMsg? _beltsState;
 
@@ -61,6 +60,8 @@ namespace Satisvampory.Client
         IUiToggle _invShort = null!;
         IUiLabel _invIsland = null!;
         IUiDataTable _invTable = null!;
+        IUiChips _invCats = null!;
+        InventoryMsg? _invLast;
         bool _invCanEdit;
         IUiInput _ruleTarget = null!;
         IUiDropdown _ruleKind = null!;
@@ -384,44 +385,83 @@ namespace Satisvampory.Client
 
         void BuildBelts(IUiPanel p)
         {
-            In(BeltsTab, p.Label("A belt is a named list of chests and stations you use together. A category is a named set of items."));
-            _belts = In(BeltsTab, p.OrderedList("belts", Array.Empty<UiListItem>(), new UiOrderedListOptions { Reorder = false, EmptyText = "No belts yet. Make one, then add it to any Input or Output." }));
-            Track(_belts.Term("Belt"));
-            Track(_belts.OnExpand((item, open) => { if (open) ShowBelt(item.Id); }));
-            Track(_belts.OnRemove(item => EditBelt(new BeltEditReq { Op = 2, BeltId = item.Id })));
-            _beltDetail = In(BeltsTab, p.Label(""));
-            _beltName = In(BeltsTab, p.Input("Belt name", ""));
-            Track(In(BeltsTab, p.Button("+ New belt")).OnClick(() => EditBelt(new BeltEditReq { Op = 0, Name = _beltName.Value })));
-            Track(In(BeltsTab, p.Button("Rename selected")).OnClick(() => WithSelectedBelt(id => EditBelt(new BeltEditReq { Op = 1, BeltId = id, Name = _beltName.Value }))));
+            _beltsMd = In(BeltsTab, p.MasterDetail("belts", new UiMasterDetailOptions
+            {
+                Tabs = new[] { "Belts", "Categories" },
+                Rows = 12,
+                SearchPlaceholder = "Search belts or categories",
+                NewCaption = "+ New belt",
+                EmptyText = "No belts yet. Name one below, then + New belt.",
+                DetailEmptyText = "Select a belt to see its chests and where it is used.",
+            }));
+            _beltsMd.SetTexts(CategoriesPage, newCaption: "+ New category", emptyText: "No categories.", detailEmptyText: "Select a category to see its items.");
+            Track(_beltsMd.OnSelected(_ => ShowSelected()));
+            Track(_beltsMd.OnAction(OnBeltAction));
+            Track(_beltsMd.OnReorder(m => WithBelt(id => EditBelt(new BeltEditReq { Op = 5, BeltId = id, Index = m.From, To = m.To }))));
+            Track(_beltsMd.OnRemove(item =>
+            {
+                if (_beltsMd.Tab == BeltsPage) WithBelt(id => EditBelt(new BeltEditReq { Op = 4, BeltId = id, Index = int.Parse(item.Id) }));
+                else if (_beltsMd.SelectedId is { } cat) EditBelt(new BeltEditReq { Op = 12, Name = cat, Text = item.Id });
+            }));
+            _beltName = In(BeltsTab, p.Input("Belt name (new or rename)", ""));
             _beltText = In(BeltsTab, p.Input("Add chests whose name contains", ""));
-            Track(In(BeltsTab, p.Button("+ Add by name")).OnClick(() => WithSelectedBelt(id => EditBelt(new BeltEditReq { Op = 3, BeltId = id, Text = _beltText.Value }))));
-            In(BeltsTab, p.Divider());
-            _categories = In(BeltsTab, p.OrderedList("categories", Array.Empty<UiListItem>(), new UiOrderedListOptions { Reorder = false, Remove = false }));
-            Track(_categories.Term("Category"));
-            _catName = In(BeltsTab, p.Input("Category", ""));
-            _catItem = In(BeltsTab, p.Input("Item", ""));
-            Track(In(BeltsTab, p.Button("+ New category")).OnClick(() => EditBelt(new BeltEditReq { Op = 10, Name = _catName.Value })));
-            Track(In(BeltsTab, p.Button("+ Add item to category")).OnClick(() => EditBelt(new BeltEditReq { Op = 11, Name = _catName.Value, Text = ClientItems.Resolve(_ctx, _catItem.Value) })));
-            Track(In(BeltsTab, p.Button("− Remove item from category")).OnClick(() => EditBelt(new BeltEditReq { Op = 12, Name = _catName.Value, Text = ClientItems.Resolve(_ctx, _catItem.Value) })));
-            Track(In(BeltsTab, p.Button("Restore built-in / delete custom")).OnClick(() => EditBelt(new BeltEditReq { Op = 13, Name = _catName.Value })));
+            _catName = In(BeltsTab, p.Input("Category name (new)", ""));
+            _catItem = In(BeltsTab, p.Input("Item to add to the selected category", ""));
         }
 
-        string? _selectedBelt;
-
-        void WithSelectedBelt(Action<string> act)
+        void WithBelt(Action<string> act)
         {
-            if (_selectedBelt == null) { _ctx.Hud.Notify("Open a belt in the list first.", kind: UiNoticeKind.Info, seconds: 3); return; }
-            act(_selectedBelt);
+            if (_beltsMd.Tab != BeltsPage || _beltsMd.SelectedId == null) { _ctx.Hud.Notify("Select a belt first.", kind: UiNoticeKind.Info, seconds: 3); return; }
+            act(_beltsMd.SelectedId);
         }
 
-        void ShowBelt(string id)
+        void OnBeltAction(UiDetailAction a)
         {
-            _selectedBelt = id;
-            var b = _beltsState?.Belts.FirstOrDefault(x => x.Id == id);
-            if (b == null) return;
-            _beltName.Value = b.Name;
-            _beltDetail.Text = $"{b.Name}:\n  " + (b.Members.Count == 0 ? "no chests yet" : string.Join("\n  ", b.Members.Select(m => $"{m.Name} · {m.Where}")))
-                + (b.UsedBy.Count == 0 ? "\nNot used anywhere yet." : "\nUsed by: " + string.Join("; ", b.UsedBy));
+            if (a.Tab == BeltsPage)
+            {
+                switch (a.ActionId)
+                {
+                    case UiDetailAction.New: EditBelt(new BeltEditReq { Op = 0, Name = _beltName.Value }); break;
+                    case "rename": EditBelt(new BeltEditReq { Op = 1, BeltId = a.EntryId, Name = _beltName.Value }); break;
+                    case "duplicate": EditBelt(new BeltEditReq { Op = 6, BeltId = a.EntryId, Name = _beltName.Value }); break;
+                    case "delete": EditBelt(new BeltEditReq { Op = 2, BeltId = a.EntryId }); break;
+                    case "byname": EditBelt(new BeltEditReq { Op = 3, BeltId = a.EntryId, Text = _beltText.Value }); break;
+                    case "pick": PickBeltMembers(a.EntryId); break;
+                }
+                return;
+            }
+            switch (a.ActionId)
+            {
+                case UiDetailAction.New: EditBelt(new BeltEditReq { Op = 10, Name = _catName.Value }); break;
+                case "additem": EditBelt(new BeltEditReq { Op = 11, Name = a.EntryId, Text = ClientItems.Resolve(_ctx, _catItem.Value) }); break;
+                case "restore": EditBelt(new BeltEditReq { Op = 13, Name = a.EntryId }); break;
+            }
+        }
+
+        /// <summary>Pick in world, repeated: every container or station interacted with joins the belt until Esc.</summary>
+        void PickBeltMembers(string beltId)
+        {
+            var panel = Panel;
+            UiApi.Hide(panel);
+            var added = 0;
+            _ctx.Hud.PickInWorld(result =>
+            {
+                if (!result.IsCurrent || !result.HasNetworkId)
+                {
+                    _ctx.Hud.Notify("That was not a container or station Satisvampory can use.", kind: UiNoticeKind.Warning, seconds: 4);
+                    return;
+                }
+                Send<BeltEditReq, BeltsMsg>(new BeltEditReq { Op = 7, BeltId = beltId, PickIndex = result.NetworkIdIndex, PickGeneration = result.NetworkIdGeneration, PickType = result.NetworkId2 }, m =>
+                {
+                    added++;
+                    _beltsState = m;
+                    _ctx.Hud.Notify($"Added to the belt ({added} so far). Keep picking, Esc to finish.", kind: UiNoticeKind.Success, seconds: 3);
+                });
+            }, () =>
+            {
+                UiApi.Show(panel);
+                Send<GetBeltsReq, BeltsMsg>(new GetBeltsReq(), DrawBelts);
+            }, new UiWorldPickOptions { Repeat = true, Prompt = "Interact with chests or stations to add them to the belt. Esc to finish." });
         }
 
         void EditBelt(BeltEditReq req) => Send<BeltEditReq, BeltsMsg>(req, DrawBelts);
@@ -430,20 +470,67 @@ namespace Satisvampory.Client
         {
             _ = Panel;
             _beltsState = m;
-            _belts.SetItems(m.Belts.Select(b => new UiListItem(b.Id, b.Name)
+            _beltsMd.SetEntries(BeltsPage, m.Belts.Select(b => new UiMasterEntry(b.Id, b.Name)
             {
-                Note = $"{b.Members.Count} chests" + (b.UsedBy.Count > 0 ? $" · used by {b.UsedBy.Count}" : ""),
-                Detail = string.Join(", ", b.Members.Select(x => $"{x.Name} ({x.Where})")),
-                Removable = m.CanEdit,
+                Note = $"{b.Members.Count} chests",
+                Badge = b.UsedBy.Count > 0 ? b.UsedBy.Count.ToString() : "",
+                Tooltip = b.UsedBy.Count == 0 ? "Not used anywhere yet." : "Used by " + b.UsedBy.Count,
+                Keywords = b.Members.Select(x => x.Name).ToList(),
+                Term = "Belt",
             }));
-            _categories.SetItems(m.Categories.Select(c => new UiListItem(c.Name, c.Name)
+            _beltsMd.SetEntries(CategoriesPage, m.Categories.Select(c => new UiMasterEntry(c.Name, c.Name)
             {
-                Badge = c.Kind,
                 Note = $"{c.Members.Count} items",
-                Detail = string.Join(", ", c.Members.Take(30)),
-                Removable = false,
+                Badge = c.Kind == "Built-in" ? "" : c.Kind,
+                Keywords = c.Members,
+                Term = "Category",
             }));
-            if (_selectedBelt != null) ShowBelt(_selectedBelt);
+            ShowSelected();
+        }
+
+        void ShowSelected()
+        {
+            var m = _beltsState;
+            if (m == null || _beltsMd.SelectedId is not { } id) return;
+            var edit = m.CanEdit;
+            if (_beltsMd.Tab == BeltsPage)
+            {
+                var b = m.Belts.FirstOrDefault(x => x.Id == id);
+                if (b == null) return;
+                var lines = new List<UiDetailLine>
+                {
+                    UiDetailLine.Title(b.Name,
+                        new UiDetailButton("rename", "Rename") { Enabled = edit },
+                        new UiDetailButton("duplicate", "Duplicate") { Enabled = edit },
+                        new UiDetailButton("delete", "Delete") { Enabled = edit }),
+                    UiDetailLine.Heading("Chests and stations", b.Members.Count, "Belt"),
+                    UiDetailLine.MemberList(b.Members.Select((x, i) => new UiListItem(i.ToString(), x.Name) { Note = x.Where, Removable = edit }),
+                        reorder: edit, remove: edit, emptyText: "No chests yet. Pick them in the world or add by name."),
+                    UiDetailLine.Actions(
+                        new UiDetailButton("pick", "◎ Pick in world") { Enabled = edit },
+                        new UiDetailButton("byname", "+ Add by name") { Enabled = edit }),
+                    UiDetailLine.Heading("Used by", b.UsedBy.Count),
+                };
+                if (b.UsedBy.Count == 0) lines.Add(UiDetailLine.Line("Not used anywhere yet. Add it to an Input or Output."));
+                lines.AddRange(b.UsedBy.Select(u => UiDetailLine.Line(u, LabelTone.Normal)));
+                _beltsMd.SetDetail(BeltsPage, lines);
+            }
+            else
+            {
+                var c = m.Categories.FirstOrDefault(x => x.Name == id);
+                if (c == null) return;
+                var lines = new List<UiDetailLine>
+                {
+                    UiDetailLine.Title(c.Name, new UiDetailButton("restore", c.Kind == "Custom" ? "Delete" : "Restore built-in") { Enabled = edit && c.Kind != "Built-in" }),
+                    UiDetailLine.Line(c.Kind == "Built-in" ? "Built-in. Adding or removing an item makes an island copy." : c.Kind == "Edited" ? "A built-in category, changed on this island." : "Made on this island."),
+                    UiDetailLine.Heading("Items", c.Members.Count, "Category"),
+                    UiDetailLine.MemberList(c.Members.Select((x, i) => new UiListItem(i < c.Items.Count ? c.Items[i].ToString() : x, x) { Removable = edit }),
+                        reorder: false, remove: edit, emptyText: "No items yet."),
+                    UiDetailLine.Actions(new UiDetailButton("additem", "+ Add item") { Enabled = edit }),
+                };
+                if (c.Members.Count >= 80) lines.Add(UiDetailLine.Line("Showing the first 80."));
+                _beltsMd.SetDetail(CategoriesPage, lines);
+            }
         }
 
         // ---------------- Inventory ----------------
@@ -458,6 +545,15 @@ namespace Satisvampory.Client
             Track(In(InventoryTab, p.Button("Refresh")).OnClick(LoadInventory));
             Track(_invShort.OnChanged(_ => LoadInventory()));
             _invIsland = In(InventoryTab, p.Label(""));
+            _invCats = In(InventoryTab, p.Chips("inv.cats", Array.Empty<UiChip>(), new UiChipsOptions
+            {
+                Toggle = true,
+                Remove = false,
+                MaxLines = 2,
+                EmptyText = "",
+            }));
+            Track(_invCats.Term("Category"));
+            Track(_invCats.OnClick(_ => { if (_invLast != null) DrawInventory(_invLast); }));
             _invTable = In(InventoryTab, p.DataTable("inv", new[]
             {
                 new UiTableColumn("item", "Item") { Hideable = false },
@@ -495,9 +591,21 @@ namespace Satisvampory.Client
         void DrawInventory(InventoryMsg m)
         {
             static string From(int f) => f == 1 ? "category" : "default";
+            static IEnumerable<string> Cats(InventoryRowMsg r) => r.Categories.Split(',').Select(c => c.Trim()).Where(c => c.Length > 0);
+            var fresh = !ReferenceEquals(m, _invLast);
+            _invLast = m;
             _invCanEdit = m.CanEdit;
             _invIsland.Text = m.Island + (m.Rows.Count >= 500 ? " · first 500 items; narrow with Search." : "");
-            _invTable.SetRows(m.Rows.Select(r =>
+
+            // Category chips (spec 15): the categories present, most items first; selected ones filter the table.
+            var picked = new HashSet<string>(_invCats.SelectedIds);
+            if (fresh)
+                _invCats.SetChips(m.Rows.SelectMany(Cats).GroupBy(c => c).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(24)
+                    .Select(g => new UiChip(g.Key, g.Key) { Note = g.Count().ToString(), Removable = false, Selected = picked.Contains(g.Key), Tooltip = "Show only " + g.Key }));
+            picked = new HashSet<string>(_invCats.SelectedIds);
+            var rows = picked.Count == 0 ? m.Rows : m.Rows.Where(r => Cats(r).Any(picked.Contains)).ToList();
+
+            _invTable.SetRows(rows.Select(r =>
             {
                 var row = new UiTableRow(r.Item.ToString()) { ItemPrefab = r.Item, Detail = r.Categories.Length > 0 ? "Categories: " + r.Categories : "" };
                 row.Text("item", ClientItems.NameOf(_ctx, r.Item, r.Name))

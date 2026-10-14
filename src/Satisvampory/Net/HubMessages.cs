@@ -125,6 +125,8 @@ namespace Satisvampory.Net
         /// <summary>"Built-in", "Edited", "Custom".</summary>
         [Field(2)] public string Kind = "";
         [Field(3)] public List<string> Members = new();
+        /// <summary>Item guids, same order as <see cref="Members"/>.</summary>
+        [Field(4)] public List<int> Items = new();
     }
 
     [ModMessage("sv.belts")]
@@ -145,6 +147,7 @@ namespace Satisvampory.Net
     public sealed class BeltEditReq
     {
         /// <summary>0 create, 1 rename, 2 delete, 3 add members by name, 4 remove member, 5 move member, 6 duplicate,
+        /// 7 add the member picked in the world (Pick* fields),
         /// 10 category create/replace members, 11 category add item, 12 category remove item, 13 category restore/delete.</summary>
         [Field(1)] public int Op;
         [Field(2)] public string BeltId = "";
@@ -152,6 +155,9 @@ namespace Satisvampory.Net
         [Field(4)] public string Text = "";
         [Field(5)] public int Index;
         [Field(6)] public int To;
+        [Field(7)] public int PickIndex;
+        [Field(8)] public int PickGeneration;
+        [Field(9)] public int PickType;
     }
 
     // ---------------- Inventory ----------------

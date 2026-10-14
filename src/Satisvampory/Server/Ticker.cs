@@ -92,7 +92,10 @@ namespace Satisvampory.Server
                 var state = SaveCodec.Restore(save, out _);
                 if (state.Graph.Lists.Count == 0) continue;
 
-                var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null);
+                var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
+                {
+                    TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
+                };
                 var scope = members.Select(ProgenitorWorld.PlotOf).ToList();
                 var deposit = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, scope, plot)
                 {
@@ -224,7 +227,10 @@ namespace Satisvampory.Server
             var (key, members) = IslandOf(castle, all, Sharing(server));
             var save = Stores.Island(_ctx.Save, key);
             var state = save == null ? new IslandState() : SaveCodec.Restore(save, out _);
-            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null);
+            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
+                {
+                    TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
+                };
             var heartRef = _ctx.Inventory.Of(castle.Heart.ToEntity());
             var heartId = world.AddBag(heartRef);
             var plot = ProgenitorWorld.PlotOf(castle);

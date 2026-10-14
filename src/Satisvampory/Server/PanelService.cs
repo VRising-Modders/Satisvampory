@@ -42,6 +42,8 @@ namespace Satisvampory.Server
             _ctx.Requests.Handle<SetDepositReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetDeposit(s, r)));
             _ctx.Requests.Handle<PickerReq, PickerReply>((u, r, i) => With(u, r.Target, s => PickerRows(s, r)));
             _ctx.Requests.Handle<TryItReq, TryItReply>((u, r, i) => With(u, r.Target, s => TryIt(s, r)));
+            _ctx.Requests.Handle<SetRecipesReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetRecipes(s, r)));
+            _ctx.Requests.Handle<SetLoopReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetLoop(s, r)));
         }
 
         // ---------------- session per request ----------------
@@ -65,7 +67,10 @@ namespace Satisvampory.Server
                 ?? throw new RequestRefusedException("Stand on one of your or your clan's castles to change logistics.");
             var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)
+            {
+                TableRecipesOn = id => island.State.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
+            };
 
             var id = TargetResolver.Resolve(_ctx, target, out var why)
                 ?? throw new RequestRefusedException(why);
@@ -205,6 +210,34 @@ namespace Satisvampory.Server
             return reply;
         }
 
+        PanelMsg SetRecipes(Session s, SetRecipesReq r)
+        {
+            if (s.Role == ActorRole.Guest) throw new RequestRefusedException("Clan members can change recipes.");
+            if (s.Container.Kind != NodeKind.Station) throw new RequestRefusedException("Only stations have recipes.");
+            var wanted = new HashSet<int>(r.On);
+            var table = new HashSet<int>();
+            foreach (var row in s.World.RecipeRows(s.Container.Id))
+            {
+                var on = wanted.Contains(row.Guid);
+                if (row.GameToggle)
+                {
+                    if (row.On != on && !s.World.SetGameRecipe(s.Container.Id, row.Guid, on))
+                        throw new RequestRefusedException($"The game refused to switch {row.Name}.");
+                }
+                else if (on) table.Add(row.Guid);
+            }
+            s.Island.State.TableRecipesOn[s.Container.Id] = table;
+            Save(s);
+            return Panel(s);
+        }
+
+        PanelMsg SetLoop(Session s, SetLoopReq r)
+        {
+            Must(s.Edits.SetLoopMode(s.Role, r.LoopKey, (LoopMode)Math.Clamp(r.Mode, 0, 2)));
+            Save(s);
+            return Panel(s);
+        }
+
         TryItReply TryIt(Session s, TryItReq r)
         {
             if (!TryItem(s.Catalog, r.Item, out var item)) throw new RequestRefusedException($"No item called \"{r.Item}\".");
@@ -273,7 +306,18 @@ namespace Satisvampory.Server
                 var mode = s.Island.State.LoopModes.TryGetValue(loop.Key, out var m) ? m : LoopMode.CycleOnce;
                 var waiting = report!.Diagnostics.TryGetValue(c.Id, out var dg) && dg.Contains("loop-waiting");
                 msg.LoopBanner = $"Loop · {loop.Members.Count} chests · {Mode(mode)}{(waiting ? " · waiting for a change" : "")}";
+                msg.LoopKey = loop.Key;
+                msg.LoopMode = (int)mode;
             }
+            if (c.Kind == NodeKind.Station)
+                foreach (var row in s.World.RecipeRows(c.Id))
+                    msg.Recipes.Add(new RecipeMsg
+                    {
+                        Guid = row.Guid,
+                        Name = Pretty(row.Name),
+                        Inputs = string.Join(" + ", row.Inputs.Select(x => $"{x.Amount} {s.Catalog.NameOf(x.Item)}")),
+                        On = row.On,
+                    });
             return msg;
         }
 
@@ -328,6 +372,10 @@ namespace Satisvampory.Server
 
         // ---------------- helpers ----------------
 
+        /// <summary>"Recipe_Ingredient_IronIngot" → "Ingredient Iron Ingot"; the client shows its own names once the catalog lands.</summary>
+        static string Pretty(string recipe) =>
+            Engine.Model.CatalogBuilder.DisplayNameOf(new GameItem(1, (recipe ?? "").Replace("Recipe_", "Item_"), null, 1, 0, 0));
+
         static string Mode(LoopMode m) => m switch { LoopMode.EvenDistribution => "even distribution", LoopMode.Off => "off", _ => "cycle once" };
 
         static string Explain(string code) => code switch
@@ -345,14 +393,8 @@ namespace Satisvampory.Server
             _ => code,
         };
 
-        static string PlotLabel(ServerActions.Island island, PlotId plot)
-        {
-            if (plot == ProgenitorWorld.PlotOf(island.Standing)) return "here";
-            var c = island.Castles.FirstOrDefault(x => ProgenitorWorld.PlotOf(x) == plot);
-            if (c == null) return "elsewhere";
-            var name = c.Name;
-            return string.IsNullOrWhiteSpace(name) ? $"Plot {c.Territory.Index}" : name;
-        }
+        string PlotLabel(ServerActions.Island island, PlotId plot) =>
+            Labels.Plot(_ctx.Save, island.Castles, ProgenitorWorld.PlotOf(island.Standing), plot);
 
         static string Describe(ItemCatalog catalog, ItemFilter f)
         {

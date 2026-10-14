@@ -27,6 +27,7 @@ namespace Satisvampory.Client
         readonly ListView _output;
         readonly DepositView _deposit;
         readonly PickerView _picker;
+        readonly RecipesView _recipes;
 
         internal Panels(SatisContext ctx)
         {
@@ -35,6 +36,7 @@ namespace Satisvampory.Client
             _output = new ListView(this, 1);
             _deposit = new DepositView(this);
             _picker = new PickerView(this);
+            _recipes = new RecipesView(this);
         }
 
         internal SatisContext Ctx => _ctx;
@@ -108,6 +110,7 @@ namespace Satisvampory.Client
             _input.Redraw();
             _output.Redraw();
             _deposit.Redraw();
+            _recipes.Redraw();
         }
 
         internal void Send<TReq, TReply>(TReq req, Action<TReply> ok) where TReq : class, new() where TReply : class, new() =>
@@ -120,6 +123,8 @@ namespace Satisvampory.Client
         internal void Edit(EditListReq req) => Send<EditListReq, PanelMsg>(req, Apply);
 
         internal void OpenPicker(int side) => _picker.Show(side);
+
+        internal void OpenRecipes() => _recipes.Show();
 
         static string Reason(RequestStatus status, string reason) => status switch
         {
@@ -136,6 +141,7 @@ namespace Satisvampory.Client
             _output.Hide();
             _deposit.Hide();
             _picker.Hide();
+            _recipes.Hide();
         }
     }
 
@@ -188,6 +194,8 @@ namespace Satisvampory.Client
         IUiDropdown _order = null!;
         IUiOrderedList _list = null!;
         IUiLabel _loop = null!;
+        IUiDropdown _loopMode = null!;
+        IUiButton _recipesButton = null!;
         IUiInput _tryAmount = null!;
         IUiInput _tryItem = null!;
         IUiLabel _tryResult = null!;
@@ -236,6 +244,18 @@ namespace Satisvampory.Client
             ctx.Track(panel.Button("◎ Pick in world").OnClick(() =>
                 ctx.Hud.Notify("Pick in world needs Progenitor to report the picked chest's network id; use Add… for now.", kind: UiNoticeKind.Info, seconds: 6)));
             _loop = panel.Label("");
+            _loopMode = panel.Dropdown("Loop mode", new[] { "0", "1", "2" }, "0", new[] { "Cycle once, then wait", "Even distribution", "Off (closing edge never runs)" });
+            ctx.Track(_loopMode.OnChanged(v =>
+            {
+                if (_redrawing || Owner.State == null || Owner.State.LoopKey.Length == 0) return;
+                Owner.Send<SetLoopReq, PanelMsg>(new SetLoopReq { Target = Owner.Target(), LoopKey = Owner.State.LoopKey, Mode = int.Parse(v) }, Owner.Apply);
+            }));
+            if (_side == 0)
+            {
+                _recipesButton = panel.Button("Recipes…");
+                ctx.Track(_recipesButton.OnClick(Owner.OpenRecipes));
+                ctx.Track(_recipesButton.Tooltip("Which recipes this station works on. Only switched-on recipes pull inputs.", "Recipes"));
+            }
 
             panel.Divider();
             _tryAmount = panel.Input("Try it: amount", "100");
@@ -264,6 +284,9 @@ namespace Satisvampory.Client
                 }));
                 _loop.Text = s.LoopBanner;
                 _loop.Visible = s.LoopBanner.Length > 0;
+                _loopMode.Visible = s.LoopKey.Length > 0;
+                _loopMode.Value = s.LoopMode.ToString();
+                if (_side == 0) _recipesButton.Visible = s.NodeKind == 1;
             }
             finally
             {
@@ -472,6 +495,47 @@ namespace Satisvampory.Client
 
         public override void Redraw()
         {
+        }
+    }
+
+    /// <summary>A station's recipe switches (spec 04): selected recipes are on.</summary>
+    internal sealed class RecipesView : View
+    {
+        IUiLabel _note = null!;
+        IUiPicker _picker = null!;
+
+        public RecipesView(Panels owner) : base(owner)
+        {
+        }
+
+        protected override string Title => "Recipes";
+
+        protected override void Build(IUiPanel panel)
+        {
+            var ctx = Owner.Ctx;
+            _note = panel.Label("Select the recipes this station should work on. Only those pull inputs, and only in whole crafts.");
+            _picker = panel.Picker("recipes", Array.Empty<UiPickerEntry>(), new UiPickerOptions { Multi = true, Rows = 12, Placeholder = "Search recipes" });
+            ctx.Track(panel.Button("Apply").OnClick(() =>
+                Owner.Send<SetRecipesReq, PanelMsg>(new SetRecipesReq
+                {
+                    Target = Owner.Target(),
+                    On = _picker.Selected.Select(int.Parse).ToList(),
+                }, reply =>
+                {
+                    Owner.Apply(reply);
+                    ctx.Hud.Notify("Recipes updated.", kind: UiNoticeKind.Success, seconds: 3);
+                })));
+        }
+
+        public override void Redraw()
+        {
+            var s = Owner.State;
+            if (s == null || s.NodeKind != 1) return;
+            _ = Panel;
+            _picker.SetEntries(s.Recipes.Select(r => new UiPickerEntry(r.Guid.ToString(), r.Name) { Note = r.Inputs }));
+            _picker.ClearSelection();
+            foreach (var r in s.Recipes.Where(r => r.On)) _picker.Select(r.Guid.ToString());
+            _note.Visible = true;
         }
     }
 }

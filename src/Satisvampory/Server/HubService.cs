@@ -73,7 +73,10 @@ namespace Satisvampory.Server
             var relation = _ctx.Castles.RelationTo(userEntity, island.Standing);
             var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)
+            {
+                TableRecipesOn = id => island.State.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
+            };
             var standing = ProgenitorWorld.PlotOf(island.Standing);
             return body(new Session
             {
@@ -496,14 +499,7 @@ namespace Satisvampory.Server
             return catalog.TryResolveItem(text ?? string.Empty, out item);
         }
 
-        string Label(ServerActions.Island island, PlotId plot)
-        {
-            if (plot == ProgenitorWorld.PlotOf(island.Standing)) return "here";
-            var c = island.Castles.FirstOrDefault(x => ProgenitorWorld.PlotOf(x) == plot);
-            if (c == null) return "elsewhere";
-            var custom = Stores.Castle(_ctx.Save, c.Territory.Index).PlotLabel;
-            if (!string.IsNullOrWhiteSpace(custom)) return custom;
-            return string.IsNullOrWhiteSpace(c.Name) ? $"Plot {c.Territory.Index}" : c.Name;
-        }
+        string Label(ServerActions.Island island, PlotId plot) =>
+            Labels.Plot(_ctx.Save, island.Castles, ProgenitorWorld.PlotOf(island.Standing), plot);
     }
 }

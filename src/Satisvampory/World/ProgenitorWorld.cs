@@ -35,6 +35,9 @@ namespace Satisvampory.World
         readonly Dictionary<PlotId, ICastleHandle> _castles = new();
         readonly Func<EngineId, DepositOptions?> _deposit;
 
+        /// <summary>Satisvampory's switches for crafting-table recipes; null means all off.</summary>
+        public Func<EngineId, ISet<int>?>? TableRecipesOn { get; set; }
+
         public ProgenitorWorld(PluginInventory inventory, Progenitor.Stations.PluginStations? stations, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit)
         {
             _inv = inventory;
@@ -108,13 +111,30 @@ namespace Satisvampory.World
         /// switch. Crafting tables have none, so their recipes count as off until Satisvampory's
         /// table switches exist (spec 04: default off).
         /// </summary>
+        /// <summary>Raw rows for the recipe switches panel: guid, name, inputs, whether the game toggles it, and on.</summary>
+        public IReadOnlyList<(int Guid, string Name, IReadOnlyList<ItemStack> Inputs, bool GameToggle, bool On)> RecipeRows(EngineId station)
+        {
+            if (_stations == null || !_nodes.TryGetValue(station, out var n) || n.Info.Kind != NodeKind.Station)
+                return Array.Empty<(int, string, IReadOnlyList<ItemStack>, bool, bool)>();
+            var mine = TableRecipesOn?.Invoke(station);
+            return _stations.Recipes(n.Entity)
+                .Where(r => !r.HiddenInStation)
+                .Select(r => (r.RecipeGuid, r.Name, (IReadOnlyList<ItemStack>)r.Inputs.Select(x => new ItemStack(new ItemId(x.ItemGuid), x.Amount)).ToList(),
+                    r.CanToggle, r.CanToggle ? r.Enabled : mine?.Contains(r.RecipeGuid) == true))
+                .ToList();
+        }
+
+        /// <summary>The game's own switch, for refinement stations.</summary>
+        public bool SetGameRecipe(EngineId station, int recipe, bool on) =>
+            _stations != null && _nodes.TryGetValue(station, out var n) && _stations.SetRecipeEnabled(n.Entity, recipe, on).Ok;
+
         public IReadOnlyList<Recipe> Recipes(EngineId station)
         {
             if (_stations == null || !_nodes.TryGetValue(station, out var n) || n.Info.Kind != NodeKind.Station) return Array.Empty<Recipe>();
             var list = new List<Recipe>();
             foreach (var r in _stations.Recipes(n.Entity))
             {
-                var on = r.CanToggle && r.Enabled;
+                var on = r.CanToggle ? r.Enabled : TableRecipesOn?.Invoke(station)?.Contains(r.RecipeGuid) == true;
                 list.Add(new Recipe(
                     r.RecipeGuid,
                     r.Inputs.Select(x => new ItemStack(new ItemId(x.ItemGuid), x.Amount)).ToList(),

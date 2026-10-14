@@ -93,6 +93,36 @@ namespace Satisvampory.Net
         /// <summary>Whether Pull: reverse Mass Deposit may be offered on the Input (stations, hearts).</summary>
         [Field(13)] public bool HasDemand;
         [Field(14)] public bool HasOutput = true;
+        /// <summary>The loop this container is in, for changing its mode; empty when none.</summary>
+        [Field(15)] public string LoopKey = "";
+        /// <summary>0 cycle once, 1 even distribution, 2 off.</summary>
+        [Field(16)] public int LoopMode;
+        [Field(17)] public List<RecipeMsg> Recipes = new();
+    }
+
+    [ModMessage("sv.recipe")]
+    public sealed class RecipeMsg
+    {
+        [Field(1)] public int Guid;
+        [Field(2)] public string Name = "";
+        [Field(3)] public string Inputs = "";
+        [Field(4)] public bool On;
+    }
+
+    [ModMessage("sv.recipes.set")]
+    public sealed class SetRecipesReq
+    {
+        [Field(1)] public TargetMsg Target = new();
+        /// <summary>Every recipe guid that should be on; all others are switched off.</summary>
+        [Field(2)] public List<int> On = new();
+    }
+
+    [ModMessage("sv.loop.set")]
+    public sealed class SetLoopReq
+    {
+        [Field(1)] public TargetMsg Target = new();
+        [Field(2)] public string LoopKey = "";
+        [Field(3)] public int Mode;
     }
 
     [ModMessage("sv.panel.get")]

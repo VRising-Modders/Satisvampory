@@ -95,7 +95,10 @@ namespace Satisvampory.Server
             var island = Resolve(ctx, half, userEntity, user);
             if (island == null) return Notice(NoticeCode.Refused);
 
-            var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
+            var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)
+            {
+                TableRecipesOn = id => island.State.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
+            };
             var deposit = new DepositContext(half.Catalog.Current.WithEdits(island.State.Categories), world, island.Scope, ProgenitorWorld.PlotOf(island.Standing))
             {
                 Settings = island.State.MassDeposit,

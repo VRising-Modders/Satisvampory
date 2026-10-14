@@ -1,5 +1,10 @@
 # 10 — Settings
 
+Where each part lives:
+
+- **Me, Keys, Server, Help** are sections of Satisvampory's page in Progenitor's Mods menu. Server rows are synced from the server and editable by admins in-game; admin actions (import) are buttons there whose requests the server checks.
+- **Castle, Mass Deposit, Belts and categories, Inventory, Find** are tabs of the Satisvampory hub panel, opened from keybinds and from the Stash / Satisvampory buttons beside the inventory's sort button. They need the server's per-castle and per-island state, which a config page cannot hold.
+
 Built on Progenitor's settings pages (`ctx.Settings.Page`) and keybinds (`ctx.Keybinds`), reached from Progenitor's Mods menu and from Satisvampory's own panels. Every value is server-owned: the client shows what the server last sent and sends a change request. Rows the player may not change are shown locked with who can change them.
 
 ## Me

@@ -33,3 +33,22 @@ Satisvampory 2.0 has **no** `.` commands, not even for admins. Every admin actio
 | **S8** | Settings pages complete, admin port, localization, package | Every 1.x `.sg` allow has a Server row; package installs clean |
 
 Autoloot is a separate mod with its own milestones; it starts once Progenitor's settings and keybinds are live-verified.
+
+## Status (2026-10-14)
+
+Built and tested outside the game; nothing has run in-game yet.
+
+| Area | State |
+|---|---|
+| Engine (lists, Mass Deposit by settings, sharing, stations, loops, specials, servant logic, heart feed, evaluator, import) | done, unit-tested |
+| Plugin: settings page (Me, Keys, Server, Help), player settings sync, admin import Check / Import | done |
+| Plugin: conveyor tick, special chests, heart blood feed on visit and login, stash from anywhere | done |
+| Plugin: Input / Output / Deposit settings panels, picker, Try it, recipe switches, loop mode, Empty trash | done; container identity waits on Progenitor's network-id resolver |
+| Plugin: hub (Castle, Mass Deposit, Belts and categories, Inventory, Find), Stash button, tooltip line | done |
+| Item catalog from the game | waits on Progenitor `ctx.Items.Catalog`; engine builder done |
+| Crafting and building from shared storage | waits on Progenitor P3 merge; policy done |
+| Double-tap sort to stash | waits on Progenitor's sort event (in progress) |
+| Servants (loot stash, repeat hunts, hunt log, throne targeting) | waits on Progenitor's mission API (in progress); engine logic done |
+| Brazier lighting (night, proximity) | waits on Progenitor's brazier, day/night and player-position APIs (in progress); fuel works |
+| Pick in world, Locate | wait on the resolver and pick-result network id |
+| Data-table inventory, term tooltips, tip cards | wait on Progenitor P7b; text versions in place |

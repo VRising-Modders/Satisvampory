@@ -9,7 +9,7 @@ When a player opens a container or station, the vanilla panel gains two small ic
 
 A third control, the **Deposit settings** gear beside the rename field, holds what the chest takes for Mass Deposit, its priorities and bans. It is not a list; see `01-containers.md`, "Deposit settings".
 
-The input and output buttons each show a small count badge (number of entries) and turns the game's warning red when an entry is blocked. Clicking opens a side panel anchored to that edge of the vanilla window, styled like the vanilla tooltip and side panels. Only one side panel is open at a time.
+The input and output buttons each show a small count badge (number of entries) and turns the game's warning red when an entry is blocked. Clicking opens a Satisvampory panel beside the vanilla window: Progenitor attaches the buttons to the vanilla window, and the panel itself is Satisvampory's own, closed together with the window. Only one side panel is open at a time.
 
 Guests see the buttons and can open the panels read-only, with the tooltip "Clan members can change logistics".
 

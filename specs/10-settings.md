@@ -88,7 +88,7 @@ Same switches as 1.x's server toggles, rewritten. Every allow defaults ON except
 | Diagnostics: work-queue depth, last tick cost, item catalog summary | info rows, refreshed while the page is open |
 | Allow unmodded clients | OFF |
 | Satisvampory version and save version | info |
-| Import from Satisvampory 1.x: **Check** (dry run: what would carry over, what would not) and **Import** | buttons; result shown in an info row |
+| Import from Satisvampory 1.x or KindredLogistics: **Check** (dry run: what would carry over, what would not) and **Import** | buttons; result shown in an info row |
 
 ## Who honors reserve
 

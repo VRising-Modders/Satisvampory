@@ -37,8 +37,8 @@ namespace Satisvampory.Config
 
                 page.Info("Version", () => $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · island save v{Engine.Persistence.IslandSave.CurrentVersion}", refreshSeconds: 0);
                 page.Button("Check", () => admin.Request?.Invoke(Net.ActionKind.ImportCheck),
-                    help: "Reads the server's Satisvampory 1.x settings file and reports what would carry over. Changes nothing. Admins only.",
-                    needsServerPart: true, label: "Import from Satisvampory 1.x");
+                    help: "Reads the server's Satisvampory 1.x or KindredLogistics settings file and reports what would carry over. Changes nothing. Admins only.",
+                    needsServerPart: true, label: "Import from Satisvampory 1.x or KindredLogistics");
                 page.Info("Import result", () => admin.LastResult, refreshSeconds: 0.5);
 
                 page.Section("Help");

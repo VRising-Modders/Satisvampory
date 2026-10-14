@@ -635,7 +635,7 @@ namespace Satisvampory.Client
                 Send<PullReq, TextReply>(new PullReq { Text = item.ToString(), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
             })));
             Track(In(InventoryTab, p.Button("Locate")).OnClick(() => ForSelected(1, item =>
-                Send<FindReq, FindReply>(new FindReq { Text = item.ToString() }, r => { _lastFind = r; Locate(); }))));
+                Send<FindReq, FindReply>(new FindReq { Text = item.ToString() }, r => { _lastFind = r; _findTable.SetSelected(Array.Empty<string>()); Locate(); }))));
             Track(In(InventoryTab, p.Button("Where does it go?")).OnClick(() => ForSelected(1, item =>
             {
                 _mdItem.Value = _invRows.TryGetValue(item, out var row) ? ClientItems.NameOf(_ctx, item, row.Name) : item.ToString();
@@ -854,25 +854,53 @@ namespace Satisvampory.Client
 
         // ---------------- Find ----------------
 
+        IUiChips _findPick = null!;
+        IUiDataTable _findTable = null!;
+        readonly List<EvalRowMsg> _findRows = new();
+        int _findItem;
+
         void BuildFind(IUiPanel p)
         {
             _findText = In(FindTab, p.Input("Item, category or chest name", ""));
-            Track(In(FindTab, p.Button("Find")).OnClick(() =>
-                Send<FindReq, FindReply>(new FindReq { Text = _findText.Value }, DrawFind)));
+            Track(_findText.OnChanged(_ => RunFind()));
+            Track(In(FindTab, p.Button("Find")).OnClick(RunFind));
+            // Ambiguous names and category members: a pick list with icons; nothing is guessed (spec 07).
+            _findPick = In(FindTab, p.Chips("find.pick", Array.Empty<UiChip>(), new UiChipsOptions { Remove = false, MaxLines = 3, EmptyText = "" }));
+            Track(_findPick.OnClick(chip =>
+            {
+                if (chip.ItemPrefab == 0) return;
+                _findText.Value = chip.Label;
+                RunFind();
+            }));
+            _findResult = In(FindTab, p.Label(""));
+            _findTable = In(FindTab, p.DataTable("find", new[]
+            {
+                new UiTableColumn("chest", "Chest") { Hideable = false },
+                new UiTableColumn("count", "Count", UiTableColumnKind.Number) { Format = "#,0", Subtotal = UiTableSubtotal.Sum },
+                new UiTableColumn("holds", "Holds"),
+            }, new UiDataTableOptions { VisibleRows = 10, Grouped = true, MultiSelect = true, TotalRow = false, EmptyText = "Nothing found on your island." }));
             _pullAmount = In(FindTab, p.Input("Take amount (blank: one stack of each)", ""));
             Track(In(FindTab, p.Button("Take into bags")).OnClick(() =>
             {
                 int.TryParse(_pullAmount.Value, out var n);
-                Send<PullReq, TextReply>(new PullReq { Text = ClientItems.Resolve(_ctx, _findText.Value), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
+                var what = _findItem != 0 ? _findItem.ToString() : ClientItems.Resolve(_ctx, _findText.Value);
+                Send<PullReq, TextReply>(new PullReq { Text = what, Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
             }));
             Track(In(FindTab, p.Button("Locate")).OnClick(Locate));
-            _findResult = In(FindTab, p.Label(""));
+        }
+
+        void RunFind()
+        {
+            var text = (_findText.Value ?? "").Trim();
+            if (text.Length == 0) return;
+            Send<FindReq, FindReply>(new FindReq { Text = text }, DrawFind);
         }
 
         /// <summary>Ping the chests from the last search (spec 07): the first item's chests, else chests by name.</summary>
         void Locate()
         {
-            var rows = _lastFind == null ? new List<EvalRowMsg>()
+            var picked = _findTable == null ? new List<EvalRowMsg>() : _findTable.Selected.Select(x => int.TryParse(x, out var i) && i < _findRows.Count ? _findRows[i] : null).Where(x => x != null).Select(x => x!).ToList();
+            var rows = picked.Count > 0 ? picked : _lastFind == null ? new List<EvalRowMsg>()
                 : (_lastFind.Items.FirstOrDefault()?.Chests ?? new List<EvalRowMsg>()).Concat(_lastFind.Items.Count == 0 ? _lastFind.ChestsByName : new List<EvalRowMsg>()).ToList();
             int pinged = 0, far = 0;
             foreach (var r in rows.Where(r => r.NetType != 0).Take(10))
@@ -890,21 +918,37 @@ namespace Satisvampory.Client
 
         void DrawFind(FindReply r)
         {
+            _ = Panel;
             _lastFind = r;
-            var lines = new List<string>();
-            if (r.Ambiguous) lines.Add("Several items match; pick one by its full name:");
-            if (r.Categories.Count > 0) lines.Add("Category: " + string.Join(", ", r.Categories) + " (Take gives one stack of each)");
-            foreach (var it in r.Items)
+            _findRows.Clear();
+            _findTable.SetSelected(Array.Empty<string>());
+            var many = r.Ambiguous || r.Categories.Count > 0;
+            _findItem = !many && r.Items.Count == 1 ? r.Items[0].Item : 0;
+            _findPick.SetChips(many
+                ? r.Items.Select(it => new UiChip(it.Item.ToString(), ClientItems.NameOf(_ctx, it.Item, it.Name)) { ItemPrefab = it.Item, Note = it.Total.ToString("N0"), Removable = false })
+                : Array.Empty<UiChip>());
+            _findResult.Text = r.Ambiguous ? "Several items match; pick one:"
+                : r.Categories.Count > 0 ? "Category " + string.Join(", ", r.Categories) + ": Take gives one stack of each, or pick an item."
+                : r.Items.Count == 1 ? $"{ClientItems.NameOf(_ctx, r.Items[0].Item, r.Items[0].Name)} — {r.Items[0].Total:N0} on the island"
+                : r.Items.Count == 0 && r.ChestsByName.Count == 0 ? "Nothing found on your island." : "";
+
+            var rows = new List<UiTableRow>();
+            UiTableRow Row(EvalRowMsg c, string group, string holds)
             {
-                lines.Add($"{it.Name} — {it.Total:N0}");
-                lines.AddRange(it.Chests.Select(c => $"   {c.Name} · {c.Where} · {c.Amount:N0}"));
+                var id = _findRows.Count.ToString();
+                _findRows.Add(c);
+                var row = new UiTableRow(id) { Groups = new[] { group } };
+                row.Text("chest", c.Name).Number("count", c.Amount).Text("holds", holds);
+                return row;
             }
-            if (r.ChestsByName.Count > 0)
-            {
-                lines.Add("Chests named like that:");
-                lines.AddRange(r.ChestsByName.Select(c => $"   {c.Name} · {c.Where} · {c.Amount:N0} items"));
-            }
-            _findResult.Text = lines.Count == 0 ? "Nothing found on your island." : string.Join("\n", lines);
+            string Group(EvalRowMsg c) => c.Where + (c.Level > 0 ? $" · level {c.Level}" : "");
+            if (!many)
+                foreach (var it in r.Items)
+                    foreach (var c in it.Chests)
+                        rows.Add(Row(c, Group(c), ""));
+            foreach (var c in r.ChestsByName)
+                rows.Add(Row(c, "Chests named like this · " + Group(c), c.Holds));
+            _findTable.SetRows(rows);
         }
 
         internal static string TryText(int n, TryItReply r)

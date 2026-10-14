@@ -263,6 +263,7 @@ namespace Satisvampory.Net
         [Field(1)] public string Name = "";
         [Field(2)] public long Total;
         [Field(3)] public List<EvalRowMsg> Chests = new();
+        [Field(4)] public int Item;
     }
 
     [ModMessage("sv.find.reply")]

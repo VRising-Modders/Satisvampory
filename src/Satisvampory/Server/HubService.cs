@@ -630,14 +630,23 @@ namespace Satisvampory.Server
             var r = Engine.Ui.Find.Run(s.World, s.Catalog, s.Island.Scope, s.Standing, p => Label(s.Island, p), q.Text ?? "");
             var reply = new FindReply { Ambiguous = r.Ambiguous };
             reply.Categories.AddRange(r.Categories);
+            int LevelOf(PlotId plot) => s.Island.Castles.FirstOrDefault(c => ProgenitorWorld.PlotOf(c) == plot)?.Level ?? 0;
             foreach (var it in r.Items.Take(25))
                 reply.Items.Add(new FoundMsg
                 {
+                    Item = it.Item.Guid,
                     Name = it.Name,
                     Total = it.Total,
-                    Chests = it.Chests.Take(20).Select(c => WithWords(new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count }, c.Id)).ToList(),
+                    Chests = it.Chests.Take(40).Select(c => WithWords(new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count, Level = LevelOf(c.Plot) }, c.Id)).ToList(),
                 });
-            reply.ChestsByName.AddRange(r.ChestsByName.Take(20).Select(c => WithWords(new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count }, c.Id)));
+            reply.ChestsByName.AddRange(r.ChestsByName.Take(20).Select(c => WithWords(new EvalRowMsg
+            {
+                Name = c.Name,
+                Where = c.PlotLabel,
+                Amount = c.Count,
+                Level = LevelOf(c.Plot),
+                Holds = string.Join(", ", s.World.Contents(c.Id).OrderByDescending(x => x.Amount).Take(3).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
+            }, c.Id)));
             return reply;
         }
 

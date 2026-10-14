@@ -223,6 +223,9 @@ namespace Satisvampory.Net
         [Field(5)] public int NetIndex;
         [Field(6)] public int NetGeneration;
         [Field(7)] public int NetType;
+        /// <summary>Find: the plot's heart level, and what a chest found by name holds.</summary>
+        [Field(8)] public int Level;
+        [Field(9)] public string Holds = "";
     }
 
     [ModMessage("sv.tryit.reply")]

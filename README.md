@@ -10,7 +10,9 @@ Castle logistics for V Rising, built on [Progenitor](https://github.com/VRising-
 
 There are no chat commands at all, for players or admins: admins use the Server section of the settings page. Autoloot is a separate mod.
 
-Status: **in development**. The game-free engine and its tests are here. The plugin waits on Progenitor's inventory, station and panel APIs. The product contract is [`specs/`](specs/README.md).
+Status: **in development, not yet tested in game**. The game-free engine, its tests and the plugin are here; the product contract is [`specs/`](specs/README.md).
+
+Crafting and building from storage uses Progenitor's experimental material sources. They are off until the server and every client set `[Materials] NativeSeams = true` in Progenitor's config and restart; without that, crafting and building use the game's own rules and everything else still works.
 
 ## Layout
 

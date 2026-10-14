@@ -46,7 +46,7 @@ Built and tested outside the game; nothing has run in-game yet.
 | Plugin: Input / Output / Deposit settings panels, picker, Try it, recipe switches, loop mode, Empty trash | done |
 | Plugin: hub (Castle, Mass Deposit, Belts and categories, Inventory, Find), Stash button, tooltip line | done |
 | Item catalog from the game | done (Progenitor item catalog) |
-| Crafting and building from shared storage | provider done against Progenitor PR 15 (open); build and craft only, repair and upgrade stay vanilla until Progenitor wires them |
+| Crafting and building from shared storage | done (Progenitor material sources, opt-in `[Materials] NativeSeams` on server and clients); build and craft only, repair and upgrade stay vanilla until Progenitor wires them |
 | Double-tap sort to stash | done (Progenitor sort event) |
 | Servants (loot stash, repeat hunts, notices, hunt log, throne targeting) | done (Progenitor servants API) |
 | Braziers fed from their Input list | done |

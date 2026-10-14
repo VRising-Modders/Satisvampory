@@ -98,18 +98,43 @@ namespace Satisvampory.Client
 
             var inv = UiApi.AttachToVanilla(VanillaUiSite.InventoryPanel, VanillaPanelAnchor.BesideSort, _ctx.Owner, _ctx.Guid);
             _ctx.Track(inv);
-            var stash = inv.Button("Stash");
-            _ctx.Track(stash.OnClick(() => _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash })));
-            _ctx.Track(stash.Tooltip("Put everything but your hotbar where it belongs (Mass Deposit).", "Stash"));
+            // One short button fits beside the game's sort bar; it opens a small menu with Stash,
+            // Inventory and Find (spec 07, 15). Double-tap sort and the Stash keybind still stash in one step.
+            var storage = inv.Button("Storage");
+            _ctx.Track(storage.OnClick(ToggleStorageMenu));
+            _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
             _ctx.Events.On<InventorySortUsed>(OnSort);
-            // Spec 15 and 07: Inventory beside Stash, and Find from the same place; the hub's other tabs are one click away.
-            var open = inv.Button("Inventory");
-            _ctx.Track(open.OnClick(() => Open(InventoryTab)));
-            _ctx.Track(open.Tooltip("Everything on your island, with reserves and caps. Castle, Mass Deposit and belts are tabs in the same window.", "Inventory"));
-            var find = inv.Button("Find");
-            _ctx.Track(find.OnClick(() => Open(FindTab)));
-            _ctx.Track(find.Tooltip("Find an item, category or chest on your island and take it.", "Find"));
+        }
+
+        IUiPanel? _storageMenu;
+
+        void ToggleStorageMenu()
+        {
+            if (_storageMenu == null)
+            {
+                var p = _storageMenu = UiApi.Panel("Storage", _ctx.Owner, _ctx.Guid);
+                p.CaptureMode = UiCaptureMode.WhenHovered;
+                _ctx.Track(p);
+                var stash = p.Button("Stash");
+                _ctx.Track(stash.OnClick(() =>
+                {
+                    if (!_ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash }))
+                        _ctx.Log.LogWarning("Satisvampory: could not send Stash to the server");
+                    UiApi.Hide(p);
+                }));
+                _ctx.Track(stash.Tooltip("Put everything but your hotbar where it belongs (Mass Deposit).", "Stash"));
+                var open = p.Button("Inventory");
+                _ctx.Track(open.OnClick(() => { UiApi.Hide(p); Open(InventoryTab); }));
+                _ctx.Track(open.Tooltip("Everything on your island, with reserves and caps.", "Inventory"));
+                var find = p.Button("Find");
+                _ctx.Track(find.OnClick(() => { UiApi.Hide(p); Open(FindTab); }));
+                _ctx.Track(find.Tooltip("Find an item, category or chest on your island and take it.", "Find"));
+                UiApi.Show(p);
+                return;
+            }
+            if (_storageMenu.Visible) UiApi.Hide(_storageMenu);
+            else UiApi.Show(_storageMenu);
         }
 
         readonly Dictionary<int, (double At, string Line)> _storageCache = new();

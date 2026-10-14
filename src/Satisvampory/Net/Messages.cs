@@ -44,6 +44,10 @@ namespace Satisvampory.Net
         /// <summary>0 idle, 1 moving, 2 blocked.</summary>
         [Field(8)] public int Tone;
         [Field(9)] public FilterMsg FilterSpec = new();
+        /// <summary>A pick-in-world result: the picked building's network id words, resolved on the server.</summary>
+        [Field(10)] public int PickIndex;
+        [Field(11)] public int PickGeneration;
+        [Field(12)] public int PickType;
     }
 
     [ModMessage("sv.priority")]
@@ -205,6 +209,10 @@ namespace Satisvampory.Net
         [Field(2)] public string Where = "";
         [Field(3)] public int Amount;
         [Field(4)] public string Why = "";
+        /// <summary>Network id words for Locate; 0 when unknown.</summary>
+        [Field(5)] public int NetIndex;
+        [Field(6)] public int NetGeneration;
+        [Field(7)] public int NetType;
     }
 
     [ModMessage("sv.tryit.reply")]

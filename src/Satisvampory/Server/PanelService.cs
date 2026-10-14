@@ -124,8 +124,17 @@ namespace Satisvampory.Server
             switch (r.Op)
             {
                 case 0:
-                    Must(s.Edits.AddEntry(s.Role, s.Container.Id, side, ToEntry(r.Entry)));
+                {
+                    var entry = r.Entry;
+                    if (entry.Kind == 0 && string.IsNullOrEmpty(entry.ContainerId) && entry.PickType != 0)
+                    {
+                        var picked = TargetResolver.Resolve(_ctx, entry.PickIndex, entry.PickGeneration, entry.PickType, out var why)
+                            ?? throw new RequestRefusedException(why);
+                        entry.ContainerId = picked.Value.ToString("N");
+                    }
+                    Must(s.Edits.AddEntry(s.Role, s.Container.Id, side, ToEntry(entry)));
                     break;
+                }
                 case 1:
                     Must(s.Edits.RemoveEntry(s.Role, s.Container.Id, side, r.Index));
                     break;

@@ -50,6 +50,16 @@ namespace Satisvampory.World
                 _castles[plot] = castle;
                 var list = new List<ContainerInfo>();
                 _byPlot[plot] = list;
+                // The heart: lists and fuel, never a Mass Deposit home or default source (spec 09).
+                if (!castle.HeartId.IsNone)
+                {
+                    var heartId = new EngineId(castle.HeartId.Value);
+                    var heartEntity = castle.Heart.ToEntity();
+                    var heartInfo = new ContainerInfo(heartId, plot, NodeKind.Heart, "Castle heart") { FurnitureName = "Castle heart" };
+                    _nodes[heartId] = new Node { Info = heartInfo, Main = inventory.Of(heartEntity), Output = default, Castle = castle, Entity = heartEntity };
+                    list.Add(heartInfo);
+                }
+
                 foreach (var row in castle.Containers().Concat(castle.Stations()))
                 {
                     if (row.Id.IsNone) continue;

@@ -241,8 +241,7 @@ namespace Satisvampory.Client
             ctx.Track(_list.OnRemove(item => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = int.Parse(item.Id) })));
 
             ctx.Track(panel.Button("+ Add…").OnClick(() => Owner.OpenPicker(_side)));
-            ctx.Track(panel.Button("◎ Pick in world").OnClick(() =>
-                ctx.Hud.Notify("Pick in world needs Progenitor to report the picked chest's network id; use Add… for now.", kind: UiNoticeKind.Info, seconds: 6)));
+            ctx.Track(panel.Button("◎ Pick in world").OnClick(PickInWorld));
             _loop = panel.Label("");
             _loopMode = panel.Dropdown("Loop mode", new[] { "0", "1", "2" }, "0", new[] { "Cycle once, then wait", "Even distribution", "Off (closing edge never runs)" });
             ctx.Track(_loopMode.OnChanged(v =>
@@ -292,6 +291,32 @@ namespace Satisvampory.Client
             {
                 _redrawing = false;
             }
+        }
+
+        void PickInWorld()
+        {
+            var ctx = Owner.Ctx;
+            Hide();
+            ctx.Hud.PickInWorld(result =>
+            {
+                if (!result.IsCurrent || !result.HasNetworkId)
+                {
+                    ctx.Hud.Notify("That was not a container or station Satisvampory can use.", kind: UiNoticeKind.Warning, seconds: 5);
+                    return;
+                }
+                Owner.Send<EditListReq, PanelMsg>(new EditListReq
+                {
+                    Target = Owner.Target(),
+                    Side = _side,
+                    Op = 0,
+                    Entry = new RowMsg { Kind = 0, PickIndex = result.NetworkIdIndex, PickGeneration = result.NetworkIdGeneration, PickType = result.NetworkId2 },
+                }, reply =>
+                {
+                    Owner.Apply(reply);
+                    ctx.Hud.Notify($"Added to {(_side == 0 ? "Input" : "Output")} of {reply.Name}.", kind: UiNoticeKind.Success, seconds: 4);
+                    Show();
+                });
+            }, () => Show(), new UiWorldPickOptions { Prompt = _side == 0 ? "Interact with a container or station to pull from. Esc to cancel." : "Interact with a container or station to send to. Esc to cancel." });
         }
 
         void TryIt()

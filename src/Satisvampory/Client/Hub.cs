@@ -67,6 +67,7 @@ namespace Satisvampory.Client
         // Find
         IUiInput _findText = null!, _pullAmount = null!;
         IUiLabel _findResult = null!;
+        FindReply? _lastFind;
 
         internal Hub(SatisContext ctx, PlayerConfig player)
         {
@@ -463,11 +464,32 @@ namespace Satisvampory.Client
                 int.TryParse(_pullAmount.Value, out var n);
                 Send<PullReq, TextReply>(new PullReq { Text = ClientItems.Resolve(_ctx, _findText.Value), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
             }));
+            Track(In(FindTab, p.Button("Locate")).OnClick(Locate));
             _findResult = In(FindTab, p.Label(""));
+        }
+
+        /// <summary>Ping the chests from the last search (spec 07): the first item's chests, else chests by name.</summary>
+        void Locate()
+        {
+            var rows = _lastFind == null ? new List<EvalRowMsg>()
+                : (_lastFind.Items.FirstOrDefault()?.Chests ?? new List<EvalRowMsg>()).Concat(_lastFind.Items.Count == 0 ? _lastFind.ChestsByName : new List<EvalRowMsg>()).ToList();
+            int pinged = 0, far = 0;
+            foreach (var r in rows.Where(r => r.NetType != 0).Take(10))
+            {
+                if (_ctx.Hud.TryFindByNetworkId(r.NetIndex, r.NetGeneration, r.NetType, out var entity, out _))
+                {
+                    _ctx.Hud.Locate(entity, r.Name, 10);
+                    pinged++;
+                }
+                else far++;
+            }
+            _ctx.Hud.Notify(pinged == 0 ? "Nothing nearby to ping; those chests are too far away to show." : $"Pinged {pinged} chest{(pinged == 1 ? "" : "s")}." + (far > 0 ? $" {far} too far away." : ""),
+                kind: UiNoticeKind.Info, seconds: 4);
         }
 
         void DrawFind(FindReply r)
         {
+            _lastFind = r;
             var lines = new List<string>();
             if (r.Ambiguous) lines.Add("Several items match; pick one by its full name:");
             if (r.Categories.Count > 0) lines.Add("Category: " + string.Join(", ", r.Categories) + " (Take gives one stack of each)");

@@ -467,9 +467,9 @@ namespace Satisvampory.Server
                 {
                     Name = it.Name,
                     Total = it.Total,
-                    Chests = it.Chests.Take(20).Select(c => new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count }).ToList(),
+                    Chests = it.Chests.Take(20).Select(c => WithWords(new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count }, c.Id)).ToList(),
                 });
-            reply.ChestsByName.AddRange(r.ChestsByName.Take(20).Select(c => new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count }));
+            reply.ChestsByName.AddRange(r.ChestsByName.Take(20).Select(c => WithWords(new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count }, c.Id)));
             return reply;
         }
 
@@ -492,6 +492,12 @@ namespace Satisvampory.Server
             if (result.Items == 0) return new TextReply { Text = "Nothing to take: none on the island, or only last stacks left." };
             if (prefs.SilentPull) return new TextReply { Text = $"Took {result.Items:N0}." };
             return new TextReply { Text = $"Took {result.Items:N0} from {result.Containers(byDestination: false)} chests." + (result.Left.Count > 0 ? $" Short by {result.Left.Values.Sum():N0}." : "") };
+        }
+
+        EvalRowMsg WithWords(EvalRowMsg row, Engine.Model.ContainerId id)
+        {
+            if (TargetResolver.Words(_ctx, id, out var i, out var g, out var t)) { row.NetIndex = i; row.NetGeneration = g; row.NetType = t; }
+            return row;
         }
 
         StorageCountReply StorageCount(Session s, StorageCountReq q)

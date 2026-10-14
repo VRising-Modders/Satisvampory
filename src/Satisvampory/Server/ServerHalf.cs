@@ -39,6 +39,7 @@ namespace Satisvampory.Server
             _ctx.Track(new OnDispose(() => { if (ReferenceEquals(_active, this)) _active = null; }));
             _ctx.Net.OnReceiveFromClient(EventIds.PlayerPrefs, OnPrefs);
             _ctx.Net.OnReceiveFromClient(EventIds.Action, OnAction);
+            new Ticker(_ctx, this).Attach();
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }
 

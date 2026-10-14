@@ -53,3 +53,15 @@ Built and tested outside the game; nothing has run in-game yet.
 | Pick in world, Locate | done (Progenitor network-id resolver) |
 | Data-table inventory, term tooltips, tip cards | done against Progenitor PR 14 (open): sortable, hideable table with inline Reserve / Cap edits; ⓘ terms; tips for the hub, Mass Deposit, Belts, Inventory, Input/Output and Deposit settings. Belts and categories as master-detail with repeat pick in world; category chips filter the inventory. Live inventory (snapshot then deltas every 2 s while the tab is open), sort and hidden columns remembered per player, shared-island tip |
 | Stash skipping the hotbar exactly; stash/pull/tidy refused while downed, dead, in PvP combat | done (Progenitor slot filters and player state) |
+
+## Not done yet (spec audit, 2026-10-14)
+
+- Stash notice breakdown on hover (Progenitor notices have no hover).
+- Localization keys for every string (`00-product.md`, `16-help.md`).
+- Hunt log "since last logout" (needs a logout time; the log keeps 72 hours).
+- Diagnostics per list row (they are per container today).
+- Servant "Sent" notice survival chance (Progenitor does not expose it).
+- Belts and categories: sort by recent use, Used by entries that jump to the use, editing a member item's reserve and cap from its chip, adding every item of a vanilla item category.
+- Inventory: a category header's own reserve and cap in grouped view (bulk edits set per-item overrides).
+- Find: autofill while typing (an ambiguous name shows a pick list with icons instead).
+

@@ -41,7 +41,7 @@ It opens from the Castle settings page, from any Push or Pull row, and from a ke
 
 ### Overview
 
-A table of every item and category that has a home on the island, with its ordered homes and each chest's priority. Clicking a chest opens its deposit settings. Dragging a chest above another in an item's list changes that chest's priority for the item by just enough to put it there. The change is written into that chest's settings, so the chests stay the single source of truth.
+A table of every item and category that has a home on the island, with its ordered homes and each chest's priority. Editing a chest's priority in the table moves it up or down that item's list. The change is written into that chest's settings, so the chests stay the single source of truth. **Locate** pings the selected chest; its deposit settings open from the chest itself.
 
 ### Overrides (Simple)
 

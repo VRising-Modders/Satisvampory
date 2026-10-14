@@ -6,3 +6,4 @@ TestResults/
 LOCAL.md
 specs/archive-2026-09/
 design/
+Directory.Build.local.props

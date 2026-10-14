@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The plugin: one DLL for server and client. The engine's sources are compiled in, so the
+       mod ships as a single assembly that Progenitor can hot-reload. -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>Satisvampory</AssemblyName>
+    <RootNamespace>Satisvampory</RootNamespace>
+    <Version>2.0.0</Version>
+    <BepInExPluginGuid>satisvampory</BepInExPluginGuid>
+    <BepInExPluginName>Satisvampory</BepInExPluginName>
+    <ReferenceGame>true</ReferenceGame>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- -p:ProgenitorPa=true -p:ProgenitorDll=<a Core built from Progenitor's inventory branch>
+         compiles the world adapter against ctx.Inventory / castle containers (Progenitor PR #6). -->
+    <DefineConstants Condition="'$(ProgenitorPa)' == 'true'">$(DefineConstants);SATIS_PA</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Satisvampory.Engine\**\*.cs" Exclude="..\Satisvampory.Engine\obj\**;..\Satisvampory.Engine\bin\**" Link="Engine\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

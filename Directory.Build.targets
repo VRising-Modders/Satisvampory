@@ -1,0 +1,13 @@
+<Project>
+  <!-- Projects with <ReferenceGame>true</ReferenceGame> compile against the game's own BepInEx,
+       its generated interop assemblies, and the installed Progenitor Core (never NuGet copies). -->
+  <ItemGroup Condition="'$(ReferenceGame)' == 'true'">
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.1.0" />
+    <Reference Include="$(VRisingGameDir)\BepInEx\core\*.dll" Private="false" />
+    <Reference Include="$(VRisingInteropDir)\*.dll" Private="false" />
+    <Reference Include="$(ProgenitorDll)" Private="false" />
+  </ItemGroup>
+  <Target Name="SatisCheckGame" BeforeTargets="ResolveAssemblyReferences" Condition="'$(ReferenceGame)' == 'true' and (!Exists('$(VRisingInteropDir)\ProjectM.dll') or !Exists('$(ProgenitorDll)'))">
+    <Error Text="Game references not found. Need $(VRisingInteropDir)\ProjectM.dll and $(ProgenitorDll). Set VRISING_GAME_DIR / PROGENITOR_DLL or Directory.Build.local.props." />
+  </Target>
+</Project>

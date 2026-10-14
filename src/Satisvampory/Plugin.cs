@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+using BepInEx;
+using Progenitor.Plugins;
+using Satisvampory.Config;
+using Satisvampory.Server;
+
+namespace Satisvampory
+{
+    /// <summary>
+    /// Satisvampory 2.0. One DLL on both sides: the server runs the engine and owns every item
+    /// move; the client draws panels and sends requests. Settings, keybinds and saves go through
+    /// Progenitor.
+    /// </summary>
+    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+    [BepInDependency("progenitor")]
+    [ProgenitorSide(Side.Both)]
+    public sealed class Plugin : ProgenitorPlugin<SatisContext>
+    {
+        protected override void OnLoad(SatisContext ctx)
+        {
+            var server = ServerConfig.Bind(ctx);
+            var player = PlayerConfig.Bind(ctx);
+            var keys = Keys.Register(ctx);
+            SettingsPage.Build(ctx, server, player, keys);
+
+            if (ctx.IsServer) new ServerHalf(ctx, server).Attach();
+            else new ClientHalf(ctx, player, keys).Attach();
+        }
+    }
+
+    /// <summary>Empty, as every Progenitor context should be.</summary>
+    public sealed class SatisContext : PluginContext
+    {
+    }
+}

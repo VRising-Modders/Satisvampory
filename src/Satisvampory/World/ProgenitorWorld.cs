@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+#if SATIS_PA
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Progenitor.Castles;
+using Progenitor.Inventory;
+using Satisvampory.Engine.Model;
+using Satisvampory.Engine.Stations;
+using Satisvampory.Engine.World;
+using EngineId = Satisvampory.Engine.Model.ContainerId;
+using PgId = Progenitor.Inventory.ContainerId;
+
+namespace Satisvampory.World
+{
+    /// <summary>
+    /// The engine's <see cref="IWorld"/> over Progenitor's inventory and castle APIs (spec 11,
+    /// P1/P4/P5). Built per tick or request for the plots in scope; it reads containers once and
+    /// asks Progenitor for counts, space and every move, so nothing here touches ECS.
+    /// </summary>
+    internal sealed class ProgenitorWorld : IWorld
+    {
+        sealed class Node
+        {
+            public ContainerInfo Info = null!;
+            public InventoryRef Main;
+            public InventoryRef Output;
+            public ICastleHandle Castle = null!;
+        }
+
+        readonly PluginInventory _inv;
+        readonly Dictionary<EngineId, Node> _nodes = new();
+        readonly Dictionary<PlotId, List<ContainerInfo>> _byPlot = new();
+        readonly Dictionary<PlotId, ICastleHandle> _castles = new();
+        readonly Func<EngineId, DepositOptions?> _deposit;
+
+        public ProgenitorWorld(PluginInventory inventory, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit)
+        {
+            _inv = inventory;
+            _deposit = deposit;
+            foreach (var castle in castles)
+            {
+                if (!castle.Enabled) continue;
+                var plot = PlotOf(castle);
+                _castles[plot] = castle;
+                var list = new List<ContainerInfo>();
+                _byPlot[plot] = list;
+                foreach (var row in castle.Containers().Concat(castle.Stations()))
+                {
+                    if (row.Id.IsNone) continue;
+                    var id = new EngineId(row.Id.Value);
+                    var info = new ContainerInfo(id, plot, row.IsStation ? NodeKind.Station : NodeKind.Chest, row.Nameplate)
+                    {
+                        FurnitureName = Pretty(row.Building.PrefabName),
+                        X = row.Building.TileX,
+                        Z = row.Building.TileY,
+                        Role = RoleOf(row),
+                    };
+                    if (_deposit(id) is { } d) Copy(d, info.Deposit);
+                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = row.Output, Castle = castle };
+                    list.Add(info);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Register the actor's bag for one action. It gets a throwaway id, is never on a plot, so it
+        /// is never a home or a source for anything but the action that registered it.
+        /// </summary>
+        public EngineId AddBag(InventoryRef bag)
+        {
+            var id = EngineId.New();
+            _nodes[id] = new Node { Info = new ContainerInfo(id, default, NodeKind.Chest, "bag"), Main = bag, Output = default };
+            return id;
+        }
+
+        /// <summary>A plot is identified by its territory index, which survives restarts.</summary>
+        public static PlotId PlotOf(ICastleHandle castle) => new((ulong)(uint)castle.Territory.Index);
+
+        public IReadOnlyList<ContainerInfo> ContainersOn(PlotId plot) =>
+            _byPlot.TryGetValue(plot, out var l) ? l : (IReadOnlyList<ContainerInfo>)Array.Empty<ContainerInfo>();
+
+        public ContainerInfo? Find(EngineId id) => _nodes.TryGetValue(id, out var n) ? n.Info : null;
+
+        public IReadOnlyList<ItemStack> Contents(EngineId id, InvPart part = InvPart.Main)
+        {
+            if (!TryRef(id, part, out var r)) return Array.Empty<ItemStack>();
+            var snap = _inv.Read(r);
+            var sums = new Dictionary<int, int>();
+            foreach (var s in snap.Slots)
+                if (s.Item != 0 && s.Amount > 0)
+                    sums[s.Item] = (sums.TryGetValue(s.Item, out var n) ? n : 0) + s.Amount;
+            return sums.Select(kv => new ItemStack(new ItemId(kv.Key), kv.Value)).ToList();
+        }
+
+        public int Count(EngineId id, ItemId item, InvPart part = InvPart.Main) =>
+            TryRef(id, part, out var r) ? _inv.Count(r, item.Guid) : 0;
+
+        public int FreeSpace(EngineId id, ItemId item) =>
+            TryRef(id, InvPart.Main, out var r) ? _inv.FreeSpace(r, item.Guid) : 0;
+
+        public bool IsRaided(PlotId plot) => _castles.TryGetValue(plot, out var c) && c.Raided;
+
+        /// <summary>Recipes arrive with ctx.Stations (PR #2); until then stations want nothing.</summary>
+        public IReadOnlyList<Recipe> Recipes(EngineId station) => Array.Empty<Recipe>();
+
+        public int Transfer(EngineId from, InvPart fromPart, EngineId to, ItemId item, int amount)
+        {
+            if (amount <= 0 || !TryRef(from, fromPart, out var a) || !TryRef(to, InvPart.Main, out var b)) return 0;
+            var r = _inv.Transfer(a, b, item.Guid, amount);
+            return r.Ok ? r.Done : 0;
+        }
+
+        public int Destroy(EngineId from, ItemId item, int amount)
+        {
+            if (amount <= 0 || !TryRef(from, InvPart.Main, out var r)) return 0;
+            var res = _inv.TryRemove(r, item.Guid, amount);
+            return res.Ok ? res.Done : 0;
+        }
+
+        /// <summary>No brazier control in Progenitor yet.</summary>
+        public bool SetLit(EngineId brazier, bool lit) => false;
+
+        bool TryRef(EngineId id, InvPart part, out InventoryRef r)
+        {
+            r = default;
+            if (!_nodes.TryGetValue(id, out var n)) return false;
+            r = part == InvPart.Output && n.Info.Kind == NodeKind.Station ? n.Output : n.Main;
+            return !r.IsNone;
+        }
+
+        static StationRole RoleOf(CastleContainerInfo row)
+        {
+            if (!row.IsStation) return StationRole.None;
+            var name = row.Building.PrefabName ?? string.Empty;
+            if (Has(name, "Devour")) return StationRole.Devourer;
+            if (Has(name, "Brazier")) return StationRole.Brazier;
+            if (Has(name, "Stable")) return StationRole.Stable;
+            if (Has(name, "Tomb") || Has(name, "Nest") || Has(name, "Spawner")) return StationRole.UnitSpawner;
+            return row.IsRefinement ? StationRole.Refinement : StationRole.Workstation;
+        }
+
+        static bool Has(string s, string part) => s.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        /// <summary>"TM_Stash_Chest_Large" → "Stash Chest Large"; good enough until localized names are wired.</summary>
+        static string Pretty(string? prefab)
+        {
+            if (string.IsNullOrEmpty(prefab)) return "Container";
+            var p = prefab!;
+            var cut = p.IndexOf('_');
+            if (cut > 0 && cut <= 4) p = p.Substring(cut + 1);
+            return p.Replace('_', ' ');
+        }
+
+        static void Copy(DepositOptions from, DepositOptions to)
+        {
+            to.Takes = from.Takes;
+            to.BasePriority = from.BasePriority;
+            to.Special = from.Special;
+            foreach (var kv in from.ItemPriority) to.ItemPriority[kv.Key] = kv.Value;
+            foreach (var kv in from.CategoryPriority) to.CategoryPriority[kv.Key] = kv.Value;
+            to.BannedItems.UnionWith(from.BannedItems);
+            to.BannedCategories.UnionWith(from.BannedCategories);
+        }
+    }
+}
+#endif

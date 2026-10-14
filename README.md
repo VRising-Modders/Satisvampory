@@ -19,7 +19,24 @@ Status: **in development**. The game-free engine and its tests are here. The plu
 | `specs/` | Product contract. Read before changing behavior. |
 | `src/Satisvampory.Engine` | Game-free routing engine: lists, Mass Deposit, sharing, stations, loops, player actions, 1.x import. |
 | `tests/Satisvampory.Engine.Tests` | Engine tests. `dotnet test` |
-| `src/Satisvampory` (planned) | The plugin: one DLL for server and client, adapting Progenitor to the engine. |
+| `src/Satisvampory` | The plugin: one DLL for server and client. Settings page (Me, Keys, Server, Help), keybinds, player settings sync, save stores, `.sv` admin commands, and the world adapter over Progenitor. |
+
+## Building
+
+Needs the game with BepInEx installed (for its interop assemblies) and Progenitor installed in it.
+
+```
+dotnet test tests/Satisvampory.Engine.Tests
+dotnet build src/Satisvampory
+```
+
+The plugin compiles against `<game>\BepInEx\progenitor-core\Progenitor.dll`. Override paths with `VRISING_GAME_DIR`, `PROGENITOR_DLL`, or a git-ignored `Directory.Build.local.props`.
+
+Stash, tidy and the conveyor need Progenitor's inventory API, which is still in review. To build the world adapter against a Progenitor Core built from that branch:
+
+```
+dotnet build src/Satisvampory -p:ProgenitorPa=true -p:ProgenitorDll=<path to that Progenitor.dll>
+```
 
 ## Relationship to 1.x
 

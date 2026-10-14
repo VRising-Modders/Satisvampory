@@ -15,5 +15,15 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal(-1531666018, id.Guid);
             Assert.Equal("Stone", cat.NameOf(id));
         }
+
+        [Fact]
+        public void A_two_word_prefab_name_resolves_by_its_spaced_name()
+        {
+            // Live server entry for Copper Ore (2026-10-14): no display name, Mineral|Ingredient flags.
+            var cat = CatalogBuilder.Build(new[] { new GameItem(-1805325497, "Item_Ingredient_Mineral_CopperOre", null, 250, 67109376, 0) });
+            Assert.Equal("Copper Ore", cat.NameOf(new ItemId(-1805325497)));
+            Assert.True(cat.TryResolveItem("Copper Ore", out var id));
+            Assert.Equal(-1805325497, id.Guid);
+        }
     }
 }

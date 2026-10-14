@@ -233,6 +233,7 @@ namespace Satisvampory.Client
         IUiInput _tryAmount = null!;
         IUiInput _tryItem = null!;
         IUiLabel _tryResult = null!;
+        string? _tryFor;
         bool _redrawing;
 
         public ListView(Panels owner, int side) : base(owner) => _side = side;
@@ -335,6 +336,8 @@ namespace Satisvampory.Client
             var s = Owner.State;
             if (s == null) return;
             _ = Panel;
+            // A result from another chest or station is not about this one.
+            if (_tryFor != s.ContainerId) { _tryFor = s.ContainerId; _tryResult.Text = ""; }
             _redrawing = true;
             try
             {

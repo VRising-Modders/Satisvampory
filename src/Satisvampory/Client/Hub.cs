@@ -276,6 +276,8 @@ namespace Satisvampory.Client
                 BuildInventory(p);
                 BuildFind(p);
                 _huntLog = In(HuntLogTab, p.Label(""));
+                // A new panel draws at once; only Open shows the hub, so a redraw from a reply (Tidy) stays hidden.
+                UiApi.Hide(p);
                 return p;
             }
         }

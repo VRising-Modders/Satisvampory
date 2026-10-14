@@ -32,6 +32,10 @@ namespace Satisvampory.Server
         /// </summary>
         const long CacheMs = 30000;
 
+        // Time spent inside this provider; warns when a 30 s window costs more than a second.
+        long _spentTicks, _lastReport = Environment.TickCount64;
+        int _calls;
+
         readonly SatisContext _ctx;
         readonly ServerHalf _half;
         readonly Dictionary<(CastleId User, int Territory), (long Until, long Revision, Resolved? Island)> _cache = new();
@@ -66,6 +70,13 @@ namespace Satisvampory.Server
 
         public long Revision(in MaterialContext context)
         {
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { return RevisionCore(context); }
+            finally { Spent(t0); }
+        }
+
+        long RevisionCore(in MaterialContext context)
+        {
             // Settings and list edits bump the policy; raid state and chest contents are picked up
             // by a slow time bucket. Payments re-resolve regardless.
             var allowed = Allowed(context, out _) ? 1L : 0L;
@@ -74,6 +85,13 @@ namespace Satisvampory.Server
 
         public IReadOnlyList<PgId> Candidates(in MaterialContext context)
         {
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { return CandidatesCore(context); }
+            finally { Spent(t0); }
+        }
+
+        IReadOnlyList<PgId> CandidatesCore(in MaterialContext context)
+        {
             var island = Resolve(context);
             if (island == null) return Array.Empty<PgId>();
             var station = context.Station;
@@ -81,6 +99,26 @@ namespace Satisvampory.Server
         }
 
         public ItemSources? Sources(in MaterialContext context, int item)
+        {
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { return SourcesCore(context, item); }
+            finally { Spent(t0); }
+        }
+
+        void Spent(long t0)
+        {
+            _spentTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
+            _calls++;
+            var now = Environment.TickCount64;
+            if (now - _lastReport < 30_000) return;
+            var ms = _spentTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (ms > 1000) _ctx.Log.LogWarning($"Satisvampory: material sources spent {ms:0} ms in {_calls} calls over the last {(now - _lastReport) / 1000} s");
+            _spentTicks = 0;
+            _calls = 0;
+            _lastReport = now;
+        }
+
+        ItemSources? SourcesCore(in MaterialContext context, int item)
         {
             var island = Resolve(context);
             if (island == null) return null;

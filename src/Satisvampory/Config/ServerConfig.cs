@@ -16,6 +16,7 @@ namespace Satisvampory.Config
         const string Section = "Server";
 
         readonly List<Action<ServerSettings>> _apply = new();
+        readonly List<Action<ServerSettings>> _write = new();
 
         public List<(ConfigEntryBase Entry, string Label, string Help)> Rows { get; } = new();
 
@@ -55,6 +56,12 @@ namespace Satisvampory.Config
             return c;
         }
 
+        /// <summary>Set every entry from a settings object (the import).</summary>
+        public void Write(ServerSettings s)
+        {
+            foreach (var w in _write) w(s);
+        }
+
         /// <summary>The current values as the engine's settings object.</summary>
         public ServerSettings Snapshot()
         {
@@ -68,6 +75,8 @@ namespace Satisvampory.Config
             var e = ctx.Bind(Section, key, value, help, synced: true);
             Rows.Add((e, label, help));
             _apply.Add(s => set(s, e.Value));
+            var getter = typeof(ServerSettings).GetProperty(key);
+            if (getter != null) _write.Add(s => e.Value = (bool)getter.GetValue(s)!);
         }
 
         void Int(PluginContext ctx, string key, int value, int min, int max, string label, string help, Action<ServerSettings, int> set)
@@ -75,6 +84,8 @@ namespace Satisvampory.Config
             var e = ctx.Bind(Section, key, value, help, synced: true, acceptableValues: new AcceptableValueRange<int>(min, max));
             Rows.Add((e, label, help));
             _apply.Add(s => set(s, e.Value));
+            var getter = typeof(ServerSettings).GetProperty(key);
+            if (getter != null) _write.Add(s => e.Value = Math.Clamp((int)getter.GetValue(s)!, min, max));
         }
     }
 }

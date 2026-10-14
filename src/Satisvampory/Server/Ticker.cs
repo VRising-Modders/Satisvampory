@@ -127,7 +127,7 @@ namespace Satisvampory.Server
         /// the clan's taking-part castles under clan share, the owner's castles under castle share,
         /// else the castle alone. Raided castles never join.
         /// </summary>
-        (string Key, List<ICastleHandle> Members) IslandOf(ICastleHandle castle, List<ICastleHandle> all, SharingState sharing)
+        internal (string Key, List<ICastleHandle> Members) IslandOf(ICastleHandle castle, List<ICastleHandle> all, SharingState sharing)
         {
             var owner = _half.PlayerFor(castle.Owner.PlatformId);
             bool Excluded(ICastleHandle c) => Stores.Castle(_ctx.Save, c.Territory.Index).ExcludeFromSharing;
@@ -176,7 +176,7 @@ namespace Satisvampory.Server
             }
         }
 
-        static SharingState Sharing(ServerSettings s) => new()
+        internal static SharingState Sharing(ServerSettings s) => new()
         {
             CastleShareAllowed = s.CastleShare,
             PlayersMayLeaveCastleShare = s.PlayersMayLeaveCastleShare,

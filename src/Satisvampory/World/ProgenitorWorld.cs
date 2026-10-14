@@ -124,6 +124,9 @@ namespace Satisvampory.World
                 .ToList();
         }
 
+        /// <summary>The placed entity behind a container id, for nameplate writes.</summary>
+        public Unity.Entities.Entity EntityOf(EngineId id) => _nodes.TryGetValue(id, out var n) ? n.Entity : Unity.Entities.Entity.Null;
+
         /// <summary>The game's own switch, for refinement stations.</summary>
         public bool SetGameRecipe(EngineId station, int recipe, bool on) =>
             _stations != null && _nodes.TryGetValue(station, out var n) && _stations.SetRecipeEnabled(n.Entity, recipe, on).Ok;

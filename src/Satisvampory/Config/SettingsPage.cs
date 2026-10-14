@@ -39,6 +39,10 @@ namespace Satisvampory.Config
                 page.Button("Check", () => admin.Request?.Invoke(Net.ActionKind.ImportCheck),
                     help: "Reads the server's Satisvampory 1.x or KindredLogistics settings file and reports what would carry over. Changes nothing. Admins only.",
                     needsServerPart: true, label: "Import from Satisvampory 1.x or KindredLogistics");
+                page.Button("Import", () => admin.Request?.Invoke(Net.ActionKind.ImportApply),
+                    confirm: "Import the older mod's settings and chest names into Satisvampory 2.0? Run Check first. Existing 2.0 settings for a player are kept.",
+                    help: "Applies the older mod's server allows, players' settings, reserves, caps, categories, per-castle switches, and turns chest names into deposit settings and belts. Admins only.",
+                    needsServerPart: true, label: " ");
                 page.Info("Import result", () => admin.LastResult, refreshSeconds: 0.5);
 
                 page.Section("Help");

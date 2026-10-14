@@ -55,7 +55,7 @@ namespace Satisvampory
 
         void SendAction(ActionKind kind)
         {
-            if (kind == ActionKind.ImportCheck) _admin.LastResult = "Asking the server…";
+            if (kind is ActionKind.ImportCheck or ActionKind.ImportApply) _admin.LastResult = "Asking the server…";
             _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)kind });
         }
 

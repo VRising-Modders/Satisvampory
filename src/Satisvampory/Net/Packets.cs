@@ -32,6 +32,9 @@ namespace Satisvampory.Net
 
         /// <summary>Admin: dry run of the 1.x settings import.</summary>
         ImportCheck = 10,
+
+        /// <summary>Admin: apply the older mod's settings and chest names once.</summary>
+        ImportApply = 11,
     }
 
     /// <summary>Client → server: a player action triggered by a key or button.</summary>

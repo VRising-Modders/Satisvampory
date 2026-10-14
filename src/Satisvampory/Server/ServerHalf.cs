@@ -77,9 +77,16 @@ namespace Satisvampory.Server
             if (length < sizeof(ActionPacket)) return;
             var a = *(ActionPacket*)payload;
             if (a.Magic != EventIds.Magic) return;
-            if ((ActionKind)a.Kind == ActionKind.ImportCheck)
+            if ((ActionKind)a.Kind is ActionKind.ImportCheck or ActionKind.ImportApply)
             {
-                var text = user.IsAdmin ? AdminActions.ImportCheck() : "Only server admins can run this.";
+                string text;
+                if (!user.IsAdmin) text = "Only server admins can run this.";
+                else if ((ActionKind)a.Kind == ActionKind.ImportCheck) text = AdminActions.ImportCheck();
+                else
+                {
+                    try { text = AdminActions.ImportApply(_ctx, this); }
+                    catch (System.Exception e) { _ctx.Log.LogError("Satisvampory: import failed: " + e); text = "Import failed: " + e.Message; }
+                }
                 _ctx.Net.SendToUser(userEntity, EventIds.Text, TextPacket.Of(ActionKind.ImportCheck, text));
                 return;
             }

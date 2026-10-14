@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
+using Progenitor.Castles;
+using Satisvampory.Engine.Persistence;
+using Satisvampory.World;
 using Satisvampory.Engine.Import;
 using Satisvampory.Engine.Model;
 
@@ -46,6 +50,110 @@ namespace Satisvampory.Server
             {
                 return $"Could not read the {found.Mod} settings file: " + e.Message;
             }
+        }
+    
+        /// <summary>
+        /// Applies the older mod's data once (spec 12). Server allows go into the synced settings;
+        /// players' settings are written only where a player has none yet; reserves, caps,
+        /// categories and aliases merge into the island each player's castles belong to; chest names
+        /// become deposit settings and belts on every castle; per-castle switches carry over by
+        /// territory. Running it again adds nothing new.
+        /// </summary>
+        public static string ImportApply(SatisContext ctx, ServerHalf half)
+        {
+            var found = Sources
+                .Select(s => (s.Mod, Path: Path.Combine(BepInEx.Paths.ConfigPath, s.Folder, "playerSettings.json")))
+                .FirstOrDefault(s => File.Exists(s.Path));
+            var catalog = half.Catalog.Current;
+            var notes = new List<string>();
+            int players = 0, islands = 0, chests = 0, belts = 0, renamed = 0, castles = 0;
+
+            var server = half.Config.Snapshot();
+            var all = ctx.Castles.All().Where(c => c.Enabled).ToList();
+            var ticker = half.Ticker!;
+
+            if (found.Path != null)
+            {
+                var r = LegacySettings.Read(File.ReadAllText(found.Path), catalog);
+                var imported = r.Server;
+                imported.CleanNamesAfterImport = server.CleanNamesAfterImport;
+                imported.ImportDone = true;
+                half.Config.Write(imported);
+                server = half.Config.Snapshot();
+
+                foreach (var p in r.Players)
+                {
+                    if (Stores.Player(ctx.Save, p.PlatformId) == null) { Stores.SetPlayer(ctx.Save, p.PlatformId, p.Me); players++; }
+                    var mine = all.Where(c => c.Owner.PlatformId == p.PlatformId).ToList();
+                    if (mine.Count == 0) continue;
+                    var (key, _) = ticker.IslandOf(mine[0], all, Ticker.Sharing(server));
+                    var state = Load(ctx, key);
+                    if (p.Rules.DefaultReserve != 10) state.Rules.DefaultReserve = p.Rules.DefaultReserve;
+                    foreach (var kv in p.Rules.ItemReserve) state.Rules.ItemReserve.TryAdd(kv.Key, kv.Value);
+                    foreach (var kv in p.Rules.ItemCap) state.Rules.ItemCap.TryAdd(kv.Key, kv.Value);
+                    foreach (var kv in p.Categories.Custom) state.Categories.Custom.TryAdd(kv.Key, kv.Value);
+                    foreach (var kv in p.Categories.Edited) state.Categories.Edited.TryAdd(kv.Key, kv.Value);
+                    foreach (var kv in p.Categories.Aliases) state.Categories.Aliases.TryAdd(kv.Key, kv.Value);
+                    Stores.SetIsland(ctx.Save, key, SaveCodec.Capture(state, state.Graph.Sequence));
+                    islands++;
+
+                    foreach (var c in mine)
+                    {
+                        var cs = Stores.Castle(ctx.Save, c.Territory.Index);
+                        cs.FeedSalvage |= p.SalvageTerritories.Contains(c.Territory.Index);
+                        if (p.RepeatHuntOffTerritories.Contains(c.Territory.Index)) cs.RepeatHunts = false;
+                        Stores.SetCastle(ctx.Save, c.Territory.Index, cs);
+                    }
+                }
+                foreach (var t in r.ExcludedTerritories)
+                {
+                    var cs = Stores.Castle(ctx.Save, t);
+                    cs.ExcludeFromSharing = true;
+                    Stores.SetCastle(ctx.Save, t, cs);
+                    castles++;
+                }
+                if (r.ClanShareByClanKey.Count > 0) notes.Add("clan share switches are not carried over: clan share is a per-player choice in 2.0 (default on)");
+                notes.AddRange(r.NotImported.Take(3));
+            }
+            else
+            {
+                notes.Add("no older settings file; chest names only");
+            }
+
+            // Chest names → deposit settings and belts, island by island.
+            var done = new HashSet<Engine.Model.PlotId>();
+            foreach (var castle in all)
+            {
+                var plot = ProgenitorWorld.PlotOf(castle);
+                if (done.Contains(plot)) continue;
+                var (key, members) = ticker.IslandOf(castle, all, Ticker.Sharing(server));
+                foreach (var m in members) done.Add(ProgenitorWorld.PlotOf(m));
+                var state = Load(ctx, key);
+                var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null);
+                var containers = members.SelectMany(m => world.ContainersOn(ProgenitorWorld.PlotOf(m))).Where(c => c.Kind != Engine.Model.NodeKind.Heart).ToList();
+                var report = LegacyImporter.Apply(containers, catalog.WithEdits(state.Categories), state.Graph, world);
+                foreach (var c in containers)
+                    if (!state.Deposit.ContainsKey(c.Id)) { state.Deposit[c.Id] = c.Deposit; chests++; }
+                belts += report.GroupsCreated;
+                Stores.SetIsland(ctx.Save, key, SaveCodec.Capture(state, state.Graph.Sequence));
+
+                if (server.CleanNamesAfterImport)
+                    foreach (var (id, clean) in report.CleanNames)
+                        if (ctx.Castles.TrySetNameplate(world.EntityOf(id), clean, out _)) renamed++;
+            }
+            half.MaterialPolicy.Invalidate();
+            ctx.Save.Set("import-done", System.DateTime.UtcNow.ToString("o"));
+
+            return $"Imported{(found.Path != null ? " from " + found.Mod : "")}: {players} players, {islands} islands' reserves/caps/categories, "
+                + $"{castles} excluded castles, {chests} chests set from their names, {belts} belts"
+                + (server.CleanNamesAfterImport ? $", {renamed} names cleaned" : "")
+                + (notes.Count > 0 ? ". Notes: " + string.Join("; ", notes) : ".");
+        }
+
+        static IslandState Load(SatisContext ctx, string key)
+        {
+            var save = Stores.Island(ctx.Save, key);
+            return save == null ? new IslandState() : SaveCodec.Restore(save, out _);
         }
     }
 }

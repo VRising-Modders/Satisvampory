@@ -89,10 +89,33 @@ namespace Satisvampory.Server
             };
         }
 
+        /// <summary>
+        /// "Stash from anywhere" (spec 07): the island of the player's own castle, used when they
+        /// stand on no plot. Null when they own no castle.
+        /// </summary>
+        internal static Island? Home(SatisContext ctx, ServerHalf half, Entity userEntity, ServerSettings server)
+        {
+            var home = ctx.Castles.ForUser(userEntity);
+            if (!home.Enabled || half.Ticker == null) return null;
+            var all = ctx.Castles.All().Where(c => c.Enabled).ToList();
+            var (key, members) = half.Ticker.IslandOf(home, all, Ticker.Sharing(server));
+            var save = Stores.Island(ctx.Save, key);
+            return new Island
+            {
+                Standing = home,
+                Castles = members,
+                Scope = members.Select(ProgenitorWorld.PlotOf).ToList(),
+                OwnerKey = key,
+                State = save == null ? new IslandState() : SaveCodec.Restore(save, out _),
+            };
+        }
+
         internal static NoticePacket Run(SatisContext ctx, ServerHalf half, Entity userEntity, User user, ActionKind kind)
         {
             var server = half.Config.Snapshot();
             var island = Resolve(ctx, half, userEntity, user);
+            if (island == null && kind == ActionKind.Stash && server.AllowStashFromAnywhere && half.PlayerFor(user.PlatformId).StashFromAnywhere)
+                island = Home(ctx, half, userEntity, server);
             if (island == null) return Notice(NoticeCode.Refused);
 
             var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)

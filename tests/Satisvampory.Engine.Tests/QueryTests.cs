@@ -120,3 +120,39 @@ namespace Satisvampory.Engine.Tests
         }
     }
 }
+
+namespace Satisvampory.Engine.Tests
+{
+    public class MaterialPolicyTests
+    {
+        [Fact]
+        public void Per_item_reverse_order_reserve_once_and_vanilla_fallbacks()
+        {
+            var cat = TestItems.Catalog();
+            var w = new FakeWorld();
+            var home = new PlotId(1);
+            var ironHome = w.Chest(home, "Iron Ore");
+            var woodHome = w.Chest(home, "wood");
+            var dump = w.Chest(home, "");
+            var skip = w.Chest(home, "s");
+            skip.Deposit.Special = SpecialKind.Skip;
+            foreach (var c in new[] { ironHome, woodHome, dump, skip }) w.Put(c, TestItems.IronOre, 10).Put(c, TestItems.Plank, 10);
+            var ctx = new DepositContext(cat, w, new[] { home }, home);
+            var rules = new Lists.CastleRules { DefaultReserve = 25 };
+            var policy = new World.MaterialPolicy();
+
+            var iron = policy.Sources(World.MaterialUse.Craft, true, true, ctx, rules, TestItems.IronOre)!.Value;
+            var wood = policy.Sources(World.MaterialUse.Build, true, true, ctx, rules, TestItems.Plank)!.Value;
+            Assert.Equal(ironHome.Id, iron.SpendOrder[^1]);   // best home drained last
+            Assert.Equal(woodHome.Id, wood.SpendOrder[^1]);   // each item follows its own order
+            Assert.DoesNotContain(skip.Id, iron.SpendOrder);
+            Assert.Equal(25, iron.PoolReserve);
+
+            Assert.Null(policy.Sources(World.MaterialUse.Research, true, true, ctx, rules, TestItems.IronOre));
+            Assert.Null(policy.Sources(World.MaterialUse.Craft, true, false, ctx, rules, TestItems.IronOre));
+            var r = policy.Revision;
+            policy.Invalidate();
+            Assert.True(policy.Revision > r);
+        }
+    }
+}

@@ -122,6 +122,8 @@ namespace Satisvampory.Net
         [Field(2)] public string Name = "";
         [Field(3)] public List<RowMsg> Members = new();
         [Field(4)] public List<string> UsedBy = new();
+        /// <summary>Plot labels the belt spans.</summary>
+        [Field(5)] public List<string> Plots = new();
     }
 
     [ModMessage("sv.category")]
@@ -133,6 +135,9 @@ namespace Satisvampory.Net
         [Field(3)] public List<string> Members = new();
         /// <summary>Item guids, same order as <see cref="Members"/>.</summary>
         [Field(4)] public List<int> Items = new();
+        /// <summary>Island stock per item, same order.</summary>
+        [Field(5)] public List<long> Stock = new();
+        [Field(6)] public List<string> UsedBy = new();
     }
 
     [ModMessage("sv.belts")]
@@ -141,6 +146,9 @@ namespace Satisvampory.Net
         [Field(1)] public List<BeltMsg> Belts = new();
         [Field(2)] public List<CategoryMsg> Categories = new();
         [Field(3)] public bool CanEdit;
+        /// <summary>Add by name preview: the belt it is for, and what would be added.</summary>
+        [Field(4)] public string PreviewFor = "";
+        [Field(5)] public List<string> Preview = new();
     }
 
     [ModMessage("sv.belts.get")]
@@ -153,7 +161,8 @@ namespace Satisvampory.Net
     public sealed class BeltEditReq
     {
         /// <summary>0 create, 1 rename, 2 delete, 3 add members by name, 4 remove member, 5 move member, 6 duplicate,
-        /// 7 add the member picked in the world (Pick* fields),
+        /// 7 add the member picked in the world (Pick* fields), 8 preview add by name,
+        /// 14 rename a custom category (Name to Text), 15 duplicate a category (Name to Text),
         /// 10 category create/replace members, 11 category add item, 12 category remove item, 13 category restore/delete.</summary>
         [Field(1)] public int Op;
         [Field(2)] public string BeltId = "";

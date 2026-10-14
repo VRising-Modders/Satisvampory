@@ -341,7 +341,17 @@ namespace Satisvampory.Server
                 foreach (var m in b.Members)
                 {
                     var c = s.World.Find(m);
-                    bm.Members.Add(new RowMsg { ContainerId = m.Value.ToString("N"), Name = c?.DisplayName ?? "(gone)", Where = c == null ? "" : Label(s.Island, c.Plot) });
+                    var row = new RowMsg
+                    {
+                        ContainerId = m.Value.ToString("N"),
+                        Name = c?.DisplayName ?? "(gone)",
+                        Where = c == null ? "" : Label(s.Island, c.Plot),
+                        // At a glance: what it holds most.
+                        Status = c == null ? "" : string.Join(", ", s.World.Contents(m).OrderByDescending(x => x.Amount).Take(2).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
+                    };
+                    if (TargetResolver.Words(_ctx, m, out var ni, out var ng, out var nt)) { row.PickIndex = ni; row.PickGeneration = ng; row.PickType = nt; }
+                    bm.Members.Add(row);
+                    if (row.Where.Length > 0 && !bm.Plots.Contains(row.Where)) bm.Plots.Add(row.Where);
                 }
                 foreach (var u in BeltOps.Usages(graph, b.Id, refs))
                     bm.UsedBy.Add(u.Kind switch
@@ -354,12 +364,19 @@ namespace Satisvampory.Server
                 msg.Belts.Add(bm);
             }
             var edits = s.Island.State.Categories;
+            var stock = new Dictionary<ItemId, long>();
+            foreach (var plot in s.Island.Scope)
+                foreach (var c in s.World.ContainersOn(plot).Where(c => c.Kind == NodeKind.Chest))
+                    foreach (var st in s.World.Contents(c.Id))
+                        stock[st.Item] = (stock.TryGetValue(st.Item, out var have) ? have : 0) + st.Amount;
+            string NameOfContainer(Engine.Model.ContainerId id) => s.World.Find(id) is { } x ? $"{x.DisplayName} · {Label(s.Island, x.Plot)}" : "a chest";
             foreach (var name in s.Catalog.CategoryNames.OrderBy(n => n))
                 msg.Categories.Add(new CategoryMsg
                 {
                     Name = name,
                     Kind = edits.Custom.ContainsKey(name) ? "Custom" : edits.Edited.ContainsKey(name) ? "Edited" : "Built-in",
-                }.Fill(s.Catalog.Members(name).Select(i => (s.Catalog.NameOf(i), i.Guid)).OrderBy(x => x.Item1).Take(80)));
+                }.Fill(s.Catalog.Members(name).Select(i => (s.Catalog.NameOf(i), i.Guid)).OrderBy(x => x.Item1).Take(80), stock,
+                    Engine.Edits.CategoryOps.Usages(s.Island.State, name, NameOfContainer)));
             return msg;
         }
 
@@ -413,6 +430,21 @@ namespace Satisvampory.Server
                 case 13:
                     EditCategory(s, q);
                     break;
+                case 14:
+                    Must(Engine.Edits.CategoryOps.Rename(s.Island.State, _half.Catalog.Current, q.Name, q.Text));
+                    break;
+                case 15:
+                    Must(Engine.Edits.CategoryOps.Duplicate(s.Island.State, s.Catalog, q.Name, q.Text));
+                    break;
+                case 8:
+                {
+                    var matches = BeltOps.MatchByName(s.World, s.Island.Scope, q.Text).ToList();
+                    var preview = Belts(s);
+                    preview.PreviewFor = q.BeltId;
+                    preview.Preview.AddRange(matches.Take(30).Select(c => $"{c.DisplayName} · {Label(s.Island, c.Plot)}"));
+                    if (matches.Count > 30) preview.Preview.Add($"… and {matches.Count - 30} more");
+                    return preview;
+                }
                 default:
                     throw new RequestRefusedException("Unknown edit.");
             }
@@ -707,9 +739,15 @@ namespace Satisvampory.Server
 
     internal static class CategoryMsgFill
     {
-        internal static CategoryMsg Fill(this CategoryMsg m, IEnumerable<(string Name, int Guid)> items)
+        internal static CategoryMsg Fill(this CategoryMsg m, IEnumerable<(string Name, int Guid)> items, IReadOnlyDictionary<ItemId, long> stock, List<string> usedBy)
         {
-            foreach (var (name, guid) in items) { m.Members.Add(name); m.Items.Add(guid); }
+            foreach (var (name, guid) in items)
+            {
+                m.Members.Add(name);
+                m.Items.Add(guid);
+                m.Stock.Add(stock.TryGetValue(new ItemId(guid), out var n) ? n : 0);
+            }
+            m.UsedBy.AddRange(usedBy);
             return m;
         }
     }

@@ -437,9 +437,12 @@ namespace Satisvampory.Client
             }));
             _beltName = In(BeltsTab, p.Input("Belt name (new or rename)", ""));
             _beltText = In(BeltsTab, p.Input("Add chests whose name contains", ""));
-            _catName = In(BeltsTab, p.Input("Category name (new)", ""));
+            _catName = In(BeltsTab, p.Input("Category name (new, rename or duplicate)", ""));
             _catItem = In(BeltsTab, p.Input("Item to add to the selected category", ""));
         }
+
+        string? _deleteArmed;
+        float _deleteArmedAt;
 
         void WithBelt(Action<string> act)
         {
@@ -456,8 +459,34 @@ namespace Satisvampory.Client
                     case UiDetailAction.New: EditBelt(new BeltEditReq { Op = 0, Name = _beltName.Value }); break;
                     case "rename": EditBelt(new BeltEditReq { Op = 1, BeltId = a.EntryId, Name = _beltName.Value }); break;
                     case "duplicate": EditBelt(new BeltEditReq { Op = 6, BeltId = a.EntryId, Name = _beltName.Value }); break;
-                    case "delete": EditBelt(new BeltEditReq { Op = 2, BeltId = a.EntryId }); break;
-                    case "byname": EditBelt(new BeltEditReq { Op = 3, BeltId = a.EntryId, Text = _beltText.Value }); break;
+                    case "delete":
+                    {
+                        // Spec 14: delete asks first, listing what uses the belt.
+                        var now = UnityEngine.Time.realtimeSinceStartup;
+                        if (_deleteArmed != a.EntryId || now - _deleteArmedAt > 4)
+                        {
+                            _deleteArmed = a.EntryId;
+                            _deleteArmedAt = now;
+                            var uses = _beltsState?.Belts.FirstOrDefault(b => b.Id == a.EntryId)?.UsedBy ?? new List<string>();
+                            _ctx.Hud.Notify("Delete this belt? Press Delete again." + (uses.Count == 0 ? " Nothing uses it." : $" It is removed from: {string.Join("; ", uses.Take(4))}{(uses.Count > 4 ? "; …" : "")}."), kind: UiNoticeKind.Warning, seconds: 4);
+                            break;
+                        }
+                        _deleteArmed = null;
+                        EditBelt(new BeltEditReq { Op = 2, BeltId = a.EntryId });
+                        break;
+                    }
+                    case "byname": Send<BeltEditReq, BeltsMsg>(new BeltEditReq { Op = 8, BeltId = a.EntryId, Text = _beltText.Value }, DrawBelts); break;
+                    case "byname-confirm": EditBelt(new BeltEditReq { Op = 3, BeltId = a.EntryId, Text = _beltText.Value }); break;
+                    case "locate":
+                    {
+                        var b = _beltsState?.Belts.FirstOrDefault(x => x.Id == a.EntryId);
+                        if (b == null) break;
+                        int pinged = 0;
+                        foreach (var m in b.Members.Where(m => m.PickType != 0))
+                            if (_ctx.Hud.TryFindByNetworkId(m.PickIndex, m.PickGeneration, m.PickType, out var entity, out _)) { _ctx.Hud.Locate(entity, m.Name, 10); pinged++; }
+                        _ctx.Hud.Notify(pinged == 0 ? "None of its chests is near enough to ping." : $"Pinged {pinged} chest{(pinged == 1 ? "" : "s")}.", kind: UiNoticeKind.Info, seconds: 4);
+                        break;
+                    }
                     case "pick": PickBeltMembers(a.EntryId); break;
                 }
                 return;
@@ -466,6 +495,13 @@ namespace Satisvampory.Client
             {
                 case UiDetailAction.New: EditBelt(new BeltEditReq { Op = 10, Name = _catName.Value }); break;
                 case "additem": EditBelt(new BeltEditReq { Op = 11, Name = a.EntryId, Text = ClientItems.Resolve(_ctx, _catItem.Value) }); break;
+                case "rename": EditBelt(new BeltEditReq { Op = 14, Name = a.EntryId, Text = _catName.Value }); break;
+                case "duplicate": EditBelt(new BeltEditReq { Op = 15, Name = a.EntryId, Text = _catName.Value }); break;
+                case "inventory":
+                    _ = Panel;
+                    _invSearch.Value = a.EntryId;
+                    OpenTab(InventoryTab);
+                    break;
                 case "restore": EditBelt(new BeltEditReq { Op = 13, Name = a.EntryId }); break;
             }
         }
@@ -504,10 +540,10 @@ namespace Satisvampory.Client
             _beltsState = m;
             _beltsMd.SetEntries(BeltsPage, m.Belts.Select(b => new UiMasterEntry(b.Id, b.Name)
             {
-                Note = $"{b.Members.Count} chests",
+                Note = $"{b.Members.Count} chests" + (b.Plots.Count > 0 ? " · " + string.Join(", ", b.Plots.Take(3)) + (b.Plots.Count > 3 ? "…" : "") : ""),
+                Keywords = b.Members.Select(x => x.Name).Concat(b.Plots).ToList(),
                 Badge = b.UsedBy.Count > 0 ? b.UsedBy.Count.ToString() : "",
                 Tooltip = b.UsedBy.Count == 0 ? "Not used anywhere yet." : "Used by " + b.UsedBy.Count,
-                Keywords = b.Members.Select(x => x.Name).ToList(),
                 Term = "Belt",
             }));
             _beltsMd.SetEntries(CategoriesPage, m.Categories.Select(c => new UiMasterEntry(c.Name, c.Name)
@@ -543,13 +579,21 @@ namespace Satisvampory.Client
                         new UiDetailButton("duplicate", "Duplicate") { Enabled = edit },
                         new UiDetailButton("delete", "Delete") { Enabled = edit }),
                     UiDetailLine.Heading("Chests and stations", b.Members.Count, "Belt"),
-                    UiDetailLine.MemberList(b.Members.Select((x, i) => new UiListItem(i.ToString(), x.Name) { Note = x.Where, Removable = edit }),
+                    UiDetailLine.MemberList(b.Members.Select((x, i) => new UiListItem(i.ToString(), x.Name) { Note = x.Where + (x.Status.Length > 0 ? " · " + x.Status : ""), Removable = edit }),
                         reorder: edit, remove: edit, emptyText: "No chests yet. Pick them in the world or add by name."),
                     UiDetailLine.Actions(
                         new UiDetailButton("pick", "◎ Pick in world") { Enabled = edit },
-                        new UiDetailButton("byname", "+ Add by name") { Enabled = edit }),
+                        new UiDetailButton("byname", "+ Add by name…") { Enabled = edit },
+                        new UiDetailButton("locate", "Locate all")),
                     UiDetailLine.Heading("Used by", b.UsedBy.Count),
                 };
+                if (m.PreviewFor == b.Id)
+                {
+                    lines.Insert(4, UiDetailLine.Heading(m.Preview.Count == 0 ? "Add by name: nothing matches" : "Add by name would add", m.Preview.Count));
+                    var at = 5;
+                    foreach (var p in m.Preview.Take(8)) lines.Insert(at++, UiDetailLine.Line(p, LabelTone.Normal));
+                    if (m.Preview.Count > 0) lines.Insert(at, UiDetailLine.Actions(new UiDetailButton("byname-confirm", "Add these") { Enabled = edit }));
+                }
                 if (b.UsedBy.Count == 0) lines.Add(UiDetailLine.Line("Not used anywhere yet. Add it to an Input or Output."));
                 lines.AddRange(b.UsedBy.Select(u => UiDetailLine.Line(u, LabelTone.Normal)));
                 _beltsMd.SetDetail(BeltsPage, lines);
@@ -560,13 +604,25 @@ namespace Satisvampory.Client
                 if (c == null) return;
                 var lines = new List<UiDetailLine>
                 {
-                    UiDetailLine.Title(c.Name, new UiDetailButton("restore", c.Kind == "Custom" ? "Delete" : "Restore built-in") { Enabled = edit && c.Kind != "Built-in" }),
+                    UiDetailLine.Title(c.Name,
+                        new UiDetailButton("restore", c.Kind == "Custom" ? "Delete" : "Restore built-in") { Enabled = edit && c.Kind != "Built-in" },
+                        new UiDetailButton("rename", "Rename") { Enabled = edit && c.Kind == "Custom" },
+                        new UiDetailButton("duplicate", "Duplicate") { Enabled = edit }),
                     UiDetailLine.Line(c.Kind == "Built-in" ? "Built-in. Adding or removing an item makes an island copy." : c.Kind == "Edited" ? "A built-in category, changed on this island." : "Made on this island."),
                     UiDetailLine.Heading("Items", c.Members.Count, "Category"),
-                    UiDetailLine.MemberList(c.Members.Select((x, i) => new UiListItem(i < c.Items.Count ? c.Items[i].ToString() : x, x) { Removable = edit }),
+                    UiDetailLine.MemberList(c.Members.Select((x, i) => new UiListItem(i < c.Items.Count ? c.Items[i].ToString() : x, x)
+                        {
+                            Note = i < c.Stock.Count ? $"{c.Stock[i]:N0} on the island" : "",
+                            Removable = edit,
+                        }),
                         reorder: false, remove: edit, emptyText: "No items yet."),
-                    UiDetailLine.Actions(new UiDetailButton("additem", "+ Add item") { Enabled = edit }),
+                    UiDetailLine.Actions(
+                        new UiDetailButton("additem", "+ Add item") { Enabled = edit },
+                        new UiDetailButton("inventory", "Show in inventory")),
+                    UiDetailLine.Heading("Used by", c.UsedBy.Count, "Category"),
                 };
+                if (c.UsedBy.Count == 0) lines.Add(UiDetailLine.Line("Nothing names this category yet."));
+                lines.AddRange(c.UsedBy.Take(12).Select(u => UiDetailLine.Line(u, LabelTone.Normal)));
                 if (c.Members.Count >= 80) lines.Add(UiDetailLine.Line("Showing the first 80."));
                 _beltsMd.SetDetail(CategoriesPage, lines);
             }

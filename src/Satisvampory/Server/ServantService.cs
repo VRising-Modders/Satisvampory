@@ -152,8 +152,8 @@ namespace Satisvampory.Server
         {
             var all = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             var (key, members) = _half.Ticker!.IslandOf(castle, all, Ticker.Sharing(server));
-            var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members));
-            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null);
+            var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, ProgenitorWorld.BackgroundRowsMs));
+            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, ProgenitorWorld.BackgroundRowsMs);
             var home = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, members.Select(ProgenitorWorld.PlotOf).ToList(), ProgenitorWorld.PlotOf(castle))
             {
                 Settings = state.MassDeposit,

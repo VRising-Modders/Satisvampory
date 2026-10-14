@@ -58,7 +58,7 @@ namespace Satisvampory.Server
             foreach (var c in castles.OrderBy(c => c.Territory.Index))
             {
                 sig = unchecked(sig * 31 + c.Territory.Index * 2 + (c.Raided ? 1 : 0));
-                foreach (var id in ProgenitorWorld.ContainerIds(new[] { c }))
+                foreach (var id in ProgenitorWorld.ContainerIds(new[] { c }, ProgenitorWorld.BackgroundRowsMs))
                     sig = unchecked(sig + id.Value.GetHashCode() * 17);
             }
             if (sig == _materialFacts) return;
@@ -95,7 +95,7 @@ namespace Satisvampory.Server
             {
                 try
                 {
-                    var ids = new HashSet<Engine.Model.ContainerId>(ProgenitorWorld.ContainerIds(group));
+                    var ids = new HashSet<Engine.Model.ContainerId>(ProgenitorWorld.ContainerIds(group, ProgenitorWorld.BackgroundRowsMs));
                     var state = Stores.Load(_ctx.Save, group.Key, ids);
                     var gone = state.Graph.Referenced().Where(id => !ids.Contains(id)).ToList();
                     foreach (var k in _missingSince.Keys.Where(k => k.Key == group.Key && !gone.Contains(k.Id)).ToList()) _missingSince.Remove(k);
@@ -235,11 +235,11 @@ namespace Satisvampory.Server
         int RunIsland(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget)
         {
             {
-                var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members));
+                var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, ProgenitorWorld.BackgroundRowsMs));
                 if (state.Graph.Lists.Count == 0 && state.Deposit.Values.All(d => d.Special == SpecialKind.None))
                     return 0;
 
-                var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
+                var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, ProgenitorWorld.BackgroundRowsMs)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };
@@ -449,8 +449,8 @@ namespace Satisvampory.Server
         void TopUp(ICastleHandle castle, List<ICastleHandle> all, ServerSettings server)
         {
             var (key, members) = IslandOf(castle, all, Sharing(server));
-            var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members));
-            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
+            var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, ProgenitorWorld.BackgroundRowsMs));
+            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, ProgenitorWorld.BackgroundRowsMs)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };

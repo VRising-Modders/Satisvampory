@@ -56,6 +56,7 @@ namespace Satisvampory.Server
             _ctx.Track(new OnDispose(() => _server.Changed -= serverChanged));
             World.ProgenitorWorld.FailureLog = t => _ctx.Log.LogInfo(t);
             _ctx.Track(new OnDispose(() => World.ProgenitorWorld.FailureLog = null));
+            _ctx.Track(new OnDispose(World.ProgenitorWorld.ForgetRows));
             var like = new PluginContextLike(_ctx);
             Labels.OwnerKeyOf = c => Stores.SettingsKey(like, c);
             _ctx.Track(new OnDispose(() => Labels.OwnerKeyOf = null));

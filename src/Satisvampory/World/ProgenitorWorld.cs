@@ -40,7 +40,33 @@ namespace Satisvampory.World
         /// <summary>Satisvampory's switches for crafting-table recipes; null means all off.</summary>
         public Func<EngineId, ISet<int>?>? TableRecipesOn { get; set; }
 
-        public ProgenitorWorld(PluginInventory inventory, Progenitor.Stations.PluginStations? stations, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit)
+        // ---------------- container rows ----------------
+
+        /// <summary>Background work (ticker, material answers) accepts rows this old; player requests read fresh.</summary>
+        public const long BackgroundRowsMs = 30_000;
+
+        static readonly Dictionary<int, (long At, ulong Heart, List<CastleContainerInfo> Rows)> RowCache = new();
+
+        /// <summary>
+        /// A castle's containers and stations. Progenitor walks every building of the castle for
+        /// each list (about 100 ms for a large castle), so rows up to <paramref name="maxAgeMs"/>
+        /// old are reused; a fresh read refreshes the cache for everyone. Main thread only.
+        /// </summary>
+        public static List<CastleContainerInfo> Rows(ICastleHandle castle, long maxAgeMs = 0)
+        {
+            var now = Environment.TickCount64;
+            var key = castle.Territory.Index;
+            var heart = castle.Heart.Index == 0 ? 0UL : ((ulong)(uint)castle.Heart.Index << 32) | (uint)castle.Heart.Version;
+            if (maxAgeMs > 0 && RowCache.TryGetValue(key, out var hit) && hit.Heart == heart && now - hit.At <= maxAgeMs) return hit.Rows;
+            var rows = castle.Containers().Concat(castle.Stations()).ToList();
+            RowCache[key] = (now, heart, rows);
+            return rows;
+        }
+
+        /// <summary>Drop every cached row (plugin unload).</summary>
+        public static void ForgetRows() => RowCache.Clear();
+
+        public ProgenitorWorld(PluginInventory inventory, Progenitor.Stations.PluginStations? stations, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit, long maxRowAgeMs = 0)
         {
             _inv = inventory;
             _stations = stations;
@@ -62,7 +88,7 @@ namespace Satisvampory.World
                     list.Add(heartInfo);
                 }
 
-                foreach (var row in castle.Containers().Concat(castle.Stations()))
+                foreach (var row in Rows(castle, maxRowAgeMs))
                 {
                     if (row.Id.IsNone) continue;
                     var id = new EngineId(row.Id.Value);
@@ -99,13 +125,13 @@ namespace Satisvampory.World
         }
 
         /// <summary>Every container, station and heart id on these castles, for loading their saved records.</summary>
-        public static IEnumerable<EngineId> ContainerIds(IEnumerable<ICastleHandle> castles)
+        public static IEnumerable<EngineId> ContainerIds(IEnumerable<ICastleHandle> castles, long maxRowAgeMs = 0)
         {
             foreach (var c in castles)
             {
                 if (!c.Enabled) continue;
                 if (!c.HeartId.IsNone) yield return new EngineId(c.HeartId.Value);
-                foreach (var row in c.Containers().Concat(c.Stations()))
+                foreach (var row in Rows(c, maxRowAgeMs))
                     if (!row.Id.IsNone) yield return new EngineId(row.Id.Value);
             }
         }

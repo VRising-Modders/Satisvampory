@@ -75,8 +75,12 @@ namespace Satisvampory.Server
             if (!_stopped) MainThread.PostDelayed(TickSeconds, Tick, _ctx.Owner);
         }
 
+        /// <summary>Online player positions, read once per tick (for proximity braziers).</summary>
+        List<(float X, float Z)>? _players;
+
         void RunIslands(ServerSettings server)
         {
+            _players = null;
             var sharing = Sharing(server);
             var castles = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             var done = new HashSet<PlotId>();
@@ -178,6 +182,9 @@ namespace Satisvampory.Server
         int RunSpecials(ProgenitorWorld world, List<ICastleHandle> members, ServerSettings server)
         {
             var moves = 0;
+            var time = _ctx.Time.GetTimeOfDay();
+            var isNight = time is { } t && !t.IsDay;
+            var players = _players ??= _ctx.Players.OnlinePositions().Select(p => (p.X, p.Z)).ToList();
             foreach (var castle in members)
             {
                 var plot = ProgenitorWorld.PlotOf(castle);
@@ -188,14 +195,13 @@ namespace Satisvampory.Server
                     CastleFeedsSalvage = castleSettings.FeedSalvage,
                     AllowSpawner = server.AllowSpawnerChests,
                     AllowBrazier = server.AllowBrazierChests,
-                    // Lighting braziers needs a Progenitor brazier API; fuel still flows.
-                    AllowNightAndProximity = false,
+                    AllowNightAndProximity = server.AllowNightAndProximity,
                     AllowTrash = server.AllowTrash,
                 };
                 var report = new JobReport();
                 SpecialJobs.Salvage(world, plot, sw, report);
                 SpecialJobs.Spawners(world, plot, sw, report);
-                SpecialJobs.Braziers(world, plot, sw, isNight: false, players: Array.Empty<(float, float)>(), report);
+                SpecialJobs.Braziers(world, plot, sw, isNight, players, report);
                 moves += report.Moves.Count;
             }
             return moves;

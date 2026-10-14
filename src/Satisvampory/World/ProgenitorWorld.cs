@@ -67,8 +67,8 @@ namespace Satisvampory.World
                     var info = new ContainerInfo(id, plot, row.IsStation ? NodeKind.Station : NodeKind.Chest, row.Nameplate)
                     {
                         FurnitureName = Pretty(row.Building.PrefabName),
-                        X = row.Building.TileX,
-                        Z = row.Building.TileY,
+                        X = CastleGeometry.TileToWorld(row.Building.TileX),
+                        Z = CastleGeometry.TileToWorld(row.Building.TileY),
                         Role = RoleOf(row),
                     };
                     if (_deposit(id) is { } d) Copy(d, info.Deposit);
@@ -183,8 +183,9 @@ namespace Satisvampory.World
             return res.Ok ? res.Done : 0;
         }
 
-        /// <summary>No brazier control in Progenitor yet.</summary>
-        public bool SetLit(EngineId brazier, bool lit) => false;
+        /// <summary>Light or put out a brazier through Progenitor; false when the game refused.</summary>
+        public bool SetLit(EngineId brazier, bool lit) =>
+            _stations != null && _nodes.TryGetValue(brazier, out var n) && _stations.SetBrazierEnabled(n.Entity, lit).Ok;
 
         bool TryRef(EngineId id, InvPart part, out InventoryRef r)
         {
@@ -199,7 +200,7 @@ namespace Satisvampory.World
             if (!row.IsStation) return StationRole.None;
             var name = row.Building.PrefabName ?? string.Empty;
             if (Has(name, "Devour")) return StationRole.Devourer;
-            if (Has(name, "Brazier")) return StationRole.Brazier;
+            if (Has(name, "Brazier") || Has(name, "Bonfire")) return StationRole.Brazier;
             if (Has(name, "Stable")) return StationRole.Stable;
             if (Has(name, "Tomb") || Has(name, "Nest") || Has(name, "Spawner")) return StationRole.UnitSpawner;
             return row.IsRefinement ? StationRole.Refinement : StationRole.Workstation;

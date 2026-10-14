@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Progenitor.Inventory;
 using Progenitor.Networking;
 using Progenitor.Ui;
 using Satisvampory.Config;
@@ -86,6 +87,7 @@ namespace Satisvampory.Client
             _ctx.Track(stash.OnClick(() => _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash })));
             _ctx.Track(stash.Tooltip("Put everything but your hotbar where it belongs (Mass Deposit).", "Stash"));
             AttachTooltip();
+            _ctx.Events.On<InventorySortUsed>(OnSort);
             var open = inv.Button("Satisvampory");
             _ctx.Track(open.OnClick(() => Open(CastleTab)));
             _ctx.Track(open.Tooltip("Castle, Mass Deposit, belts and categories, inventory, find.", "Satisvampory"));
@@ -119,6 +121,15 @@ namespace Satisvampory.Client
                     if (tip.IsOpen && tip.Target.ItemGuid == item) tip.SetRows(line.Length == 0 ? Array.Empty<string>() : new[] { line });
                 });
             }));
+        }
+
+        /// <summary>Sorting your own inventory twice within a second stashes it (spec 07), when the player wants that.</summary>
+        void OnSort(InventorySortUsed e)
+        {
+            if (e.Target != InventorySortTarget.Own) return;
+            if (e.SincePreviousMs < 0 || e.SincePreviousMs > 1000) return;
+            if (!_player.Rows.First(r => r.Entry.Definition.Key == "StashOnDoubleSort").Entry.Value) return;
+            _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash });
         }
 
         void OnKey(string id)

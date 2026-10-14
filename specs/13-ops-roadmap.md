@@ -43,12 +43,13 @@ Built and tested outside the game; nothing has run in-game yet.
 | Engine (lists, Mass Deposit by settings, sharing, stations, loops, specials, servant logic, heart feed, evaluator, import) | done, unit-tested |
 | Plugin: settings page (Me, Keys, Server, Help), player settings sync, admin import Check / Import | done |
 | Plugin: conveyor tick, special chests, heart blood feed on visit and login, stash from anywhere | done |
-| Plugin: Input / Output / Deposit settings panels, picker, Try it, recipe switches, loop mode, Empty trash | done; container identity waits on Progenitor's network-id resolver |
+| Plugin: Input / Output / Deposit settings panels, picker, Try it, recipe switches, loop mode, Empty trash | done |
 | Plugin: hub (Castle, Mass Deposit, Belts and categories, Inventory, Find), Stash button, tooltip line | done |
-| Item catalog from the game | waits on Progenitor `ctx.Items.Catalog`; engine builder done |
+| Item catalog from the game | done (Progenitor item catalog) |
 | Crafting and building from shared storage | waits on Progenitor P3 merge; policy done |
-| Double-tap sort to stash | waits on Progenitor's sort event (in progress) |
+| Double-tap sort to stash | done (Progenitor sort event) |
 | Servants (loot stash, repeat hunts, hunt log, throne targeting) | waits on Progenitor's mission API (in progress); engine logic done |
-| Brazier lighting (night, proximity) | waits on Progenitor's brazier, day/night and player-position APIs (in progress); fuel works |
-| Pick in world, Locate | wait on the resolver and pick-result network id |
+| Brazier lighting (night, proximity) | done (Progenitor brazier, time and position APIs) |
+| Pick in world, Locate | done (Progenitor network-id resolver) |
 | Data-table inventory, term tooltips, tip cards | wait on Progenitor P7b; text versions in place |
+| Stash skipping the hotbar exactly; stash/pull/tidy refused while downed, dead, in PvP combat | waits on Progenitor slot transfer and player state (in progress) |

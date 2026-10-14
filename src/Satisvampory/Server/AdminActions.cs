@@ -83,18 +83,23 @@ namespace Satisvampory.Server
 
                 foreach (var p in r.Players)
                 {
-                    if (Stores.Player(ctx.Save, p.PlatformId) == null) { Stores.SetPlayer(ctx.Save, p.PlatformId, p.Me); players++; }
+                    if (Stores.Player(ctx.Save, p.PlatformId) == null)
+                    {
+                        Stores.SetPlayer(ctx.Save, p.PlatformId, p.Me);
+                        half.ForgetPlayer(p.PlatformId);
+                        players++;
+                    }
                     var mine = all.Where(c => c.Owner.PlatformId == p.PlatformId).ToList();
                     if (mine.Count == 0) continue;
-                    var (key, _) = ticker.IslandOf(mine[0], all, Ticker.Sharing(server));
-                    var state = Load(ctx, key);
+                    var (key, members) = ticker.IslandOf(mine[0], all, Ticker.Sharing(server));
+                    var state = Stores.Load(ctx.Save, key, ProgenitorWorld.ContainerIds(members));
                     if (p.Rules.DefaultReserve != 10) state.Rules.DefaultReserve = p.Rules.DefaultReserve;
                     foreach (var kv in p.Rules.ItemReserve) state.Rules.ItemReserve.TryAdd(kv.Key, kv.Value);
                     foreach (var kv in p.Rules.ItemCap) state.Rules.ItemCap.TryAdd(kv.Key, kv.Value);
                     foreach (var kv in p.Categories.Custom) state.Categories.Custom.TryAdd(kv.Key, kv.Value);
                     foreach (var kv in p.Categories.Edited) state.Categories.Edited.TryAdd(kv.Key, kv.Value);
                     foreach (var kv in p.Categories.Aliases) state.Categories.Aliases.TryAdd(kv.Key, kv.Value);
-                    Stores.SetIsland(ctx.Save, key, SaveCodec.Capture(state, state.Graph.Sequence));
+                    Stores.Save(ctx.Save, key, state);
                     islands++;
 
                     foreach (var c in mine)
@@ -128,14 +133,15 @@ namespace Satisvampory.Server
                 if (done.Contains(plot)) continue;
                 var (key, members) = ticker.IslandOf(castle, all, Ticker.Sharing(server));
                 foreach (var m in members) done.Add(ProgenitorWorld.PlotOf(m));
-                var state = Load(ctx, key);
+                var state = Stores.Load(ctx.Save, key, ProgenitorWorld.ContainerIds(members));
                 var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null);
                 var containers = members.SelectMany(m => world.ContainersOn(ProgenitorWorld.PlotOf(m))).Where(c => c.Kind != Engine.Model.NodeKind.Heart).ToList();
                 var report = LegacyImporter.Apply(containers, catalog.WithEdits(state.Categories), state.Graph, world);
                 foreach (var c in containers)
-                    if (!state.Deposit.ContainsKey(c.Id)) { state.Deposit[c.Id] = c.Deposit; chests++; }
+                    if (!state.Deposit.ContainsKey(c.Id)) { state.Deposit[c.Id] = c.Deposit; state.Touched.Add(c.Id); chests++; }
                 belts += report.GroupsCreated;
-                Stores.SetIsland(ctx.Save, key, SaveCodec.Capture(state, state.Graph.Sequence));
+                foreach (var id in state.Graph.Lists.Keys) state.Touched.Add(id);
+                Stores.Save(ctx.Save, key, state);
 
                 if (server.CleanNamesAfterImport)
                     foreach (var (id, clean) in report.CleanNames)
@@ -150,10 +156,5 @@ namespace Satisvampory.Server
                 + (notes.Count > 0 ? ". Notes: " + string.Join("; ", notes) : ".");
         }
 
-        static IslandState Load(SatisContext ctx, string key)
-        {
-            var save = Stores.Island(ctx.Save, key);
-            return save == null ? new IslandState() : SaveCodec.Restore(save, out _);
-        }
     }
 }

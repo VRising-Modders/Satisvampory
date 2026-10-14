@@ -29,8 +29,10 @@ namespace Satisvampory.Server
             public ICastleHandle Standing = null!;
             public List<ICastleHandle> Castles = new();
             public IReadOnlyList<PlotId> Scope = Array.Empty<PlotId>();
+            /// <summary>Whose island-wide settings apply: the standing castle owner's clan, else the owner (Stores.SettingsKey).</summary>
             public string OwnerKey = string.Empty;
             public IslandState State = new();
+            public CastleRelation Relation;
         }
 
         /// <summary>Null when the player is not standing on a plot they or their clan may use.</summary>
@@ -44,7 +46,8 @@ namespace Satisvampory.Server
             if (relation is CastleRelation.None) return null;
             var member = relation is CastleRelation.Owner or CastleRelation.ClanMember;
 
-            var clan = ctx.Clans.Of(userEntity);
+            // The standing castle's owner decides the clan, so an allied visitor sees the host's island.
+            var clan = ctx.Clans.Of(standing.Owner.User.ToEntity());
             var clanCastles = clan.IsNone ? ctx.Castles.AllForUser(standing.Owner.User.ToEntity()).ToList() : ctx.Clans.Castles(clan).ToList();
             if (!clanCastles.Any(c => ProgenitorWorld.PlotOf(c) == ProgenitorWorld.PlotOf(standing))) clanCastles.Add(standing);
 
@@ -69,23 +72,17 @@ namespace Satisvampory.Server
             var raided = new HashSet<PlotId>(clanCastles.Where(c => c.Raided).Select(ProgenitorWorld.PlotOf));
             var scope = Scope.Resolve(standingInfo, member, actor.TakePartInClanShare, sharing, clanCastles.Select(Info), new RaidView(raided));
 
-            var clanShare = !clan.IsNone && sharing.ClanShare(actor.TakePartInClanShare) && sharing.ClanShare(standingInfo.OwnerInClanShare) && scope.Count > 1;
-            var castleShare = sharing.CastleShare(standingInfo.OwnerSharesCastles) && scope.Count > 1;
-            var ownerKey = clanShare ? "clan/" + clan.ClanGuid.ToString("N")
-                : castleShare ? "owner/" + standing.Owner.PlatformId
-                : "castle/" + standing.Territory.Index;
-
-            var save = Stores.Island(ctx.Save, ownerKey);
-            var state = save == null ? new IslandState() : SaveCodec.Restore(save, out _);
-
+            var ownerKey = Stores.SettingsKey(new PluginContextLike(ctx), standing);
             var set = new HashSet<PlotId>(scope);
+            var castles = clanCastles.Where(c => set.Contains(ProgenitorWorld.PlotOf(c))).ToList();
             return new Island
             {
                 Standing = standing,
-                Castles = clanCastles.Where(c => set.Contains(ProgenitorWorld.PlotOf(c))).ToList(),
+                Castles = castles,
                 Scope = scope,
                 OwnerKey = ownerKey,
-                State = state,
+                State = Stores.Load(ctx.Save, ownerKey, ProgenitorWorld.ContainerIds(castles)),
+                Relation = relation,
             };
         }
 
@@ -99,14 +96,14 @@ namespace Satisvampory.Server
             if (!home.Enabled || half.Ticker == null) return null;
             var all = ctx.Castles.All().Where(c => c.Enabled).ToList();
             var (key, members) = half.Ticker.IslandOf(home, all, Ticker.Sharing(server));
-            var save = Stores.Island(ctx.Save, key);
             return new Island
             {
                 Standing = home,
                 Castles = members,
                 Scope = members.Select(ProgenitorWorld.PlotOf).ToList(),
                 OwnerKey = key,
-                State = save == null ? new IslandState() : SaveCodec.Restore(save, out _),
+                State = Stores.Load(ctx.Save, key, ProgenitorWorld.ContainerIds(members)),
+                Relation = CastleRelation.Owner,
             };
         }
 
@@ -132,6 +129,7 @@ namespace Satisvampory.Server
             {
                 case ActionKind.Tidy:
                 {
+                    if (island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return Notice(NoticeCode.Refused);
                     var r = PlayerActions.Tidy(world, deposit, island.State.Graph);
                     return Notice(NoticeCode.Tidied, r.Items, r.Containers(byDestination: true));
                 }

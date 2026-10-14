@@ -36,11 +36,27 @@ namespace Satisvampory
             _ctx.Track(new OnDispose(() => _admin.Request = null));
             new Client.Panels(_ctx).Attach();
             new Client.Hub(_ctx, _player).Attach(_keys);
-            SendPrefs();
+            _ctx.Track(new OnDispose(() => _stopped = true));
+            KeepPrefsSent();
         }
 
+        bool _stopped;
+        bool _sent;
+
         void SendPrefs() =>
-            _ctx.Net.SendToServer(EventIds.PlayerPrefs, new PlayerPrefsPacket { Magic = EventIds.Magic, Version = 1, Bits = _player.Bits() });
+            _sent = _ctx.Net.SendToServer(EventIds.PlayerPrefs, new PlayerPrefsPacket { Magic = EventIds.Magic, Version = 1, Bits = _player.Bits() });
+
+        /// <summary>
+        /// Player settings must reach the server after every join: at load there is often no
+        /// connection yet, so retry every 2 s until a send goes through, then refresh once a minute
+        /// (the server ignores unchanged settings).
+        /// </summary>
+        void KeepPrefsSent()
+        {
+            if (_stopped) return;
+            SendPrefs();
+            Progenitor.Dev.MainThread.PostDelayed(_sent ? 60 : 2, KeepPrefsSent, _ctx.Owner);
+        }
 
         void OnKey(string id)
         {

@@ -114,6 +114,9 @@ namespace Satisvampory.Engine.Persistence
 
         /// <summary>Crafting tables have no game switch per recipe; these are Satisvampory's (default off).</summary>
         public Dictionary<ContainerId, HashSet<int>> TableRecipesOn { get; init; } = new();
+
+        /// <summary>Containers whose own record changed since the last save, including ones cleared or forgotten.</summary>
+        public HashSet<ContainerId> Touched { get; } = new();
     }
 
     public static class SaveCodec

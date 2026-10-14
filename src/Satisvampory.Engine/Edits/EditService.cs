@@ -64,9 +64,13 @@ namespace Satisvampory.Engine.Edits
 
         static bool CanEdit(ActorRole r) => r != ActorRole.Guest;
 
-        EditResult Accept(EditResult r)
+        EditResult Accept(EditResult r, ContainerId? touched = null)
         {
-            if (r.Ok) Revision++;
+            if (r.Ok)
+            {
+                Revision++;
+                if (touched is { } t) _island.Touched.Add(t);
+            }
             return r;
         }
 
@@ -113,7 +117,7 @@ namespace Satisvampory.Engine.Edits
             list.Insert(Math.Clamp(at ?? list.Count, 0, list.Count), stored);
 
             var closes = LoopFinder.Find(Graph.Edges()).Any(l => l.Closing.Sequence == seq);
-            return Accept(new EditResult(true, ClosesLoop: closes));
+            return Accept(new EditResult(true, ClosesLoop: closes), owner);
         }
 
         public EditResult RemoveEntry(ActorRole role, ContainerId owner, ListSide side, int index)
@@ -122,7 +126,7 @@ namespace Satisvampory.Engine.Edits
             var list = side == ListSide.Input ? Graph.For(owner).Input : Graph.For(owner).Output;
             if (index < 0 || index >= list.Count) return EditResult.No("That row is gone; the list changed");
             list.RemoveAt(index);
-            return Accept(EditResult.Done);
+            return Accept(EditResult.Done, owner);
         }
 
         public EditResult MoveEntry(ActorRole role, ContainerId owner, ListSide side, int from, int to)
@@ -133,7 +137,7 @@ namespace Satisvampory.Engine.Edits
             var e = list[from];
             list.RemoveAt(from);
             list.Insert(to, e);
-            return Accept(EditResult.Done);
+            return Accept(EditResult.Done, owner);
         }
 
         public EditResult SetOrders(ActorRole role, ContainerId owner, PullOrder? pull, SendOrder? send)
@@ -142,7 +146,7 @@ namespace Satisvampory.Engine.Edits
             var l = Graph.For(owner);
             if (pull is { } p) l.PullOrder = p;
             if (send is { } s) l.SendOrder = s;
-            return Accept(EditResult.Done);
+            return Accept(EditResult.Done, owner);
         }
 
         // ---------------- deposit options ----------------
@@ -157,7 +161,7 @@ namespace Satisvampory.Engine.Edits
             change(d);
             // Apply to the live ContainerInfo too so rankings see it at once.
             CopyInto(d, c.Deposit);
-            return Accept(EditResult.Done);
+            return Accept(EditResult.Done, id);
         }
 
         static void CopyInto(DepositOptions from, DepositOptions to)

@@ -110,7 +110,7 @@ namespace Satisvampory.Server
 
         void Save(Session s)
         {
-            Stores.SetIsland(_ctx.Save, s.Island.OwnerKey, SaveCodec.Capture(s.Island.State, s.Island.State.Graph.Sequence));
+            Stores.Save(_ctx.Save, s.Island.OwnerKey, s.Island.State);
             _half.MaterialPolicy.Invalidate();
         }
 
@@ -256,6 +256,9 @@ namespace Satisvampory.Server
 
         PanelMsg SetLoop(Session s, SetLoopReq r)
         {
+            var loops = LoopFinder.Find(s.Island.State.Graph.Edges());
+            if (!loops.Any(l => l.Key == r.LoopKey && l.Members.Contains(s.Container.Id)))
+                throw new RequestRefusedException("That loop no longer exists.");
             Must(s.Edits.SetLoopMode(s.Role, r.LoopKey, (LoopMode)Math.Clamp(r.Mode, 0, 2)));
             Save(s);
             return Panel(s);

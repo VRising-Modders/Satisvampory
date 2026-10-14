@@ -89,6 +89,18 @@ namespace Satisvampory.World
             return id;
         }
 
+        /// <summary>Every container, station and heart id on these castles, for loading their saved records.</summary>
+        public static IEnumerable<EngineId> ContainerIds(IEnumerable<ICastleHandle> castles)
+        {
+            foreach (var c in castles)
+            {
+                if (!c.Enabled) continue;
+                if (!c.HeartId.IsNone) yield return new EngineId(c.HeartId.Value);
+                foreach (var row in c.Containers().Concat(c.Stations()))
+                    if (!row.Id.IsNone) yield return new EngineId(row.Id.Value);
+            }
+        }
+
         /// <summary>A plot is identified by its territory index, which survives restarts.</summary>
         public static PlotId PlotOf(ICastleHandle castle) => new((ulong)(uint)castle.Territory.Index);
 

@@ -35,6 +35,7 @@ namespace Satisvampory.Server
         readonly Dictionary<string, TickState> _tickStates = new();
         readonly Dictionary<PlotId, double> _heartFed = new();
         readonly Dictionary<string, TickReport> _lastReports = new();
+        int _rotate;
 
         /// <summary>The last conveyor report for an island, for the panels' row status lines.</summary>
         internal TickReport? LastReport(string islandKey) => _lastReports.TryGetValue(islandKey, out var r) ? r : null;
@@ -80,32 +81,49 @@ namespace Satisvampory.Server
             var castles = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             var done = new HashSet<PlotId>();
             var budget = server.MovesPerTick;
+            if (castles.Count == 0) return;
+            // Start somewhere new each tick so islands late in the list are not starved of budget.
+            var start = _rotate++ % castles.Count;
 
-            foreach (var castle in castles)
+            for (var n = 0; n < castles.Count && budget > 0; n++)
             {
-                if (budget <= 0) break;
+                var castle = castles[(start + n) % castles.Count];
                 var plot = ProgenitorWorld.PlotOf(castle);
                 if (done.Contains(plot)) continue;
 
                 var (key, members) = IslandOf(castle, castles, sharing);
                 foreach (var m in members) done.Add(ProgenitorWorld.PlotOf(m));
+                try
+                {
+                    budget -= RunIsland(server, key, members, plot, budget);
+                }
+                catch (Exception e)
+                {
+                    _ctx.Log.LogError($"Satisvampory: island {key} failed this tick: {e.Message}");
+                }
+            }
+        }
 
-                var save = Stores.Island(_ctx.Save, key);
-                if (save == null || save.Containers.Count == 0) continue;
-                var state = SaveCodec.Restore(save, out _);
+        /// <summary>One island's specials and conveyor tick; returns the moves it made.</summary>
+        int RunIsland(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget)
+        {
+            {
+                var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members));
+                if (state.Graph.Lists.Count == 0 && state.Deposit.Values.All(d => d.Special == SpecialKind.None)) return 0;
 
                 var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };
-                var scope = members.Select(ProgenitorWorld.PlotOf).ToList();
+                // A castle with Logistics off takes no part in conveyors (spec 10).
+                var scope = members.Where(m => Stores.Castle(_ctx.Save, m.Territory.Index).LogisticsOn).Select(ProgenitorWorld.PlotOf).ToList();
                 var deposit = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, scope, plot)
                 {
                     Settings = state.MassDeposit,
                     Belts = state.Graph.BeltMembers(),
                 };
-                RunSpecials(world, members, server);
-                if (state.Graph.Lists.Count == 0) continue;
+                var used = RunSpecials(world, members, server);
+                if (state.Graph.Lists.Count == 0 || scope.Count == 0) return used;
                 if (!_tickStates.TryGetValue(key, out var tickState)) _tickStates[key] = tickState = new TickState();
                 foreach (var (loopKey, mode) in state.LoopModes)
                 {
@@ -116,12 +134,12 @@ namespace Satisvampory.Server
                 var report = new ConveyorTick(world, deposit, state.Graph, state.Rules, tickState, new TickOptions
                 {
                     MovesPerPlot = server.MovesPerPlot,
-                    MovesPerTick = budget,
+                    MovesPerTick = Math.Max(0, budget - used),
                     LoopMovesPerTick = server.LoopMovesPerTick,
                     LoopsAllowed = server.AllowLoops,
                 }).Run(Now);
-                budget -= report.Moves.Count;
                 _lastReports[key] = report;
+                return used + report.Moves.Count;
             }
         }
 
@@ -134,7 +152,8 @@ namespace Satisvampory.Server
         {
             var owner = _half.PlayerFor(castle.Owner.PlatformId);
             bool Excluded(ICastleHandle c) => Stores.Castle(_ctx.Save, c.Territory.Index).ExcludeFromSharing;
-            if (Excluded(castle)) return ("castle/" + castle.Territory.Index, new List<ICastleHandle> { castle });
+            var key = Stores.SettingsKey(new PluginContextLike(_ctx), castle);
+            if (Excluded(castle)) return (key, new List<ICastleHandle> { castle });
             if (castle.Owner.HasClan && sharing.ClanShare(owner.TakePartInClanShare))
             {
                 var clan = _ctx.Clans.Of(castle.Owner.User.ToEntity());
@@ -144,20 +163,21 @@ namespace Satisvampory.Server
                         .Where(c => c.Enabled && !c.Raided && !Excluded(c) && sharing.ClanShare(_half.PlayerFor(c.Owner.PlatformId).TakePartInClanShare))
                         .ToList();
                     if (!members.Any(c => ProgenitorWorld.PlotOf(c) == ProgenitorWorld.PlotOf(castle))) members.Add(castle);
-                    return ("clan/" + clan.ClanGuid.ToString("N"), members);
+                    return (key, members);
                 }
             }
             if (sharing.CastleShare(owner.ShareBetweenMyCastles))
             {
                 var mine = all.Where(c => c.Owner.PlatformId == castle.Owner.PlatformId && !c.Raided && !Excluded(c)).ToList();
-                if (mine.Count > 1) return ("owner/" + castle.Owner.PlatformId, mine);
+                if (mine.Count > 1) return (key, mine);
             }
-            return ("castle/" + castle.Territory.Index, new List<ICastleHandle> { castle });
+            return (key, new List<ICastleHandle> { castle });
         }
 
         /// <summary>Salvage, spawner and brazier chests work on their own plot (spec 09).</summary>
-        void RunSpecials(ProgenitorWorld world, List<ICastleHandle> members, ServerSettings server)
+        int RunSpecials(ProgenitorWorld world, List<ICastleHandle> members, ServerSettings server)
         {
+            var moves = 0;
             foreach (var castle in members)
             {
                 var plot = ProgenitorWorld.PlotOf(castle);
@@ -176,7 +196,9 @@ namespace Satisvampory.Server
                 SpecialJobs.Salvage(world, plot, sw, report);
                 SpecialJobs.Spawners(world, plot, sw, report);
                 SpecialJobs.Braziers(world, plot, sw, isNight: false, players: Array.Empty<(float, float)>(), report);
+                moves += report.Moves.Count;
             }
+            return moves;
         }
 
         internal static SharingState Sharing(ServerSettings s) => new()
@@ -240,8 +262,9 @@ namespace Satisvampory.Server
                 {
                     if (!HeartFeed.CooledDown(_heartFed, plot, Now)) continue;
                     var castle = all.First(c => ProgenitorWorld.PlotOf(c) == plot);
-                    TopUp(castle, all, server);
                     _heartFed[plot] = Now;
+                    try { TopUp(castle, all, server); }
+                    catch (Exception e) { _ctx.Log.LogError($"Satisvampory: heart top-up failed on plot {plot}: {e.Message}"); }
                 }
             }
             catch (Exception ex)
@@ -254,8 +277,7 @@ namespace Satisvampory.Server
         void TopUp(ICastleHandle castle, List<ICastleHandle> all, ServerSettings server)
         {
             var (key, members) = IslandOf(castle, all, Sharing(server));
-            var save = Stores.Island(_ctx.Save, key);
-            var state = save == null ? new IslandState() : SaveCodec.Restore(save, out _);
+            var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members));
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,

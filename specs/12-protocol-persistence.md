@@ -9,17 +9,17 @@
 
 ## Persistence
 
-Progenitor persistence, one store per scope:
+Progenitor persistence (the world save). Nothing is keyed by the sharing island: islands change whenever someone builds, toggles sharing, excludes a castle or is raided, and stored state must not move with them.
 
-| Store | Keyed by |
-|---|---|
-| Lists (input and output entries, modes, filters), deposit options (priority, item priorities, bans, special kind) | Container id |
-| Belts, Mass Deposit Simple list and Advanced script, reserves, caps, castle aliases, plot label, castle toggles | Castle heart id (settings follow the heart, not the owner) |
-| Mass Deposit settings and belts under castle share | Owner player id |
-| Mass Deposit settings and belts under clan share | Clan id |
-| Clan settings, plot numbering | Clan id |
-| Player settings, keybinds, hunt log | Player id |
-| Server settings | One record |
+| Store | Key | Holds |
+|---|---|---|
+| Container | `container/<container id>` | Its input and output lists, pull and send order, deposit settings, crafting-table recipe switches |
+| Settings owner | `settings/clan/<clan guid>`, or `settings/owner/<platform id>` for a clanless owner | Belts, Mass Deposit overrides and Advanced script, reserves, caps, categories and aliases, loop modes |
+| Castle | `castle-settings/<territory index>` | The Castle page: plot label, logistics on, salvage, heart feed, repeat hunts, exclude |
+| Player | `player/<platform id>` | The Me page |
+| Server | Progenitor synced config | The Server page |
+
+A castle uses the settings of its owner's clan, or its owner when clanless, so every castle on a clan island shares one set. Joining or leaving a clan is the only thing that changes which set applies.
 
 A destroyed container's entries are removed from every list and belt, and the affected panels show "n entries removed: chest destroyed".
 

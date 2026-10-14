@@ -107,7 +107,7 @@ namespace Satisvampory.Server
 
         void Save(Session s)
         {
-            Stores.SetIsland(_ctx.Save, s.Island.OwnerKey, SaveCodec.Capture(s.Island.State, s.Island.State.Graph.Sequence));
+            Stores.Save(_ctx.Save, s.Island.OwnerKey, s.Island.State);
             _half.MaterialPolicy.Invalidate();
         }
 
@@ -135,7 +135,7 @@ namespace Satisvampory.Server
                 Sharing = s.Island.Scope.Count <= 1 ? "no sharing" : s.Island.OwnerKey.StartsWith("clan/") ? "clan share" : "castle share",
                 IsOwner = s.Role == ActorRole.Owner,
                 CanEdit = s.Role != ActorRole.Guest,
-                LogisticsOn = s.Island.State.Rules.LogisticsOn,
+                LogisticsOn = settings.LogisticsOn,
                 DefaultReserve = s.Island.State.Rules.DefaultReserve,
                 FeedSalvage = settings.FeedSalvage,
                 HeartAutoFeed = settings.HeartAutoFeed,
@@ -155,13 +155,13 @@ namespace Satisvampory.Server
             settings.FeedSalvage = m.FeedSalvage;
             settings.HeartAutoFeed = m.HeartAutoFeed;
             settings.RepeatHunts = m.RepeatHunts;
+            settings.LogisticsOn = m.LogisticsOn;
             if (m.Exclude != settings.ExcludeFromSharing)
             {
                 if (s.Role != ActorRole.Owner) throw new RequestRefusedException("Only the castle's owner can exclude it from sharing.");
                 settings.ExcludeFromSharing = m.Exclude;
             }
             Stores.SetCastle(_ctx.Save, c.Territory.Index, settings);
-            s.Island.State.Rules.LogisticsOn = m.LogisticsOn;
             Must(s.Edits.SetDefaultReserve(s.Role, Math.Max(0, m.DefaultReserve)));
             Save(s);
             return Castle(s);
@@ -485,7 +485,7 @@ namespace Satisvampory.Server
             if (s.Catalog.TryResolveCategory(text.StartsWith("category ", StringComparison.OrdinalIgnoreCase) ? text.Substring(9) : text, out var cat) && !s.Catalog.TryResolveItem(text, out _))
                 result = PlayerActions.PullGroup(s.World, s.Deposit, bag, cat, q.Amount > 0 ? q.Amount : null, prefs.NeverPullLastStack);
             else if (TryItem(s.Catalog, text, out var item))
-                result = PlayerActions.Pull(s.World, s.Deposit, bag, item, Math.Max(1, q.Amount), prefs.NeverPullLastStack);
+                result = PlayerActions.Pull(s.World, s.Deposit, bag, item, q.Amount > 0 ? q.Amount : s.Catalog.MaxStack(item), prefs.NeverPullLastStack);
             else
                 throw new RequestRefusedException($"No item or category called \"{text}\".");
 

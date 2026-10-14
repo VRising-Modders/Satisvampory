@@ -20,6 +20,9 @@ namespace Satisvampory.Server
         readonly SatisContext _ctx;
         readonly ServerConfig _server;
         readonly Dictionary<ulong, PlayerSettings> _players = new();
+        readonly Dictionary<ulong, uint> _lastBits = new();
+        readonly Dictionary<ulong, double> _lastAction = new();
+        readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
         internal ServerHalf(SatisContext ctx, ServerConfig server)
         {
@@ -62,11 +65,16 @@ namespace Satisvampory.Server
             return s;
         }
 
+        /// <summary>Drop a cached player so the next read comes from the save (after an import wrote it).</summary>
+        internal void ForgetPlayer(ulong platformId) => _players.Remove(platformId);
+
         unsafe void OnPrefs(int eventId, Entity userEntity, User user, byte* payload, int length)
         {
             if (length < sizeof(PlayerPrefsPacket)) return;
             var p = *(PlayerPrefsPacket*)payload;
             if (p.Magic != EventIds.Magic || p.Version != 1) return;
+            if (_lastBits.TryGetValue(user.PlatformId, out var last) && last == p.Bits) return;
+            _lastBits[user.PlatformId] = p.Bits;
             var settings = PlayerConfig.FromBits(p.Bits);
             _players[user.PlatformId] = settings;
             Stores.SetPlayer(_ctx.Save, user.PlatformId, settings);
@@ -77,6 +85,10 @@ namespace Satisvampory.Server
             if (length < sizeof(ActionPacket)) return;
             var a = *(ActionPacket*)payload;
             if (a.Magic != EventIds.Magic) return;
+            // One action per second per player (spec 07); rebuilding an island is not free.
+            var now = _clock.Elapsed.TotalSeconds;
+            if (_lastAction.TryGetValue(user.PlatformId, out var at) && now - at < 1) return;
+            _lastAction[user.PlatformId] = now;
             if ((ActionKind)a.Kind is ActionKind.ImportCheck or ActionKind.ImportApply)
             {
                 string text;

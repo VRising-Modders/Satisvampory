@@ -353,6 +353,8 @@ namespace Satisvampory.Client
         IUiInput _tryItem = null!;
         IUiLabel _tryResult = null!;
         DepositMsg _draft = new();
+        bool _dirty;
+        string _draftFor = "";
 
         public DepositView(Panels owner) : base(owner)
         {
@@ -382,6 +384,7 @@ namespace Satisvampory.Client
                 var list = parts[0] == "p" ? _draft.Priorities : _draft.Bans;
                 var i = int.Parse(parts[1]);
                 if (i >= 0 && i < list.Count) list.RemoveAt(i);
+                _dirty = true;
                 DrawEntries();
             }));
             _entryName = panel.Input("Item or category", "");
@@ -410,6 +413,10 @@ namespace Satisvampory.Client
             var s = Owner.State;
             if (s == null) return;
             _ = Panel;
+            // Another panel's reply must not throw away edits not yet saved here.
+            if (_dirty && _draftFor == s.ContainerId) return;
+            _dirty = false;
+            _draftFor = s.ContainerId;
             var d = s.Deposit;
             _draft = new DepositMsg
             {
@@ -454,6 +461,7 @@ namespace Satisvampory.Client
                 ? new PriorityMsg { Item = guid, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) }
                 : new PriorityMsg { Category = name, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) };
             (ban ? _draft.Bans : _draft.Priorities).Add(entry);
+            _dirty = true;
             _entryName.Value = string.Empty;
             DrawEntries();
         }
@@ -465,6 +473,7 @@ namespace Satisvampory.Client
             _draft.Special = int.TryParse(_special.Value, out var sp) ? sp : 0;
             Owner.Send<SetDepositReq, PanelMsg>(new SetDepositReq { Target = Owner.Target(), Deposit = _draft }, reply =>
             {
+                _dirty = false;
                 Owner.Apply(reply);
                 Owner.Ctx.Hud.Notify("Deposit settings saved.", kind: UiNoticeKind.Success, seconds: 3);
             });

@@ -38,7 +38,14 @@ namespace Satisvampory.Engine.World
         /// <summary>Bumped on any change to scope, membership, raid state, exclusions, settings or lists.</summary>
         public long Revision => Interlocked.Read(ref _revision);
 
-        public void Invalidate() => Interlocked.Increment(ref _revision);
+        /// <summary>Raised after every <see cref="Invalidate"/>, so the host can drop cached answers.</summary>
+        public event System.Action? Changed;
+
+        public void Invalidate()
+        {
+            Interlocked.Increment(ref _revision);
+            Changed?.Invoke();
+        }
 
         /// <summary>
         /// Sources for one item. Returns null for "vanilla for this item", which happens when the

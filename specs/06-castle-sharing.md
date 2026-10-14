@@ -63,7 +63,8 @@ Agreed split with Progenitor (P3, 2026-10-13):
 
 - **Satisvampory decides, per item:** which containers (the actor's island), the spend order (that item's reverse Mass Deposit order, so iron and wood in one recipe can drain different chests), and the reserve, kept once across the pool, not once per chest.
 - **Progenitor does the rest:** native counts, payment, the whole-request atomic transaction (no partial payment, no double charge), per-player totals (never rewriting a heart's shared aggregate), and lifecycle.
-- **Governed operations:** build, craft, repair, and heart upgrade. Research and anything else stay vanilla.
+- **Governed operations:** build and craft. Repair and heart upgrade join when Progenitor wires them. Research and anything else stay vanilla.
+- **Who:** the castle's owner and clan members. Allies and visitors keep vanilla behavior.
 - **Local inventory:** the player's bag and the station's own inventory count first, as in vanilla. The game's explicit local-inventory build mode stays local.
 - **Cancelled crafts:** refunds follow the game's own rules (to the station, then the player), keeping item identity. Nothing is sent back to the remote chest it came from.
 - **When off:** if the player turns **Craft from storage** off or the server disallows it, that player gets vanilla behavior.

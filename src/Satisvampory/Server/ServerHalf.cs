@@ -54,6 +54,7 @@ namespace Satisvampory.Server
             new PanelService(_ctx, this).Attach();
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();
+            new MaterialService(_ctx, this).Attach();
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }
 

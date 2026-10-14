@@ -29,7 +29,7 @@ On first boot with no 2.0 data, and again on demand from the Server settings pag
 
 1. Read 1.x's config and save data (reserves, caps, custom categories, aliases, ClanShare and exclusions, salvage, heart fuel, repeat hunts, player toggles) and map each onto the 2.0 setting.
 2. For every castle, read chest names. Each `s<n>` / `r<n>` line becomes a belt "Line n · <plot label>". Each receiver gets an input entry pointing at that group; each sender keeps its contents. A station receiver gets the group as input. A 1.x loop allowed by `.sg convloop` imports as a loop in **Cycle once**.
-3. Convert the other name codes: trailing `+` to base priority, `--word` to bans, special words and `NS` / `''` to special kinds (`01-containers.md`).
+3. Convert names into deposit settings, since 2.0 never reads names: item names, category words, generic names and other names become **Takes** settings, trailing `+` becomes base priority, `--word` becomes bans, and special words and `NS` / `''` become special kinds (`01-containers.md`, "Names are just names").
 4. Strip the converted tokens from names only when the admin ticks **Clean names after import** (default OFF), so a rollback to 1.x still works.
 5. Write an import report (counts, anything not mapped) to the log and the Server settings page.
 

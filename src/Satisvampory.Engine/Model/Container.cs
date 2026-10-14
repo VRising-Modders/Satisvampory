@@ -45,7 +45,21 @@ namespace Satisvampory.Engine.Model
         public string DisplayName => Name.Length > 0 ? Name : FurnitureName;
     }
 
-    /// <summary>Per-chest Advanced options (spec 01, "Advanced options").</summary>
+    /// <summary>What a chest takes when someone uses Mass Deposit (spec 01, "Deposit settings").</summary>
+    public enum Takes
+    {
+        /// <summary>Anything not banned, at the base priority. The default, so stash works with no setup.</summary>
+        Anything,
+        /// <summary>Only the items and categories listed in its priorities.</summary>
+        OnlyListed,
+        /// <summary>Never a Mass Deposit home.</summary>
+        Nothing,
+    }
+
+    /// <summary>
+    /// Per-chest deposit settings (spec 01). These, not the chest's name, decide where Mass Deposit
+    /// puts an item.
+    /// </summary>
     public sealed class DepositOptions
     {
         public const int MinPriority = -10;
@@ -59,9 +73,12 @@ namespace Satisvampory.Engine.Model
             set => _base = value < MinPriority ? MinPriority : value > MaxPriority ? MaxPriority : value;
         }
 
+        public Takes Takes { get; set; } = Takes.Anything;
+
+        /// <summary>Per item: added to the base priority. Listing an item also makes an OnlyListed chest take it.</summary>
         public Dictionary<ItemId, int> ItemPriority { get; } = new();
 
-        /// <summary>Keyed by folded category name.</summary>
+        /// <summary>Per category, keyed by folded name; same meaning as <see cref="ItemPriority"/>.</summary>
         public Dictionary<string, int> CategoryPriority { get; } = new();
 
         public HashSet<ItemId> BannedItems { get; } = new();

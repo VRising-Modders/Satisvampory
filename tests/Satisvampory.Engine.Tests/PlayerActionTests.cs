@@ -29,7 +29,7 @@ namespace Satisvampory.Engine.Tests
         [Fact]
         public void Stash_sends_each_item_home_and_reports_leftovers()
         {
-            var ore = _w.Chest(Home, "ore", capacity: 30);
+            var ore = _w.Chest(Home, "ore", capacity: 30).OnlyCategory("ore", 5);
             var misc = _w.Chest(Away, "misc", capacity: 15);
             _w.Put(_bag, IronOre, 40).Put(_bag, Plank, 10);
 
@@ -43,8 +43,8 @@ namespace Satisvampory.Engine.Tests
         [Fact]
         public void Pull_takes_worst_home_first_and_keeps_the_last_stack()
         {
-            var exact = _w.Chest(Home, "Iron Ore");
-            var stray = _w.Chest(Home, "Planks");
+            var exact = _w.Chest(Home, "Iron Ore").OnlyItem(IronOre, 5);
+            var stray = _w.Chest(Home, "Planks").OnlyItem(Plank);
             _w.Put(exact, IronOre, 300).Put(stray, IronOre, 150);
 
             var r = PlayerActions.Pull(_w, Ctx(), _bag.Id, IronOre, 250, neverLastStack: true);
@@ -69,9 +69,9 @@ namespace Satisvampory.Engine.Tests
         [Fact]
         public void Tidy_moves_strays_home_but_never_drains_wired_chests()
         {
-            var home = _w.Chest(Home, "Iron Ore");
+            var home = _w.Chest(Home, "Iron Ore").OnlyItem(IronOre, 5);
             var general = _w.Chest(Home, "");
-            var wired = _w.Chest(Home, "Planks");
+            var wired = _w.Chest(Home, "Planks").OnlyItem(Plank);
             var overflow = _w.Chest(Home, "spill");
             overflow.Deposit.Special = SpecialKind.Overflow;
             var skip = _w.Chest(Home, "x");
@@ -92,8 +92,8 @@ namespace Satisvampory.Engine.Tests
         [Fact]
         public void Tidy_only_moves_to_strictly_better_homes()
         {
-            var a = _w.Chest(Home, "Iron Ore");
-            var b = _w.Chest(Home, "Iron Ore");
+            var a = _w.Chest(Home, "Iron Ore").OnlyItem(IronOre);
+            var b = _w.Chest(Home, "Iron Ore").OnlyItem(IronOre);
             _w.Put(a, IronOre, 10).Put(b, IronOre, 10);
             var r = PlayerActions.Tidy(_w, Ctx(), new LogisticsGraph());
             // Both are exact homes; whichever ranks second may move to the first, never back.

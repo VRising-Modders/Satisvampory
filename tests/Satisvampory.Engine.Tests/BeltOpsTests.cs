@@ -31,13 +31,13 @@ namespace Satisvampory.Engine.Tests
             g.For(chest).Output.Add(ListEntry.OfBelt(grp!.Id));
 
             var md = new MassDepositSettings();
-            md.Rows.Insert(0, DepositRow.Of(new Target(TargetKind.Belt, "Jewel cabinets")));
+            md.ItemRules.Add((ItemSelector.Any, new Target(TargetKind.Belt, "Jewel cabinets")));
             md.AdvancedScript = "for category gems: first belt \"jewel CABINETS\"  # keep \"Jewel cabinets\" here\n";
 
             Assert.True(BeltOps.Rename(g, grp.Id, "Gem racks", new BeltReferences { MassDeposit = md }).Ok);
 
             Assert.Equal(grp.Id, g.For(chest).Output.Single().Belt);
-            Assert.Equal("Gem racks", md.Rows[0].Target!.Name);
+            Assert.Equal("Gem racks", md.ItemRules[0].Target.Name);
             Assert.Contains("belt \"Gem racks\"", md.AdvancedScript);
             Assert.Contains("# keep \"Jewel cabinets\" here", md.AdvancedScript); // comments are prose, not references
         }
@@ -52,12 +52,12 @@ namespace Satisvampory.Engine.Tests
             g.For(a).Input.Add(ListEntry.OfBelt(grp!.Id));
             g.For(b).Output.Add(ListEntry.OfBelt(grp.Id));
             var md = new MassDepositSettings();
-            md.Rows.Add(DepositRow.Of(new Target(TargetKind.Belt, "line 1")));
+            md.ItemRules.Add((ItemSelector.Any, new Target(TargetKind.Belt, "line 1")));
             md.AdvancedScript = "for any:\n  first belt \"Line 1\"";
             var refs = new BeltReferences { MassDeposit = md };
 
             var uses = BeltOps.Usages(g, grp.Id, refs);
-            Assert.Equal(new[] { BeltUseKind.InputEntry, BeltUseKind.OutputEntry, BeltUseKind.MassDepositRow, BeltUseKind.ScriptLine },
+            Assert.Equal(new[] { BeltUseKind.InputEntry, BeltUseKind.OutputEntry, BeltUseKind.MassDepositItemRule, BeltUseKind.ScriptLine },
                 uses.Select(u => u.Kind).OrderBy(k => k).ToArray());
             Assert.Equal(2, uses.Single(u => u.Kind == BeltUseKind.ScriptLine).Index);
 
@@ -65,7 +65,7 @@ namespace Satisvampory.Engine.Tests
             Assert.Empty(g.Belts);
             Assert.Empty(g.For(a).Input);
             Assert.Empty(g.For(b).Output);
-            Assert.DoesNotContain(md.Rows, r => r.Target != null);
+            Assert.Empty(md.ItemRules);
             Assert.Contains("Line 1", md.AdvancedScript); // reported, not edited
         }
 

@@ -13,7 +13,6 @@ namespace Satisvampory.Engine.Lists
     {
         InputEntry,
         OutputEntry,
-        MassDepositRow,
         MassDepositItemRule,
         ScriptLine,
     }
@@ -93,7 +92,6 @@ namespace Satisvampory.Engine.Lists
             }
             if (refs.MassDeposit is { } md)
             {
-                md.Rows.RemoveAll(r => IsGroupTarget(r.Target, g.Name));
                 md.ItemRules.RemoveAll(r => IsGroupTarget(r.Target, g.Name));
             }
             graph.Belts.Remove(id);
@@ -117,8 +115,6 @@ namespace Satisvampory.Engine.Lists
 
             if (refs.MassDeposit is { } md)
             {
-                for (var i = 0; i < md.Rows.Count; i++)
-                    if (IsGroupTarget(md.Rows[i].Target, g.Name)) result.Add(new BeltUsage(BeltUseKind.MassDepositRow, Index: i));
                 for (var i = 0; i < md.ItemRules.Count; i++)
                     if (IsGroupTarget(md.ItemRules[i].Target, g.Name)) result.Add(new BeltUsage(BeltUseKind.MassDepositItemRule, Index: i));
                 foreach (var line in ScriptLinesNaming(md.AdvancedScript, g.Name))
@@ -179,13 +175,6 @@ namespace Satisvampory.Engine.Lists
 
         static void ReplaceTargets(MassDepositSettings md, string oldName, Func<Target, Target> replace)
         {
-            for (var i = 0; i < md.Rows.Count; i++)
-                if (IsGroupTarget(md.Rows[i].Target, oldName))
-                {
-                    var row = DepositRow.Of(replace(md.Rows[i].Target!));
-                    row.Enabled = md.Rows[i].Enabled;
-                    md.Rows[i] = row;
-                }
             for (var i = 0; i < md.ItemRules.Count; i++)
                 if (IsGroupTarget(md.ItemRules[i].Target, oldName))
                     md.ItemRules[i] = (md.ItemRules[i].Selector, replace(md.ItemRules[i].Target));

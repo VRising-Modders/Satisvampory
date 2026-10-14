@@ -23,15 +23,12 @@ namespace Satisvampory.Engine.Deposit
         public IReadOnlyList<PlotId> Scope { get; }
         public PlotId Standing { get; }
 
-        /// <summary>
-        /// Island settings when sharing is on (the clan's), else the standing castle's. One set per
-        /// ranking, so every chest in scope is ordered by the same list.
-        /// </summary>
+        /// <summary>The island's Mass Deposit overrides (spec 03).</summary>
         public MassDepositSettings Settings { get; init; } = new();
 
         public CompiledScript Script { get; init; } = CompiledScript.Empty;
 
-        /// <summary>Belts by folded name, members in group order.</summary>
+        /// <summary>Belts by folded name, members in belt order.</summary>
         public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> Belts { get; init; } =
             new Dictionary<string, IReadOnlyList<ContainerId>>();
 
@@ -43,30 +40,41 @@ namespace Satisvampory.Engine.Deposit
 
     public sealed class DepositCandidate
     {
-        public DepositCandidate(ContainerInfo chest, int rowIndex, string row, int priority, bool holds)
+        public DepositCandidate(ContainerInfo chest, int score, bool holds, string why)
         {
             Chest = chest;
-            RowIndex = rowIndex;
-            Row = row;
-            Priority = priority;
+            Score = score;
             Holds = holds;
+            Why = why;
         }
 
         public ContainerInfo Chest { get; }
-        public int RowIndex { get; }
-        /// <summary>Display name of the row that placed it, for the preview ("Exact names").</summary>
-        public string Row { get; }
-        public int Priority { get; }
+
+        /// <summary>The chest's priority for this item: base plus the applying entry.</summary>
+        public int Score { get; }
+
         public bool Holds { get; }
-        /// <summary>Line of the Advanced rule that decided, or 0.</summary>
+
+        /// <summary>Plain words for the preview: "Category ore +3 on base 2", "Rule on line 4", "Overflow".</summary>
+        public string Why { get; internal set; }
+
+        /// <summary>Line of the Advanced rule that placed it, or 0.</summary>
         public int RuleLine { get; internal set; }
+
+        /// <summary>Position among override targets (0 = first); int.MaxValue when not pinned.</summary>
+        public int Pinned { get; internal set; } = int.MaxValue;
+
+        public bool IsOverflow => Chest.Deposit.Special == SpecialKind.Overflow && Pinned == int.MaxValue;
+
+        /// <summary>Index of this candidate's tier in the ranking; 0 is the best home.</summary>
+        public int Tier { get; internal set; }
     }
 
     public sealed class DepositTier
     {
         public List<DepositCandidate> Members { get; } = new();
 
-        /// <summary>Equal-priority priority chests split deposits; other tiers fill in order.</summary>
+        /// <summary>Chests listing the item at the same positive priority split deposits; other tiers fill in order.</summary>
         public bool Split { get; init; }
     }
 
@@ -80,39 +88,25 @@ namespace Satisvampory.Engine.Deposit
         public DepositCandidate? Best => InOrder.FirstOrDefault();
     }
 
-    /// <summary>The one deposit order (spec 03). Quick stash, tidy, servant loot, leftovers and Mass Deposit outputs all call this.</summary>
+    /// <summary>
+    /// The one deposit order (spec 03). Each chest's deposit settings give it a priority for an
+    /// item; overrides and rules can pin targets first, restrict to targets, or exclude them.
+    /// Overflow chests are always the last resort. Chest names play no part.
+    /// </summary>
     public static class DepositRanker
     {
-        sealed class EffRow
-        {
-            public BuiltInRow? BuiltIn;
-            public Target? Target;
-            public int RuleLine;
-
-            public string Label => BuiltIn is { } b ? AdvancedScript.RowDisplayName(b) : Target!.ToString();
-
-            /// <summary>The built-in rank this row stands for; a general or overflow target counts as that rank.</summary>
-            public BuiltInRow? Rank => BuiltIn ?? Target?.Kind switch
-            {
-                TargetKind.General => BuiltInRow.General,
-                TargetKind.Overflow => BuiltInRow.Overflow,
-                _ => null,
-            };
-        }
-
         public static DepositRanking Rank(DepositContext ctx, ItemId item)
         {
             var catalog = ctx.Catalog;
-            var rows = new List<EffRow>();
-            foreach (var (sel, target) in ctx.Settings.ItemRules)
-                if (sel.Matches(item, catalog)) rows.Add(new EffRow { Target = target });
-            foreach (var r in ctx.Settings.Rows)
-                if (r.Enabled) rows.Add(new EffRow { BuiltIn = r.BuiltIn, Target = r.Target });
 
-            var nevers = new List<(Target Target, BuiltInRow? When, int Line)>();
+            var pinned = new List<(Target Target, int Line)>();
+            foreach (var (sel, target) in ctx.Settings.ItemRules)
+                if (sel.Matches(item, catalog)) pinned.Add((target, 0));
+
+            List<(Target Target, int Line)>? only = null;
+            var nevers = new List<Target>();
             string? preferPlot = null;
             var preferHere = false;
-            var firstInsert = ctx.Settings.ItemRules.Count(r => r.Selector.Matches(item, catalog));
 
             foreach (var rule in ctx.Script.Rules)
             {
@@ -122,27 +116,14 @@ namespace Satisvampory.Engine.Deposit
                     switch (op.Kind)
                     {
                         case RuleOpKind.First:
-                            foreach (var t in op.Targets)
-                                rows.Insert(firstInsert++, new EffRow { Target = t, RuleLine = op.Line });
+                            pinned.AddRange(op.Targets.Select(t => (t, op.Line)));
                             break;
                         case RuleOpKind.Only:
-                            rows = op.Targets.Select(t => new EffRow { Target = t, RuleLine = op.Line }).ToList();
-                            firstInsert = rows.Count;
+                            only = op.Targets.Select(t => (t, op.Line)).ToList();
                             break;
                         case RuleOpKind.Never:
-                            nevers.Add((op.Targets[0], op.WhenRow, op.Line));
+                            nevers.AddRange(op.Targets);
                             break;
-                        case RuleOpKind.Move:
-                        {
-                            var from = rows.FindIndex(r => r.BuiltIn == op.MoveRow);
-                            if (from < 0 || rows.FindIndex(r => r.BuiltIn == op.MoveAnchor) < 0) break;
-                            var moving = rows[from];
-                            rows.RemoveAt(from);
-                            var anchor = rows.FindIndex(r => r.BuiltIn == op.MoveAnchor);
-                            rows.Insert(op.MoveAbove ? anchor : anchor + 1, moving);
-                            moving.RuleLine = op.Line;
-                            break;
-                        }
                         case RuleOpKind.Prefer:
                             if (op.Plot == null) preferHere = true;
                             else preferPlot = op.Plot;
@@ -156,24 +137,38 @@ namespace Satisvampory.Engine.Deposit
             {
                 var kind = chest.Deposit.Special;
                 if (kind == SpecialKind.Skip) continue;
-                if (NameMatch.IsBanned(chest, item, catalog)) continue;
+                if (DepositScore.IsBanned(chest, item, catalog)) continue;
+                if (nevers.Any(t => TargetMatches(ctx, t, chest))) continue;
 
-                var match = NameMatch.Classify(chest, item, catalog);
                 var holds = ctx.World.Count(chest.Id, item) > 0;
-                var priority = NameMatch.EffectivePriority(chest, item, catalog);
 
-                for (var i = 0; i < rows.Count; i++)
+                if (only != null)
                 {
-                    var row = rows[i];
-                    if (!Qualifies(ctx, row, chest, match, holds, priority)) continue;
-                    if (nevers.Any(n => (n.When == null || n.When == row.Rank) && TargetMatches(ctx, n.Target, chest)))
-                    {
-                        if (nevers.Any(n => n.When == null && TargetMatches(ctx, n.Target, chest))) break;
-                        continue;
-                    }
-                    candidates.Add(new DepositCandidate(chest, i, row.Label, priority, holds) { RuleLine = row.RuleLine });
-                    break;
+                    // An "only" rule names the homes outright, in its order.
+                    var oi = IndexOf(only, ctx, chest);
+                    if (oi < 0) continue;
+                    candidates.Add(new DepositCandidate(chest, 0, holds, $"Rule on line {only[oi].Line}") { Pinned = oi, RuleLine = only[oi].Line });
+                    continue;
                 }
+
+                var pi = IndexOf(pinned, ctx, chest);
+                if (pi >= 0)
+                {
+                    var line = pinned[pi].Line;
+                    candidates.Add(new DepositCandidate(chest, DepositScore.Score(chest, item, catalog), holds,
+                        line > 0 ? $"Rule on line {line}" : "Mass Deposit override") { Pinned = pi, RuleLine = line });
+                    continue;
+                }
+
+                // Special-purpose chests are homes only when an override or rule names them.
+                if (SpecialKinds.IsSpecialPurpose(kind)) continue;
+                if (kind == SpecialKind.Overflow)
+                {
+                    candidates.Add(new DepositCandidate(chest, 0, holds, "Overflow"));
+                    continue;
+                }
+                if (!DepositScore.Takes(chest, item, catalog)) continue;
+                candidates.Add(new DepositCandidate(chest, DepositScore.Score(chest, item, catalog), holds, DepositScore.Explain(chest, item, catalog)));
             }
 
             int PlotRank(ContainerInfo c)
@@ -187,50 +182,42 @@ namespace Satisvampory.Engine.Deposit
                 ctx.Player is { } p ? (c.X - p.X) * (c.X - p.X) + (c.Z - p.Z) * (c.Z - p.Z) : 0f;
 
             var ordered = candidates
-                .OrderBy(c => c.RowIndex)
-                .ThenByDescending(c => c.Priority)
+                .OrderBy(c => c.Pinned)
+                .ThenBy(c => c.IsOverflow ? 1 : 0)
+                .ThenByDescending(c => c.Score)
                 .ThenBy(c => c.Holds ? 0 : 1)
                 .ThenBy(c => PlotRank(c.Chest))
                 .ThenBy(c => Distance(c.Chest))
                 .ThenBy(c => c.Chest.Id.Value)
                 .ToList();
 
+            bool Splits(DepositCandidate c) =>
+                c.Pinned == int.MaxValue && !c.IsOverflow && c.Score > 0 && DepositScore.Entry(c.Chest, item, catalog) != null;
+
             var ranking = new DepositRanking { Item = item };
             DepositTier? tier = null;
             DepositCandidate? prev = null;
             foreach (var c in ordered)
             {
-                var split = rows[c.RowIndex].BuiltIn == BuiltInRow.PriorityChests;
-                if (tier == null || prev!.RowIndex != c.RowIndex || prev.Priority != c.Priority || !split)
+                var split = Splits(c);
+                var join = tier != null && split && prev != null && Splits(prev) && prev.Score == c.Score;
+                if (!join)
                 {
                     tier = new DepositTier { Split = split };
                     ranking.Tiers.Add(tier);
                 }
-                tier.Members.Add(c);
+                c.Tier = ranking.Tiers.Count - 1;
+                tier!.Members.Add(c);
                 prev = c;
             }
             return ranking;
         }
 
-        static bool Qualifies(DepositContext ctx, EffRow row, ContainerInfo chest, NameMatchKind match, bool holds, int priority)
+        static int IndexOf(List<(Target Target, int Line)> targets, DepositContext ctx, ContainerInfo chest)
         {
-            if (row.Target is { } t) return TargetMatches(ctx, t, chest);
-
-            var kind = chest.Deposit.Special;
-            // Special-purpose chests are homes only when a row or rule names them.
-            if (SpecialKinds.IsSpecialPurpose(kind)) return false;
-            if (kind == SpecialKind.Overflow) return row.BuiltIn == BuiltInRow.Overflow;
-
-            return row.BuiltIn switch
-            {
-                BuiltInRow.PriorityChests => priority > 0 && (match != NameMatchKind.Custom || holds),
-                BuiltInRow.AlreadyHolding => holds && match is NameMatchKind.Exact or NameMatchKind.Category,
-                BuiltInRow.ExactNames => match == NameMatchKind.Exact,
-                BuiltInRow.CategoryNames => match == NameMatchKind.Category,
-                BuiltInRow.General => match == NameMatchKind.Generic,
-                BuiltInRow.HoldingAnyName => match == NameMatchKind.Custom && holds,
-                _ => false,
-            };
+            for (var i = 0; i < targets.Count; i++)
+                if (TargetMatches(ctx, targets[i].Target, chest)) return i;
+            return -1;
         }
 
         internal static bool TargetMatches(DepositContext ctx, Target t, ContainerInfo chest)
@@ -249,8 +236,7 @@ namespace Satisvampory.Engine.Deposit
                 case TargetKind.Special:
                     return chest.Deposit.Special == t.Special;
                 case TargetKind.General:
-                    return chest.Deposit.Special == SpecialKind.None
-                        && NameMatch.Classify(chest, default, ctx.Catalog) == NameMatchKind.Generic;
+                    return chest.Deposit.Special == SpecialKind.None && chest.Deposit.Takes == Takes.Anything;
                 default:
                     return false;
             }

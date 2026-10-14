@@ -38,6 +38,7 @@ namespace Satisvampory.Engine.Persistence
         public List<EntryDto> Output { get; set; } = new();
         public string PullOrder { get; set; } = nameof(Lists.PullOrder.ListOrder);
         public string SendOrder { get; set; } = nameof(Lists.SendOrder.FillInOrder);
+        public string Takes { get; set; } = nameof(Model.Takes.Anything);
         public int BasePriority { get; set; }
         public Dictionary<int, int> ItemPriority { get; set; } = new();
         public Dictionary<string, int> CategoryPriority { get; set; } = new();
@@ -51,13 +52,6 @@ namespace Satisvampory.Engine.Persistence
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public List<string> Members { get; set; } = new();
-    }
-
-    public sealed class RowDto
-    {
-        public string? BuiltIn { get; set; }
-        public TargetDto? Target { get; set; }
-        public bool Enabled { get; set; } = true;
     }
 
     public sealed class TargetDto
@@ -94,7 +88,6 @@ namespace Satisvampory.Engine.Persistence
         public int Version { get; set; } = CurrentVersion;
         public long NextSequence { get; set; }
         public List<BeltDto> Belts { get; set; } = new();
-        public List<RowDto> MassDepositRows { get; set; } = new();
         public List<ItemRuleDto> MassDepositItemRules { get; set; } = new();
         public string AdvancedScript { get; set; } = string.Empty;
         public RulesDto Rules { get; set; } = new();
@@ -162,8 +155,6 @@ namespace Satisvampory.Engine.Persistence
             foreach (var b in s.Graph.Belts.Values)
                 save.Belts.Add(new BeltDto { Id = b.Id.Value.ToString("N"), Name = b.Name, Members = b.Members.Select(Id).ToList() });
 
-            foreach (var r in s.MassDeposit.Rows)
-                save.MassDepositRows.Add(new RowDto { BuiltIn = r.BuiltIn?.ToString(), Target = r.Target == null ? null : ToDto(r.Target), Enabled = r.Enabled });
             foreach (var (sel, t) in s.MassDeposit.ItemRules)
                 save.MassDepositItemRules.Add(new ItemRuleDto { Selector = sel.Kind.ToString(), Item = sel.Item.Guid, Category = sel.Category, Target = ToDto(t) });
 
@@ -180,6 +171,7 @@ namespace Satisvampory.Engine.Persistence
                 }
                 if (s.Deposit.TryGetValue(id, out var d))
                 {
+                    dto.Takes = d.Takes.ToString();
                     dto.BasePriority = d.BasePriority;
                     dto.ItemPriority = d.ItemPriority.ToDictionary(k => k.Key.Guid, v => v.Value);
                     dto.CategoryPriority = new(d.CategoryPriority);
@@ -209,17 +201,6 @@ namespace Satisvampory.Engine.Persistence
                 state.Graph.Belts[belt.Id] = belt;
             }
 
-            state.MassDeposit.Rows.Clear();
-            foreach (var r in save.MassDepositRows)
-            {
-                DepositRow row;
-                if (r.BuiltIn != null && Enum.TryParse<BuiltInRow>(r.BuiltIn, out var bi)) row = DepositRow.Of(bi);
-                else if (r.Target != null) row = DepositRow.Of(FromDto(r.Target));
-                else continue;
-                row.Enabled = r.Enabled;
-                state.MassDeposit.Rows.Add(row);
-            }
-            if (state.MassDeposit.Rows.Count == 0) state.MassDeposit.RestoreDefaults();
             foreach (var ir in save.MassDepositItemRules)
             {
                 var kind = Enum.TryParse<ItemSelectorKind>(ir.Selector, out var k) ? k : ItemSelectorKind.Any;
@@ -244,7 +225,11 @@ namespace Satisvampory.Engine.Persistence
                 lists.PullOrder = Enum.TryParse<PullOrder>(dto.PullOrder, out var po) ? po : PullOrder.ListOrder;
                 lists.SendOrder = Enum.TryParse<SendOrder>(dto.SendOrder, out var so) ? so : SendOrder.FillInOrder;
 
-                var d = new DepositOptions { BasePriority = dto.BasePriority };
+                var d = new DepositOptions
+                {
+                    BasePriority = dto.BasePriority,
+                    Takes = Enum.TryParse<Takes>(dto.Takes, out var tk) ? tk : Takes.Anything,
+                };
                 foreach (var kv in dto.ItemPriority) d.ItemPriority[new ItemId(kv.Key)] = kv.Value;
                 foreach (var kv in dto.CategoryPriority) d.CategoryPriority[kv.Key] = kv.Value;
                 foreach (var i in dto.BannedItems) d.BannedItems.Add(new ItemId(i));

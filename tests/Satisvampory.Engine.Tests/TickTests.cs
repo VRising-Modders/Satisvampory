@@ -220,7 +220,7 @@ namespace Satisvampory.Engine.Tests
             var heart = w.Chest(Home, "", kind: NodeKind.Heart);
             var other = w.Chest(Home, "", kind: NodeKind.Heart);
             var a = w.Chest(Home, "misc");
-            var b = w.Chest(Home, "blood");
+            var b = w.Chest(Home, "blood").OnlyCategory("blood", 5);
             foreach (var c in new[] { a, b, other }) w.Put(c, TestItems.BloodEssence, 100);
             var ctx = new DepositContext(cat, w, new[] { Home }, Home);
 

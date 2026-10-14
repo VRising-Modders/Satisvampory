@@ -163,6 +163,7 @@ namespace Satisvampory.Engine.Edits
         static void CopyInto(DepositOptions from, DepositOptions to)
         {
             to.BasePriority = from.BasePriority;
+            to.Takes = from.Takes;
             to.Special = from.Special;
             to.ItemPriority.Clear();
             foreach (var kv in from.ItemPriority) to.ItemPriority[kv.Key] = kv.Value;

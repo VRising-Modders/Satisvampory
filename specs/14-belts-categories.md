@@ -6,7 +6,7 @@ Two kinds of set, with different names so they never get confused:
 |---|---|---|
 | Holds | Containers and stations | Items |
 | Example | "Ore in": the three chests beside the furnaces | "Flowers": every flower item |
-| Used by | Input and output lists, Mass Deposit rows and rules | List filters, deposit options (priorities, bans), Mass Deposit rules, reserves, caps, find, pull |
+| Used by | Input and output lists, Mass Deposit overrides and rules | List filters, deposit options (priorities, bans), Mass Deposit rules, reserves, caps, find, pull |
 | Defined in | `01-containers.md`, "Belts" | `01-containers.md`, "Categories" |
 
 This screen is where both are made, named, filled, and tidied up. Lists and Mass Deposit only use them.
@@ -19,7 +19,7 @@ The UI always says "Belt" or "Category", never just "group". Both words are expl
 - **Belts and categories** row on the Castle settings page.
 - **Manage belts…** / **Manage categories…** at the bottom of every picker and list editor.
 - A list row that is a belt has an **Edit belt** action that opens the screen on it.
-- A container's Deposit options shows the belts it is on as chips, with **+** to add it to one and **×** to remove it. Clicking a chip opens that belt.
+- A container's Deposit settings show the belts it is on as chips, with **+** to add it to one and **×** to remove it. Clicking a chip opens that belt.
 - From the Mass Deposit screen: any belt or category named in a row or rule.
 - From the Inventory page (`15-inventory.md`): any category.
 
@@ -42,7 +42,7 @@ Styled like the vanilla options menu: a tab strip, a list on the left, the selec
 │                                              │                     │
 │                                              │ Used by (4)         │
 │                                              │  Input of Furnace…  │
-│                                              │  Mass Deposit row 3 │
+│                                              │  MD override 2     │
 │                                              │  Rule, line 6       │
 │                                              │ [Locate all] [Delete]│
 └───────────────────────────────────────────────────────────────────┘
@@ -61,12 +61,12 @@ Right panel for the selected belt:
 - **Add…** opens the picker (`02-io-lists.md`, "Pickers"). It allows multi-select.
 - **◎ Pick** is pick in world. It stays in pick mode until Esc, adding each container the player interacts with.
 - **Add by name…** adds every container on the island whose name contains the text as whole words. For example, `ore` adds "Ore", "Ore 2" and "Copper ore", but not "Core". It shows the matches before adding. Hearts are never offered.
-- **Used by** lists every list entry, Mass Deposit row, and Advanced rule line that refers to this belt. Each one jumps to where it is used.
+- **Used by** lists every list entry, Mass Deposit override, and Advanced rule line that refers to this belt. Each one jumps to where it is used.
 - **Locate all** pings every member for ten seconds.
 - **Duplicate** copies the belt under a new name.
 - **Delete** asks first, listing what uses the belt.
   - The belt is removed from every list that used it, and those lists show what was removed.
-  - Mass Deposit rows naming it are removed.
+  - Mass Deposit overrides naming it are removed.
   - Advanced rule lines naming it are not edited. The script fails its check and keeps running on its last good version until a player fixes it.
 
 A belt is identified by an id, not its name. A rename updates every list entry and Mass Deposit row in the same step. It also rewrites `belt "…"` references in Advanced scripts; comments are left alone.

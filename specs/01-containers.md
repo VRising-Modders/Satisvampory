@@ -9,7 +9,7 @@ Each container has:
 | Field | Meaning |
 |---|---|
 | Identity | Stable id that survives restart (`12-protocol-persistence.md`) |
-| Name | What the player typed on the nameplate. Used for display and for Mass Deposit name matching. Never parsed for routing codes. |
+| Name | What the player typed on the nameplate. For display only; never read for routing. |
 | Plot | The castle territory it stands on |
 | Input list, output list | `02-io-lists.md` |
 | Special kind | None, or one of the kinds in `09-special-chests.md` |
@@ -61,48 +61,59 @@ The built-in categories and their aliases (`be`, `gbe`, `dsi`, …) cover the sa
 
 The UI always says **Belt** or **Category**, never just "group". The two are never offered in the same field, so "Ore" the belt and "ore" the category cannot be confused.
 
-## Names still matter for Mass Deposit
+## Names are just names
 
-A chest named "Iron Ore" or "ingots" is still a Mass Deposit target for those items, as in 1.x (`03-mass-deposit.md`). That is the only thing a name does for routing. Everything else is set in the chest's **Advanced options** (below) or its special kind (`09-special-chests.md`).
+A chest's name is for people: it shows in lists, pickers and notices. It never decides where items go. Mass Deposit reads only the chest's **deposit settings** (below).
 
-The 1.x name codes are read **once** by the importer (`12-protocol-persistence.md`) and converted:
+The 1.x name codes, and the plain names 1.x read as purposes, are converted **once** by the importer (`12-protocol-persistence.md`):
 
-| 1.x name code | Becomes |
+| 1.x name | Becomes |
 |---|---|
 | `s#`, `r#` | Belts and input entries |
-| trailing `+`, `++`, … | Base priority 1, 2, … |
+| An item name or alias ("Iron Ore") | Takes: only listed · Iron Ore |
+| A category word anywhere in the name ("ore", "East gems") | Takes: only listed · those categories |
+| Blank, a generic word ("misc", "chest"), or the furniture name | Takes: anything |
+| Any other name | Takes: only listed · the items it holds now (1.x sent a named chest only what it already held) |
+| Trailing `+`, `++`, … | Base priority 1, 2, … |
 | `--word` | A ban on the item or category *word* matched |
 | `overflow`, `salvage`, `spoils`, `trash`, `spawner`, `brazier`, `night`, `prox` | Special kind |
 | `NS`, or `''` at start or end | Special kind Skip |
 
-After import none of these are parsed from names. A player who types `--copper` on a chest later just has a chest named that.
+After import, nothing is parsed from names. A player who types `--copper` on a chest later just has a chest named that.
 
-## Advanced options (per chest)
+## Deposit settings (per chest)
 
-A third control on the container panel, a small gear beside the rename field, separate from the input and output buttons. Tooltip "Deposit options". It opens a side panel:
+A third control on the container panel, a small gear beside the rename field, separate from the Input and Output buttons. Tooltip "Deposit settings". It opens a side panel:
 
 ```
-┌ Deposit options · Gem vault · here ─────────────┐
-│ Base priority        [  2  ] (−10 … +10, 0)     │
-│                                                 │
-│ Item priorities                                 │
-│   Category: gems           [ +3 ]   ✕         │
-│   Onyx Tear                  [ −2 ]   ✕         │
-│   [+ Add item or category…]                   │
-│                                                 │
-│ Never deposit here                              │
-│   Category: weapons                  ✕        │
-│   Copper Ingot                         ✕        │
-│   [+ Add item or category…]                   │
-│                                                 │
-│ Special kind   [ None ▾ ]                       │
-└─────────────────────────────────────────────────┘
+┌ Deposit settings · Gem vault · here ─────────────┐
+│ Takes        ( ) Anything  (•) Only what's listed │
+│              ( ) Nothing                          │
+│ Base priority        [  2  ] (−10 … +10, 0)       │
+│                                                   │
+│ Items and categories                              │
+│   Category: gems             [ +3 ]   ✕           │
+│   Onyx Tear                  [ −2 ]   ✕           │
+│   [+ Add item or category…]                       │
+│                                                   │
+│ Never deposit here                                │
+│   Category: weapons                    ✕          │
+│   [+ Add item or category…]                       │
+│                                                   │
+│ Special kind   [ None ▾ ]                         │
+│ On belts       Gem racks ×   [+ belt]             │
+│                                                   │
+│ Try it: [ 200 ] [ Ruby ▾ ]  → would land here 1st │
+└───────────────────────────────────────────────────┘
 ```
 
-- **Base priority**: an integer, default 0. Higher wins among chests in the same Mass Deposit row for an item. Negative values sink a chest below its peers. Two chests at the same priority split deposits between them.
-- **Item priorities**: per item or category, a number added to the base priority for those items only. When an item matches several entries, the item entry wins over the category entry; between categories, the larger magnitude wins.
-- **Never deposit here** (bans): items or categories that Mass Deposit never puts in this chest, whatever its name or the castle's Mass Deposit rules say. Bans apply to Mass Deposit uses (quick stash, tidy, servant loot, leftovers, "Mass Deposit" outputs). An explicit output list entry that points at this chest still delivers, but it shows a warning that it conflicts with a ban.
-- **Special kind**: the same dropdown as `09-special-chests.md`.
-- A chest whose effective priority for an item is above 0 and that accepts it counts as a **priority chest** for that item (Mass Deposit Simple row 1).
-
-The Mass Deposit preview (`03-mass-deposit.md`) shows each candidate's effective priority and which entry set it.
+- **Takes:**
+  - **Anything** is the default for a new chest, so quick stash works with no setup. It takes every item not banned, at the base priority.
+  - **Only what's listed** takes just the items and categories in its list.
+  - **Nothing** means the chest is never a Mass Deposit home. Use it for a station's input chest or a display chest.
+- **Base priority:** an integer from −10 to +10, default 0. Higher wins.
+- **Items and categories:** each entry adds its number to the base for those items. An item's own entry beats a category entry; between categories, the larger number wins. On an "Only what's listed" chest, the list is also what the chest takes.
+- **Never deposit here** (bans): items or categories Mass Deposit never puts in this chest, whatever overrides or rules say. An explicit Output row pointing at this chest still delivers, with a warning.
+- **Special kind:** the same dropdown as `09-special-chests.md`.
+- **On belts:** belt chips, as on the Belts and categories screen.
+- **Try it:** a one-line evaluator for this chest. "200 Ruby → this chest would be 1st (Category gems +3 on base 2), taking 200" or "→ not used: takes only listed items" (`03-mass-deposit.md`, "Evaluator").

@@ -99,8 +99,8 @@ namespace Satisvampory.Engine.Tests
         public void Servant_loot_goes_home_first_then_spoils()
         {
             var cat = Catalog();
-            var homeOre = _w.Chest(Home, "ore");
-            var awayOre = _w.Chest(Away, "ore");
+            var homeOre = _w.Chest(Home, "ore").OnlyCategory("ore");
+            var awayOre = _w.Chest(Away, "ore").OnlyCategory("ore");
             var spoils = Special(Home, SpecialKind.Spoils);
             var servant = _w.Chest(new PlotId(99), "servant");
             _w.Put(servant, IronOre, 20).Put(servant, Sword, 1);

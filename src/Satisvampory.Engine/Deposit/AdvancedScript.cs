@@ -12,10 +12,8 @@ namespace Satisvampory.Engine.Deposit
         First,
         /// <summary>Only these targets, in order, are homes.</summary>
         Only,
-        /// <summary>Remove a target, optionally only within one built-in row.</summary>
+        /// <summary>Remove a target.</summary>
         Never,
-        /// <summary>Reorder built-in rows.</summary>
-        Move,
         /// <summary>Tie-break toward a plot ("here" when <see cref="RuleOp.Plot"/> is null).</summary>
         Prefer,
     }
@@ -24,10 +22,6 @@ namespace Satisvampory.Engine.Deposit
     {
         public RuleOpKind Kind { get; init; }
         public List<Target> Targets { get; init; } = new();
-        public BuiltInRow? WhenRow { get; init; }
-        public BuiltInRow MoveRow { get; init; }
-        public bool MoveAbove { get; init; }
-        public BuiltInRow MoveAnchor { get; init; }
         public string? Plot { get; init; }
         public int Line { get; init; }
     }
@@ -123,7 +117,7 @@ namespace Satisvampory.Engine.Deposit
         {
             while (!r.AtEnd)
             {
-                var word = r.Word("a clause (first, then, only, never, move, prefer)");
+                var word = r.Word("a clause (first, then, only, never, prefer)");
                 switch (word)
                 {
                     case "first":
@@ -144,28 +138,8 @@ namespace Satisvampory.Engine.Deposit
                         rule.Ops.Add(new RuleOp { Kind = RuleOpKind.Only, Targets = { ParseTarget(r, names) }, Line = r.Line });
                         break;
                     case "never":
-                    {
-                        var t = ParseTarget(r, names);
-                        BuiltInRow? when = null;
-                        if (r.PeekWord("when"))
-                        {
-                            r.Next();
-                            r.ExpectWord("rank");
-                            r.Expect("=");
-                            when = ParseRow(r);
-                        }
-                        rule.Ops.Add(new RuleOp { Kind = RuleOpKind.Never, Targets = { t }, WhenRow = when, Line = r.Line });
+                        rule.Ops.Add(new RuleOp { Kind = RuleOpKind.Never, Targets = { ParseTarget(r, names) }, Line = r.Line });
                         break;
-                    }
-                    case "move":
-                    {
-                        var row = ParseRow(r);
-                        var dir = r.Word("'above' or 'below'");
-                        if (dir != "above" && dir != "below") throw new ScriptError(r.Line, "Expected 'above' or 'below'");
-                        var anchor = ParseRow(r);
-                        rule.Ops.Add(new RuleOp { Kind = RuleOpKind.Move, MoveRow = row, MoveAbove = dir == "above", MoveAnchor = anchor, Line = r.Line });
-                        break;
-                    }
                     case "prefer":
                         if (r.PeekWord("here"))
                         {
@@ -246,34 +220,6 @@ namespace Satisvampory.Engine.Deposit
                     throw new ScriptError(r.Line, $"Unknown target '{kind}'");
             }
         }
-
-        /// <summary>Row names: the display names, or short keys.</summary>
-        static BuiltInRow ParseRow(Reader r)
-        {
-            var text = NameFold.Fold(r.WordOrQuoted("a row name"));
-            return text switch
-            {
-                "priority" or "priority chests" => BuiltInRow.PriorityChests,
-                "holding" or "already holding it" => BuiltInRow.AlreadyHolding,
-                "exact" or "exact names" => BuiltInRow.ExactNames,
-                "category" or "category names" => BuiltInRow.CategoryNames,
-                "general" or "general chests" => BuiltInRow.General,
-                "holding-any" or "holding it, any name" => BuiltInRow.HoldingAnyName,
-                "overflow" => BuiltInRow.Overflow,
-                _ => throw new ScriptError(r.Line, $"Unknown row '{text}'"),
-            };
-        }
-
-        public static string RowDisplayName(BuiltInRow row) => row switch
-        {
-            BuiltInRow.PriorityChests => "Priority chests",
-            BuiltInRow.AlreadyHolding => "Already holding it",
-            BuiltInRow.ExactNames => "Exact names",
-            BuiltInRow.CategoryNames => "Category names",
-            BuiltInRow.General => "General chests",
-            BuiltInRow.HoldingAnyName => "Holding it, any name",
-            _ => "Overflow",
-        };
 
         static void CheckKnown(ISet<string>? known, string name, string what, int line)
         {

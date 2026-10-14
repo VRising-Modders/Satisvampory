@@ -141,13 +141,15 @@ namespace Satisvampory.Engine.Ui
                 });
             }
 
-            if (Matches("Mass Deposit", string.Empty, string.Empty))
+            if (Matches("Mass Deposit", "push pull reverse", string.Empty))
                 rows.Add(new PickerRow
                 {
                     Kind = PickerRowKind.MassDeposit,
                     Section = PickerSection.MassDeposit,
-                    Name = "Mass Deposit",
-                    Hint = q.Side == PickerSide.Output ? "send each item where it belongs" : "pull from wherever items sit worst",
+                    Name = q.Side == PickerSide.Output ? "Push: Mass Deposit" : "Pull: reverse Mass Deposit",
+                    Hint = q.Side == PickerSide.Output
+                        ? "push each item to the chest that rates it highest"
+                        : "pull from wherever items are stored worst first",
                 });
 
             return rows
@@ -275,7 +277,7 @@ namespace Satisvampory.Engine.Ui
             var best = ranking.FirstOrDefault();
             string why = best == null
                 ? "No chest on the island takes this item"
-                : best.RuleLine > 0 ? $"Rule on line {best.RuleLine}" : best.Priority != 0 ? $"{best.Row}, priority {best.Priority}" : best.Row;
+                : best.Why;
             return new DepositPreview
             {
                 Item = item,

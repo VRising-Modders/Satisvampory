@@ -115,7 +115,7 @@ namespace Satisvampory.Engine.Player
                 !wired.Contains(c.Id) && c.Deposit.Special is SpecialKind.None or SpecialKind.Overflow or SpecialKind.Spoils;
 
             bool IsDest(DepositCandidate c) =>
-                c.Chest.Deposit.Special == SpecialKind.None && (!wired.Contains(c.Chest.Id) || c.RowIndex <= 1);
+                c.Chest.Deposit.Special == SpecialKind.None && (!wired.Contains(c.Chest.Id) || c.Tier == 0);
 
             var sources = chests.Where(IsSource).ToList();
             var items = sources.SelectMany(c => world.Contents(c.Id)).Select(s => s.Item).Distinct().ToList();

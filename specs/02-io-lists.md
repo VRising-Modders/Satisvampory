@@ -7,7 +7,7 @@ When a player opens a container or station, the vanilla panel gains two small ic
 - **Left edge: Input** (arrow into a box). Tooltip "Input: where this pulls from".
 - **Right edge: Output** (arrow out of a box). Tooltip "Output: where this sends to".
 
-A third control, the **Deposit options** gear beside the rename field, holds the chest's Mass Deposit priority and bans. It is not a list; see `01-containers.md`, "Advanced options".
+A third control, the **Deposit settings** gear beside the rename field, holds what the chest takes for Mass Deposit, its priorities and bans. It is not a list; see `01-containers.md`, "Deposit settings".
 
 The input and output buttons each show a small count badge (number of entries) and turns the game's warning red when an entry is blocked. Clicking opens a side panel anchored to that edge of the vanilla window, styled like the vanilla tooltip and side panels. Only one side panel is open at a time.
 
@@ -43,7 +43,7 @@ Guests see the buttons and can open the panels read-only, with the tooltip "Clan
 | A container | Pull from it | Send to it |
 | A station | Pull its finished products | Send it recipe inputs |
 | A belt | Pull from its members | Send to its members |
-| **Mass Deposit** | Pull from storage in **reverse** Mass Deposit priority (worst home first) | Send each item to its Mass Deposit home (1.x "RR") |
+| **Pull: reverse Mass Deposit** / **Push: Mass Deposit** | **Pull: reverse Mass Deposit** — pull the filtered items from wherever they are stored worst (not-homes first, then homes worst to best) | **Push: Mass Deposit** — send each item to the chest whose deposit settings rate it highest (1.x "RR"), on every tick |
 | A special chest (by its name, for example "Trash", "Salvage") | Pull from it where its kind allows | Send to it |
 
 Special chests appear in pickers under their own names and kinds (`09-special-chests.md`), so "send leftovers to Trash · here" is one pick.
@@ -72,6 +72,8 @@ Special chests appear in pickers under their own names and kinds (`09-special-ch
 - **Production cap** per item or category: stop feeding a station whose product is already at the cap on the island.
 - Several stations wanting the same item share it: each round feeds every station one more whole craft, up to the feed target.
 - Nothing moves on a raided plot, out of a skip chest, or into a full one.
+
+Each panel ends with a **Try it** line: an item and an amount, and the evaluator (`03-mass-deposit.md`, "Evaluator") lists, row by row, how much each target would get (0 included, with the reason) or where a pull would come from and which chests would not be used.
 
 An edge is defined once. An output entry on A pointing at B and an input entry on B pointing at A are the same edge, shown in both panels and marked "set on A".
 

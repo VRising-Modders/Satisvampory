@@ -44,7 +44,7 @@ Restack items already in chests toward their Mass Deposit homes.
 |---|---|---|
 | Heart, skip | no | no |
 | Overflow, spoils | yes | no |
-| Any chest in an input or output list or on a belt | **no** | yes, when it is the item's top-ranked home or within the top two Mass Deposit rows |
+| Any chest in an input or output list or on a belt | **no** | yes, only when it is the item's best home |
 | Special chests (salvage, trash, brazier, spawner) | no | no |
 | Anything else, any floor | yes | yes |
 

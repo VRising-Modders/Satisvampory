@@ -110,7 +110,7 @@ namespace Satisvampory.Engine.Import
     /// </summary>
     public static class LegacyImporter
     {
-        public static ImportReport Apply(IEnumerable<ContainerInfo> containers, ItemCatalog catalog, LogisticsGraph graph)
+        public static ImportReport Apply(IEnumerable<ContainerInfo> containers, ItemCatalog catalog, LogisticsGraph graph, World.IWorldView? world = null)
         {
             var report = new ImportReport();
             var parsed = new List<(ContainerInfo C, LegacyName N)>();
@@ -118,12 +118,18 @@ namespace Satisvampory.Engine.Import
             {
                 report.ChestsRead++;
                 var n = LegacyNames.Parse(c.Name);
-                if (!n.HasCodes) continue;
+                if (!n.HasCodes)
+                {
+                    // Plain names still say what the chest is for; 2.0 keeps that as settings, not as a name rule.
+                    ApplyNameAsSettings(c, n.CleanName, catalog, world, report);
+                    continue;
+                }
                 report.ChestsWithCodes++;
                 parsed.Add((c, n));
                 report.CleanNames[c.Id] = n.CleanName;
 
                 if (n.Priority > 0) c.Deposit.BasePriority = n.Priority;
+                ApplyNameAsSettings(c, n.CleanName, catalog, world, report);
                 if (n.Special != SpecialKind.None) c.Deposit.Special = n.Special;
                 foreach (var word in n.Bans)
                 {
@@ -161,6 +167,54 @@ namespace Satisvampory.Engine.Import
                 }
             }
             return report;
+        }
+
+        static readonly HashSet<string> GenericWords = new(StringComparer.Ordinal)
+        {
+            "", "chest", "chests", "container", "storage", "empty", "general", "misc", "miscellaneous",
+            "everything", "everything else", "all", "other", "others", "extra", "dump", "stuff",
+        };
+
+        /// <summary>
+        /// 1.x read a chest's purpose from its name; 2.0 reads it from deposit settings. Convert once:
+        /// an item name or alias → only that item; a category word (anywhere in the name) → only that
+        /// category; a blank, generic or furniture name → anything; any other name → only what the
+        /// chest holds now (1.x sent a named chest only items it already held).
+        /// </summary>
+        static void ApplyNameAsSettings(ContainerInfo c, string cleanName, ItemCatalog catalog, World.IWorldView? world, ImportReport report)
+        {
+            var o = c.Deposit;
+            if (o.Special != SpecialKind.None) return;
+            var name = NameFold.Fold(cleanName);
+            if (GenericWords.Contains(name) || name == NameFold.Fold(c.FurnitureName)) { o.Takes = Takes.Anything; return; }
+
+            if (catalog.TryResolveItem(name, out var item))
+            {
+                o.Takes = Takes.OnlyListed;
+                o.ItemPriority[item] = 0;
+                return;
+            }
+            if (catalog.TryResolveCategory(name, out var whole))
+            {
+                o.Takes = Takes.OnlyListed;
+                o.CategoryPriority[whole] = 0;
+                return;
+            }
+            var found = false;
+            foreach (var word in name.Split(' '))
+                if (catalog.TryResolveCategory(word, out var cat))
+                {
+                    o.CategoryPriority[cat] = 0;
+                    found = true;
+                }
+            if (found) { o.Takes = Takes.OnlyListed; return; }
+
+            o.Takes = Takes.OnlyListed;
+            if (world != null)
+                foreach (var s in world.Contents(c.Id))
+                    o.ItemPriority[s.Item] = 0;
+            if (o.ItemPriority.Count == 0)
+                report.Unmapped.Add($"{c.DisplayName}: name matches no item or category and the chest is empty; it takes nothing until set");
         }
     }
 }

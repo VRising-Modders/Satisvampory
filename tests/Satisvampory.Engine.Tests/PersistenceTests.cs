@@ -29,14 +29,13 @@ namespace Satisvampory.Engine.Tests
             g.For(a).Output.Add(ListEntry.MassDeposit(g.NextSequence()));
             g.For(a).PullOrder = PullOrder.ReverseMassDeposit;
 
-            state.MassDeposit.Rows.Insert(0, DepositRow.Of(new Target(TargetKind.Belt, "Ore in")));
-            state.MassDeposit.Rows.Single(r => r.BuiltIn == BuiltInRow.General).Enabled = false;
+            state.MassDeposit.ItemRules.Add((ItemSelector.Any, new Target(TargetKind.Belt, "Ore in")));
             state.MassDeposit.ItemRules.Add((new ItemSelector(ItemSelectorKind.Item, BloodEssence), new Target(TargetKind.Chest, "Alchemy", "Plot 2")));
             state.MassDeposit.AdvancedScript = "for category gems: first belt \"Ore in\"";
             state.Rules.DefaultReserve = 7;
             state.Rules.ItemCap[Ruby] = 300;
             state.Rules.CategoryReserve["wood"] = 50;
-            var d = new DepositOptions { BasePriority = 3, Special = SpecialKind.Overflow };
+            var d = new DepositOptions { BasePriority = 3, Special = SpecialKind.Overflow, Takes = Takes.OnlyListed };
             d.ItemPriority[IronOre] = -2;
             d.BannedCategories.Add("weapons");
             state.Deposit[c] = d;
@@ -58,13 +57,13 @@ namespace Satisvampory.Engine.Tests
             Assert.Contains(CopperOre, la.Output[0].Filter.ExcludeItems);
             Assert.Equal(EntryKind.MassDeposit, la.Output[1].Kind);
 
-            Assert.Equal(TargetKind.Belt, back.MassDeposit.Rows[0].Target!.Kind);
-            Assert.False(back.MassDeposit.Rows.Single(r => r.BuiltIn == BuiltInRow.General).Enabled);
-            Assert.Equal("Plot 2", back.MassDeposit.ItemRules.Single().Target.Plot);
+            Assert.Equal(TargetKind.Belt, back.MassDeposit.ItemRules[0].Target.Kind);
+            Assert.Equal("Plot 2", back.MassDeposit.ItemRules[1].Target.Plot);
             Assert.Equal(state.MassDeposit.AdvancedScript, back.MassDeposit.AdvancedScript);
             Assert.Equal(7, back.Rules.DefaultReserve);
             Assert.Equal(300, back.Rules.ItemCap[Ruby]);
             Assert.Equal(3, back.Deposit[c].BasePriority);
+            Assert.Equal(Takes.OnlyListed, back.Deposit[c].Takes);
             Assert.Equal(SpecialKind.Overflow, back.Deposit[c].Special);
             Assert.Contains("weapons", back.Deposit[c].BannedCategories);
             Assert.Equal(LoopMode.EvenDistribution, back.LoopModes["k"]);
@@ -80,7 +79,7 @@ namespace Satisvampory.Engine.Tests
             var only = Assert.Single(state.Graph.Lists);
             Assert.Empty(only.Value.Input);
             Assert.Equal(SpecialKind.None, state.Deposit[only.Key].Special);
-            Assert.Equal(MassDepositSettings.Defaults().Count, state.MassDeposit.Rows.Count);
+            Assert.Empty(state.MassDeposit.ItemRules);
         }
 
         [Fact]

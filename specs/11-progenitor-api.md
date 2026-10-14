@@ -58,7 +58,7 @@ An id that survives restart and does not reuse a destroyed chest's id. Satisvamp
 
 | Site | Use |
 |---|---|
-| `ContainerPanel` (left edge, right edge, beside rename) | Input and output buttons and side panels; Deposit options gear |
+| `ContainerPanel` (left edge, right edge, beside rename) | Input and output buttons and side panels; Deposit settings gear |
 | `StationPanel` (refinement and workstation, both edges) | Same, plus recipe switches where vanilla has none |
 | `InventoryPanel` (beside sort) | Stash button, double-click sort detection |
 | `ThronePanel` | Castle dropdown |

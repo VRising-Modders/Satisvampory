@@ -1,6 +1,6 @@
 # 09 — Special chests
 
-A container's **special kind** is set from the chest's Deposit options panel (`01-containers.md`). 1.x name words are converted once by the importer. Pickers list special chests under their own names and kinds, so they can be chosen directly in any input or output list.
+A container's **special kind** is set from the chest's Deposit settings panel (`01-containers.md`). 1.x name words are converted once by the importer. Pickers list special chests under their own names and kinds, so they can be chosen directly in any input or output list.
 
 | Kind | Behavior | Admin allow | Default for a castle |
 |---|---|---|---|
@@ -12,7 +12,7 @@ A container's **special kind** is set from the chest's Deposit options panel (`0
 | **Trash** | Can be emptied by a clan member from its panel (**Empty**, with confirm). Admins can empty every trash chest on a plot. Never a tidy dest. | Allow trash (ON) | — |
 | **Spoils** | Servant-loot overflow. Tidy source only. | — | — |
 
-Special chests are never Mass Deposit homes unless a Simple row or Advanced rule names them (`03-mass-deposit.md`).
+Special chests are never Mass Deposit homes unless a Mass Deposit override or Advanced rule names them (`03-mass-deposit.md`).
 
 ## Heart blood feed
 

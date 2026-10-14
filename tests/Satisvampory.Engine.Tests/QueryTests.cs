@@ -98,19 +98,19 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
-        public void Preview_names_the_row_priority_and_rule()
+        public void Preview_explains_the_priority_and_rule()
         {
-            var exact = _w.Chest(Home, "Iron Ore", capacity: 50);
+            var exact = _w.Chest(Home, "Iron Ore", capacity: 50).OnlyItem(IronOre, 1);
             var general = _w.Chest(Home, "");
             var ctx = new DepositContext(_cat, _w, new[] { Home }, Home);
             var p = Preview.For(ctx, IronOre);
             Assert.Equal(exact, p.Best!.Chest);
             Assert.Equal(general, p.RunnerUp!.Chest);
-            Assert.Equal("Exact names", p.Why);
+            Assert.Equal("Iron Ore +1 on base 0", p.Why);
             Assert.Equal(exact.Id, p.NextStackGoesTo);
 
             exact.Deposit.BasePriority = 2;
-            Assert.Equal("Priority chests, priority 2", Preview.For(ctx, IronOre).Why);
+            Assert.Equal("Iron Ore +1 on base 2", Preview.For(ctx, IronOre).Why);
 
             var script = AdvancedScript.Compile("for \"Iron Ore\": first general", _cat);
             var ruled = new DepositContext(_cat, _w, new[] { Home }, Home) { Script = script };
@@ -131,8 +131,8 @@ namespace Satisvampory.Engine.Tests
             var cat = TestItems.Catalog();
             var w = new FakeWorld();
             var home = new PlotId(1);
-            var ironHome = w.Chest(home, "Iron Ore");
-            var woodHome = w.Chest(home, "wood");
+            var ironHome = w.Chest(home, "Iron Ore").OnlyItem(TestItems.IronOre, 5);
+            var woodHome = w.Chest(home, "wood").OnlyCategory("wood", 5);
             var dump = w.Chest(home, "");
             var skip = w.Chest(home, "s");
             skip.Deposit.Special = SpecialKind.Skip;

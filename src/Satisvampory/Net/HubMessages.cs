@@ -253,6 +253,19 @@ namespace Satisvampory.Net
         [Field(2)] public int Chests;
     }
 
+    [ModMessage("sv.huntlog.get")]
+    public sealed class GetHuntLogReq
+    {
+        [Field(1)] public int Unused;
+    }
+
+    [ModMessage("sv.huntlog")]
+    public sealed class HuntLogReply
+    {
+        [Field(1)] public List<string> Lines = new();
+        [Field(2)] public List<string> Servants = new();
+    }
+
     [ModMessage("sv.text")]
     public sealed class TextReply
     {

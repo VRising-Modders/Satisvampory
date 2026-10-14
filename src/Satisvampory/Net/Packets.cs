@@ -35,6 +35,9 @@ namespace Satisvampory.Net
 
         /// <summary>Admin: apply the older mod's settings and chest names once.</summary>
         ImportApply = 11,
+
+        /// <summary>Server → client text notice (servant returns).</summary>
+        Notice = 20,
     }
 
     /// <summary>Client → server: a player action triggered by a key or button.</summary>

@@ -53,6 +53,7 @@ namespace Satisvampory.Server
             Ticker.Attach();
             new PanelService(_ctx, this).Attach();
             new HubService(_ctx, this).Attach();
+            new ServantService(_ctx, this).Attach();
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }
 

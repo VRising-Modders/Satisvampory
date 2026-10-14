@@ -48,7 +48,7 @@ Built and tested outside the game; nothing has run in-game yet.
 | Item catalog from the game | done (Progenitor item catalog) |
 | Crafting and building from shared storage | waits on Progenitor P3 merge; policy done |
 | Double-tap sort to stash | done (Progenitor sort event) |
-| Servants (loot stash, repeat hunts, hunt log, throne targeting) | waits on Progenitor's mission API (in progress); engine logic done |
+| Servants (loot stash, repeat hunts, notices, hunt log, throne targeting) | done (Progenitor servants API) |
 | Brazier lighting (night, proximity) | done (Progenitor brazier, time and position APIs) |
 | Pick in world, Locate | done (Progenitor network-id resolver) |
 | Data-table inventory, term tooltips, tip cards | wait on Progenitor P7b; text versions in place |

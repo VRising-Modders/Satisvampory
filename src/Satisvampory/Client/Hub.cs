@@ -20,7 +20,7 @@ namespace Satisvampory.Client
     /// </summary>
     internal sealed class Hub
     {
-        public const int CastleTab = 0, MassDepositTab = 1, BeltsTab = 2, InventoryTab = 3, FindTab = 4;
+        public const int CastleTab = 0, MassDepositTab = 1, BeltsTab = 2, InventoryTab = 3, FindTab = 4, HuntLogTab = 5;
 
         readonly SatisContext _ctx;
         readonly PlayerConfig _player;
@@ -68,6 +68,7 @@ namespace Satisvampory.Client
         // Find
         IUiInput _findText = null!, _pullAmount = null!;
         IUiLabel _findResult = null!;
+        IUiLabel _huntLog = null!;
         FindReply? _lastFind;
 
         internal Hub(SatisContext ctx, PlayerConfig player)
@@ -141,9 +142,7 @@ namespace Satisvampory.Client
                 case Keys.Inventory: Open(InventoryTab); break;
                 case Keys.Find: Open(FindTab); break;
                 case Keys.Tidy: Tidy(); break;
-                case Keys.HuntLog:
-                    _ctx.Hud.Notify("The hunt log arrives with Progenitor's servant mission API.", kind: UiNoticeKind.Info, seconds: 5);
-                    break;
+                case Keys.HuntLog: Open(HuntLogTab); break;
             }
         }
 
@@ -180,6 +179,11 @@ namespace Satisvampory.Client
                 case MassDepositTab: Send<GetMassDepositReq, MassDepositMsg>(new GetMassDepositReq(), DrawMassDeposit); break;
                 case BeltsTab: Send<GetBeltsReq, BeltsMsg>(new GetBeltsReq(), DrawBelts); break;
                 case InventoryTab: LoadInventory(); break;
+                case HuntLogTab:
+                    Send<GetHuntLogReq, HuntLogReply>(new GetHuntLogReq(), r =>
+                        _huntLog.Text = (r.Lines.Count == 0 ? "No hunts in the last 72 hours." : string.Join("\n", r.Lines.Take(40)))
+                            + (r.Servants.Count == 0 ? "" : "\n\nServants now:\n  " + string.Join("\n  ", r.Servants)));
+                    break;
             }
         }
 
@@ -198,13 +202,14 @@ namespace Satisvampory.Client
                 var p = _panel = UiApi.Panel("Satisvampory", _ctx.Owner, _ctx.Guid);
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
-                _tabs = p.Tabs("tabs", new[] { "Castle", "Mass Deposit", "Belts and categories", "Inventory", "Find" });
+                _tabs = p.Tabs("tabs", new[] { "Castle", "Mass Deposit", "Belts and categories", "Inventory", "Find", "Hunt log" });
                 _ctx.Track(_tabs.OnChanged(Refresh));
                 BuildCastle(p);
                 BuildMassDeposit(p);
                 BuildBelts(p);
                 BuildInventory(p);
                 BuildFind(p);
+                _huntLog = In(HuntLogTab, p.Label(""));
                 return p;
             }
         }

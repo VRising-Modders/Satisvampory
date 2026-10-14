@@ -304,4 +304,14 @@ namespace Satisvampory.Net
     {
         [Field(1)] public string Text = "";
     }
+
+    /// <summary>Admin tools on the Server page; the server checks admin rights.</summary>
+    [ModMessage("sv.admin")]
+    public sealed class AdminReq
+    {
+        /// <summary>1 empty all trash on this plot, 2 give to storage, 3 diagnostics.</summary>
+        [Field(1)] public int Op;
+        [Field(2)] public string Item = "";
+        [Field(3)] public int Amount;
+    }
 }

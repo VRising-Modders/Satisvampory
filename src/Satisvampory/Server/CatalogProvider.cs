@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.Linq;
 using Progenitor.Plugins;
+using System.Collections.Generic;
+using System;
 using Satisvampory.Engine.Model;
 
 namespace Satisvampory.Server
@@ -18,20 +20,58 @@ namespace Satisvampory.Server
 
         public ItemCatalog Current { get; private set; } = new();
 
+        /// <summary>The admin's extra aliases (synced setting); read on each refresh.</summary>
+        public Func<string>? Aliases { get; set; }
+
+        string _aliasText = "";
+        List<GameItem>? _items;
+
         /// <summary>Main thread only. Cheap when nothing changed.</summary>
         public void Refresh(PluginContext ctx)
         {
             var info = ctx.Items.CatalogInfo();
-            if (!info.Built || (info.Builds == _builds && info.Epoch == _epoch)) return;
-            var entries = ctx.Items.Catalog();
-            if (entries.Count == 0) return;
-            Current = CatalogBuilder.Build(entries.Select(e =>
-                new GameItem(e.PrefabGuid, e.PrefabName, e.DisplayName, e.MaxAmount, e.ItemCategory, e.ItemType)));
-            _builds = info.Builds;
-            _epoch = info.Epoch;
-            ctx.Log.LogInfo($"Satisvampory: item catalog built ({entries.Count} items).");
+            var aliases = Aliases?.Invoke() ?? "";
+            var fresh = info.Built && (info.Builds != _builds || info.Epoch != _epoch);
+            if (!fresh && (aliases == _aliasText || _items == null)) return;
+            if (fresh)
+            {
+                var entries = ctx.Items.Catalog();
+                if (entries.Count == 0) return;
+                _items = entries.Select(e => new GameItem(e.PrefabGuid, e.PrefabName, e.DisplayName, e.MaxAmount, e.ItemCategory, e.ItemType)).ToList();
+                _builds = info.Builds;
+                _epoch = info.Epoch;
+                ctx.Log.LogInfo($"Satisvampory: item catalog built ({_items.Count} items).");
+            }
+            var catalog = CatalogBuilder.Build(_items!);
+            var bad = ApplyAliases(catalog, aliases);
+            if (bad.Count > 0) ctx.Log.LogWarning("Satisvampory: item aliases not understood: " + string.Join(", ", bad));
+            _aliasText = aliases;
+            Current = catalog;
         }
 
         public void Replace(ItemCatalog catalog) => Current = catalog;
+
+        /// <summary>"ior = Iron Ore; rb = Ruby" (or one per line). Built-in aliases cannot be replaced. Returns entries it could not use.</summary>
+        public static List<string> ApplyAliases(ItemCatalog catalog, string text)
+        {
+            var bad = new List<string>();
+            foreach (var raw in (text ?? "").Split(new[] { ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var part = raw.Trim();
+                if (part.Length == 0) continue;
+                var eq = part.IndexOf('=');
+                if (eq <= 0) { bad.Add(part); continue; }
+                var alias = part.Substring(0, eq).Trim();
+                var name = part.Substring(eq + 1).Trim();
+                if (catalog.TryResolveItem(alias, out _)) { bad.Add(part + " (already taken)"); continue; }
+                if (int.TryParse(name, out var g)) { catalog.AddAlias(alias, new ItemId(g)); continue; }
+                if (catalog.TryResolveItem(name, out var id)) catalog.AddAlias(alias, id);
+                else bad.Add(part);
+            }
+            return bad;
+        }
+
+        /// <summary>The number of items in the built catalog, for diagnostics.</summary>
+        public int ItemCount => _items?.Count ?? 0;
     }
 }

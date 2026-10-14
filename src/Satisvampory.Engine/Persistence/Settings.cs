@@ -56,6 +56,8 @@ namespace Satisvampory.Engine.Persistence
         public int MovesPerPlot { get; set; } = 12;
         public int MovesPerTick { get; set; } = 120;
         public bool AllowUnmoddedClients { get; set; }
+        /// <summary>Admin extras on top of the built-in aliases: "ior = Iron Ore; rb = Ruby".</summary>
+        public string ItemAliases { get; set; } = "";
         public bool CleanNamesAfterImport { get; set; }
         public bool ImportDone { get; set; }
     }

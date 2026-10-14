@@ -33,6 +33,8 @@ namespace Satisvampory
             _ctx.Net.OnReceive(EventIds.Notice, OnNotice);
             _ctx.Net.OnReceive(EventIds.Text, OnText);
             _admin.Request = SendAction;
+            _admin.Run = RunAdmin;
+            _ctx.Track(new OnDispose(() => _admin.Run = null));
             _ctx.Track(new OnDispose(() => _admin.Request = null));
             Client.Help.Attach(_ctx, _player);
             new Client.Panels(_ctx).Attach();
@@ -42,6 +44,21 @@ namespace Satisvampory
             _ctx.Track(new OnDispose(() => _admin.OpenHub = null));
             _ctx.Track(new OnDispose(() => _stopped = true));
             KeepPrefsSent();
+        }
+
+        double _lastDiag = -10;
+
+        void RunAdmin(int op, string item, int amount)
+        {
+            var now = UnityEngine.Time.realtimeSinceStartup;
+            if (op == 3) { if (now - _lastDiag < 3) return; _lastDiag = now; }
+            else _admin.LastAdminResult = "Asking the server…";
+            _ctx.Requests.Send<AdminReq, TextReply>(new AdminReq { Op = op, Item = item ?? "", Amount = amount }, r =>
+            {
+                var text = r.Ok && r.Reply != null ? r.Reply.Text : (r.Reason.Length > 0 ? r.Reason : r.Status.ToString());
+                if (op == 3) _admin.Diagnostics = text;
+                else _admin.LastAdminResult = text;
+            });
         }
 
         bool _stopped;

@@ -34,10 +34,21 @@ namespace Satisvampory.Config
                 {
                     if (entry is BepInEx.Configuration.ConfigEntry<bool> flag)
                         page.Toggle(flag, label: label, help: help, scope: SettingScope.Server);
+                    else if (entry is BepInEx.Configuration.ConfigEntry<string> text)
+                        page.Text(text, multiline: true, lines: 3, label: label, help: help, scope: SettingScope.Server);
                     else
                         page.Number(entry, label: label, help: help, scope: SettingScope.Server);
                 }
 
+                page.Button("Empty", () => admin.Run?.Invoke(1, "", 0), label: "Empty all trash on this plot",
+                    confirm: "Destroy everything in every trash chest on the plot you stand on?", needsServerPart: true,
+                    help: "Admins only. Uses the plot you are standing on.");
+                page.Text(server.GiveItem, label: "Give to storage: item", help: "Admins only. Item name, alias or id.");
+                page.Number(server.GiveAmount, label: "Give to storage: amount");
+                page.Button("Give", () => admin.Run?.Invoke(2, server.GiveItem.Value, server.GiveAmount.Value), label: "Give to storage",
+                    needsServerPart: true, help: "Admins only. Creates the items and sends them to their Mass Deposit homes on the plot you stand on.");
+                page.Info("Admin result", () => admin.LastAdminResult, refreshSeconds: 0.5);
+                page.Info("Diagnostics", () => { admin.Run?.Invoke(3, "", 0); return admin.Diagnostics; }, refreshSeconds: 3);
                 page.Info("Version", () => $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · island save v{Engine.Persistence.IslandSave.CurrentVersion}", refreshSeconds: 0);
                 page.Button("Check", () => admin.Request?.Invoke(Net.ActionKind.ImportCheck),
                     help: "Reads the server's Satisvampory 1.x or KindredLogistics settings file and reports what would carry over. Changes nothing. Admins only.",
@@ -70,6 +81,13 @@ namespace Satisvampory.Config
         public System.Action<Net.ActionKind>? Request { get; set; }
 
         public string LastResult { get; set; } = "Not run yet.";
+
+        /// <summary>Admin requests: 1 empty trash here, 2 give to storage (item, amount), 3 diagnostics.</summary>
+        public System.Action<int, string, int>? Run { get; set; }
+
+        public string LastAdminResult { get; set; } = "";
+
+        public string Diagnostics { get; set; } = "Open this page as an admin to see them.";
 
         /// <summary>Opens the Satisvampory hub on a tab (set by the client half).</summary>
         public System.Action<int>? OpenHub { get; set; }

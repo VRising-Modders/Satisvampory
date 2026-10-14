@@ -20,6 +20,12 @@ namespace Satisvampory.Config
 
         public List<(ConfigEntryBase Entry, string Label, string Help)> Rows { get; } = new();
 
+        /// <summary>Synced: admin's extra item aliases.</summary>
+        public ConfigEntry<string> Aliases { get; private set; } = null!;
+        /// <summary>Local only: what Give to storage gives.</summary>
+        public ConfigEntry<string> GiveItem { get; private set; } = null!;
+        public ConfigEntry<int> GiveAmount { get; private set; } = null!;
+
         ServerConfig()
         {
         }
@@ -50,6 +56,11 @@ namespace Satisvampory.Config
             c.Flag(ctx, "AllowRepeatHunts", d.AllowRepeatHunts, "Allow repeat hunts", "Servants go back out on the same hunt.", (s, v) => s.AllowRepeatHunts = v);
             c.Flag(ctx, "RepeatHuntsOnlyWhileClanOnline", d.RepeatHuntsOnlyWhileClanOnline, "Repeat hunts only while a clan member is online", "", (s, v) => s.RepeatHuntsOnlyWhileClanOnline = v);
             c.Int(ctx, "RepeatHuntSuccessCap", d.RepeatHuntSuccessCap, 1, 100, "Repeat hunt success cap (shown)", "Shown in notices; the roll stays vanilla.", (s, v) => s.RepeatHuntSuccessCap = v);
+            c.Aliases = ctx.Bind(Section, "ItemAliases", d.ItemAliases, "Extra item aliases, e.g. ior = Iron Ore; rb = Ruby", synced: true);
+            c.Rows.Add((c.Aliases, "Item aliases (server)", "Built-ins (be gbe pbe abe gss sgs dsi ot) always work. Add more as alias = item; separate with ; or new lines."));
+            c._apply.Add(s => s.ItemAliases = c.Aliases.Value);
+            c.GiveItem = ctx.Bind("AdminTools", "GiveItem", "", "Item for Give to storage (local, admins only)");
+            c.GiveAmount = ctx.Bind("AdminTools", "GiveAmount", 100, "Amount for Give to storage (local, admins only)", acceptableValues: new AcceptableValueRange<int>(1, 100000));
             c.Flag(ctx, "CleanNamesAfterImport", d.CleanNamesAfterImport, "Clean names after 1.x import", "Remove converted codes like s1 or ++ from chest names.", (s, v) => s.CleanNamesAfterImport = v);
             return c;
         }

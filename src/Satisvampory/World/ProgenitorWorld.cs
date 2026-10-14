@@ -186,6 +186,14 @@ namespace Satisvampory.World
             return r.Ok ? r.Done : 0;
         }
 
+        /// <summary>Creates items in a container (admin Give to storage). Returns how many went in.</summary>
+        public int Create(EngineId to, ItemId item, int amount)
+        {
+            if (amount <= 0 || !TryRef(to, InvPart.Main, out var r)) return 0;
+            var res = _inv.TryAdd(r, item.Guid, amount);
+            return res.Ok ? res.Done : 0;
+        }
+
         public int Destroy(EngineId from, ItemId item, int amount)
         {
             if (amount <= 0 || !TryRef(from, InvPart.Main, out var r)) return 0;

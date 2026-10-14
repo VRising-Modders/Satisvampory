@@ -96,6 +96,13 @@ namespace Satisvampory.Server
             }
         }
 
+        double _lastTickMs;
+        int _lastIslands, _lastMoves;
+
+        internal string Diagnostics(ServerHalf half) =>
+            $"Last tick {_lastTickMs:0.0} ms · {_lastIslands} islands · {_lastMoves} moves · {_recent.Values.Sum(l => l.Count)} moves kept for status · "
+            + $"{_missingSince.Count} chests waiting to be forgotten · catalog {half.Catalog.ItemCount} items";
+
         internal TickReport? LastReport(string islandKey) => _lastReports.TryGetValue(islandKey, out var r) ? r : null;
 
         /// <summary>Moves on an island in the last minute (spec 02 status line), newest last.</summary>
@@ -146,6 +153,18 @@ namespace Satisvampory.Server
 
         void RunIslands(ServerSettings server)
         {
+            var watch = Stopwatch.StartNew();
+            _lastIslands = 0;
+            var startBudget = server.MovesPerTick;
+            try { RunIslandsCore(server); }
+            finally
+            {
+                _lastTickMs = watch.Elapsed.TotalMilliseconds;
+            }
+        }
+
+        void RunIslandsCore(ServerSettings server)
+        {
             var sharing = Sharing(server);
             var castles = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             SweepDestroyed(castles);
@@ -165,7 +184,10 @@ namespace Satisvampory.Server
                 foreach (var m in members) done.Add(ProgenitorWorld.PlotOf(m));
                 try
                 {
-                    budget -= RunIsland(server, key, members, plot, budget);
+                    var used = RunIsland(server, key, members, plot, budget);
+                    budget -= used;
+                    _lastIslands++;
+                    _lastMoves = server.MovesPerTick - budget;
                 }
                 catch (Exception e)
                 {

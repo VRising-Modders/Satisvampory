@@ -49,12 +49,15 @@ namespace Satisvampory.Server
             _ctx.Track(new OnDispose(() => { if (ReferenceEquals(_active, this)) _active = null; }));
             _ctx.Net.OnReceiveFromClient(EventIds.PlayerPrefs, OnPrefs);
             _ctx.Net.OnReceiveFromClient(EventIds.Action, OnAction);
+            Catalog.Aliases = () => Config.Snapshot().ItemAliases;
+            _ctx.Requests.Handle<AdminReq, Net.TextReply>((u, q, i) => AdminActions.Run(_ctx, this, u, q));
             Ticker = new Ticker(_ctx, this);
             Ticker.Attach();
             new PanelService(_ctx, this).Attach();
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();
             new MaterialService(_ctx, this).Attach();
+            Progenitor.Dev.MainThread.PostDelayed(20, () => AdminActions.AutoImportOnFirstBoot(_ctx, this), _ctx.Owner);
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }
 
@@ -98,7 +101,7 @@ namespace Satisvampory.Server
                 else if ((ActionKind)a.Kind == ActionKind.ImportCheck) text = AdminActions.ImportCheck();
                 else
                 {
-                    try { text = AdminActions.ImportApply(_ctx, this); }
+                    try { text = AdminActions.ImportApply(_ctx, this); _ctx.Log.LogInfo("Satisvampory: import by an admin. " + text); }
                     catch (System.Exception e) { _ctx.Log.LogError("Satisvampory: import failed: " + e); text = "Import failed: " + e.Message; }
                 }
                 _ctx.Net.SendToUser(userEntity, EventIds.Text, TextPacket.Of(ActionKind.ImportCheck, text));

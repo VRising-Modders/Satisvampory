@@ -240,7 +240,7 @@ namespace Satisvampory.Client
             _list = panel.OrderedList("rows", Array.Empty<UiListItem>(), new UiOrderedListOptions
             {
                 EmptyText = _side == 0
-                    ? "Add the chests or belts this pulls from."
+                    ? "Add the chests or belts this pulls from, or Pull: reverse Mass Deposit to take items from wherever they are stored worst."
                     : "Add where this sends items. Push: Mass Deposit sends each item to the chest that rates it highest.",
             });
             ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));

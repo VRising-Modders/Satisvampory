@@ -40,6 +40,17 @@ namespace Satisvampory.Server
 
         /// <summary>The last conveyor report for an island, for the panels' row status lines.</summary>
         internal TickReport? LastReport(string islandKey) => _lastReports.TryGetValue(islandKey, out var r) ? r : null;
+
+        /// <summary>Moves on an island in the last minute (spec 02 status line), newest last.</summary>
+        readonly Dictionary<string, List<(double At, MoveRecord Move)>> _recent = new();
+
+        internal IReadOnlyList<MoveRecord> RecentMoves(string islandKey)
+        {
+            if (!_recent.TryGetValue(islandKey, out var list)) return Array.Empty<MoveRecord>();
+            var cutoff = Now - 60;
+            list.RemoveAll(x => x.At < cutoff);
+            return list.Select(x => x.Move).ToList();
+        }
         bool _stopped;
 
         internal Ticker(SatisContext ctx, ServerHalf half)
@@ -140,6 +151,9 @@ namespace Satisvampory.Server
                     LoopsAllowed = server.AllowLoops,
                 }).Run(Now);
                 _lastReports[key] = report;
+                if (!_recent.TryGetValue(key, out var recent)) _recent[key] = recent = new List<(double, MoveRecord)>();
+                recent.RemoveAll(x => x.At < Now - 60);
+                if (recent.Count < 5000) recent.AddRange(report.Moves.Select(m => (Now, m)));
                 return used + report.Moves.Count;
             }
         }

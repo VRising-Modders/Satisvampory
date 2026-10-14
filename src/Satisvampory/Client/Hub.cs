@@ -87,6 +87,8 @@ namespace Satisvampory.Client
             _player = player;
         }
 
+        internal void OpenTab(int tab) => Open(Math.Clamp(tab, CastleTab, HuntLogTab));
+
         internal void Attach(Keys keys)
         {
             keys.Pressed += OnKey;
@@ -156,13 +158,15 @@ namespace Satisvampory.Client
             }
         }
 
+        string _lastPlotLabel = "";
+
         void Tidy()
         {
             var now = _clock.Elapsed.TotalSeconds;
             if (_player.Rows.First(r => r.Entry.Definition.Key == "TidyConfirm").Entry.Value && now - _tidyArmedAt > 3)
             {
                 _tidyArmedAt = now;
-                _ctx.Hud.Notify("Tidy this island? Press again to confirm.", kind: UiNoticeKind.Info, seconds: 3);
+                _ctx.Hud.Notify($"Tidy {(_lastPlotLabel.Length > 0 ? _lastPlotLabel : "this castle")}? Press again to confirm.", kind: UiNoticeKind.Info, seconds: 3);
                 return;
             }
             _tidyArmedAt = -10;
@@ -279,6 +283,7 @@ namespace Satisvampory.Client
             _ = Panel;
             _castleHeader.Text = $"{c.PlotLabel} · level {c.Level} · {c.Owner} · {c.Sharing}" + (c.CanEdit ? "" : " · clan members can change these");
             _plotLabel.Value = c.PlotLabel;
+            _lastPlotLabel = c.PlotLabel;
             _logistics.Value = c.LogisticsOn;
             _defaultReserve.Value = c.DefaultReserve;
             _salvage.Value = c.FeedSalvage;
@@ -399,7 +404,7 @@ namespace Satisvampory.Client
                 Rows = 12,
                 SearchPlaceholder = "Search belts or categories",
                 NewCaption = "+ New belt",
-                EmptyText = "No belts yet. Name one below, then + New belt.",
+                EmptyText = "A belt is a named list of chests and stations you use together, like 'Ore in' for the chests beside your furnaces. Make one, then add it to any Input or Output.",
                 DetailEmptyText = "Select a belt to see its chests and where it is used.",
             }));
             _beltsMd.SetTexts(CategoriesPage, newCaption: "+ New category", emptyText: "No categories.", detailEmptyText: "Select a category to see its items.");

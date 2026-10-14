@@ -147,7 +147,11 @@ namespace Satisvampory.Engine.Lists
             // Fair share in whole crafts: round k feeds every station up to k crafts.
             for (var round = 1; round <= _opt.FeedCrafts && Budget(); round++)
                 foreach (var st in stations)
-                    FeedStation(st, Sources(st, edges), round, now, final: round == _opt.FeedCrafts);
+                {
+                    var depth = st.Role == StationRole.UnitSpawner ? Math.Min(_opt.FeedCrafts, SpecialJobs.SpawnerFeedCrafts) : _opt.FeedCrafts;
+                    if (round > depth) continue;
+                    FeedStation(st, Sources(st, edges), round, now, final: round == depth);
+                }
         }
 
         /// <summary>Source chests for a station's inputs, in pull order.</summary>

@@ -18,6 +18,9 @@ namespace Satisvampory.Config
                 page.Section("Me");
                 foreach (var (entry, label, help) in player.Rows)
                     page.Toggle(entry, label: label, help: help);
+                page.Button("Open", () => admin.OpenHub?.Invoke(5), label: "Hunt log", help: "Your servants' hunts and what they brought back.");
+                page.Button("Show again", () => UiTerms.ShowMarkers(ctx.Guid), label: "Show term hints (ⓘ) again",
+                    help: "Brings back the small ⓘ markers you have hovered away.");
 
                 if (keys.Registered.Count > 0)
                 {
@@ -46,6 +49,11 @@ namespace Satisvampory.Config
                 page.Info("Import result", () => admin.LastResult, refreshSeconds: 0.5);
 
                 page.Section("Help");
+                page.Info("How it fits together", () => Glossary.HowItFits, refreshSeconds: 0);
+                page.Button("Open", () => admin.OpenHub?.Invoke(1), label: "Mass Deposit");
+                page.Button("Open", () => admin.OpenHub?.Invoke(2), label: "Belts and categories");
+                page.Button("Open", () => admin.OpenHub?.Invoke(3), label: "Inventory");
+                page.Button("Open", () => admin.OpenHub?.Invoke(4), label: "Find");
                 foreach (var (term, text) in Glossary.Terms)
                     page.Info(term, () => text, refreshSeconds: 0);
             });
@@ -62,6 +70,9 @@ namespace Satisvampory.Config
         public System.Action<Net.ActionKind>? Request { get; set; }
 
         public string LastResult { get; set; } = "Not run yet.";
+
+        /// <summary>Opens the Satisvampory hub on a tab (set by the client half).</summary>
+        public System.Action<int>? OpenHub { get; set; }
     }
 
     /// <summary>The glossary from spec 16, one place for every surface.</summary>
@@ -69,19 +80,25 @@ namespace Satisvampory.Config
     {
         public static readonly (string Term, string Text)[] Terms =
         {
-            ("Belt", "A named list of chests and stations you use together, like \"Ore in\" for the chests beside your furnaces. Put a belt in an Input or Output and it acts on every chest on it."),
-            ("Category", "A named set of items, like Flowers or Ore. Used in filters, deposit settings, reserves, caps and Mass Deposit rules."),
+            ("Belt", "A named list of chests and stations that you use together, like \"Ore in\" for the three chests beside your furnaces. Put a belt in a chest's or station's Input or Output and it acts on every chest on the belt."),
+            ("Category", "A named set of items, like Flowers or Ore. Use categories to filter what moves, to set reserves and caps, and in Mass Deposit rules."),
             ("Input", "Where this chest or station pulls items from."),
             ("Output", "Where this chest or station sends items to."),
-            ("Mass Deposit", "Where each item belongs, decided by each chest's deposit settings, never its name. Push: Mass Deposit sends items home; Pull: reverse Mass Deposit lets a station take what it needs from wherever it is stored worst."),
-            ("Deposit settings", "A chest's gear: what it takes (anything, only what's listed, nothing), its priority and its bans."),
-            ("Island", "All the castles whose chests you can use from where you stand, following castle share and clan share."),
+            ("Mass Deposit", "Where each item belongs, decided by each chest's deposit settings (what it takes, at what priority), never by its name. Quick stash, tidy and servant loot use it. \"Push: Mass Deposit\" in an Output sends items home every tick; \"Pull: reverse Mass Deposit\" in an Input takes them from wherever they are stored worst."),
+            ("Deposit settings", "A chest's gear: what it takes (anything, only what's listed, nothing), its priority, its bans."),
+            ("Island", "All the castles whose chests you can use from where you stand. It follows castle share and clan share."),
             ("Castle share", "Your own castles act as one: craft at one, use chests at another."),
             ("Clan share", "Every castle of every clan member taking part acts as one."),
             ("Reserve", "How many of an item stations and crafting leave untouched."),
             ("Cap", "Stations stop making an item once the island holds this many."),
-            ("Loop", "Chests that feed each other in a circle; it runs once or keeps items evenly spread."),
-            ("Try it", "Ask \"what if n of X\" and see where it would go or come from, and which chests would not be used and why. Nothing moves."),
+            ("Loop", "Chests that feed each other in a circle. You choose whether it runs once or keeps items evenly spread."),
+            ("Priority", "A chest's number for an item in its deposit settings: higher wins."),
+            ("Try it", "Ask \"what if n of X\" and see where it would go or come from, in order, and which chests would not be used and why. Nothing moves."),
         };
+
+        public const string HowItFits =
+            "Every chest has deposit settings that say what belongs in it; quick stash, tidy and servant loot follow them (Mass Deposit). " +
+            "Every chest and station also has an Input and an Output: lists of chests and belts it pulls from and sends to, every few seconds. " +
+            "Stations pull only whole crafts and keep the island's reserves. Castle share and clan share decide which castles count as one island.";
     }
 }

@@ -166,7 +166,7 @@ namespace Satisvampory.Server
             Must(s.Edits.SetDepositOptions(s.Role, s.Container.Id, d =>
             {
                 d.Takes = (Takes)Math.Clamp(m.Takes, 0, 2);
-                d.BasePriority = m.BasePriority;
+                d.BasePriority = Math.Clamp(m.BasePriority, -10, 10);
                 d.Special = Enum.IsDefined(typeof(SpecialKind), m.Special) ? (SpecialKind)m.Special : SpecialKind.None;
                 d.ItemPriority.Clear();
                 d.CategoryPriority.Clear();
@@ -211,7 +211,7 @@ namespace Satisvampory.Server
                     {
                         PickerSection.Here => "Here",
                         PickerSection.OtherPlots => "Other plots",
-                        PickerSection.Belts => "Belts",
+                        PickerSection.Belts => "Belts · named lists of chests you use together",
                         PickerSection.SpecialChests => "Special chests",
                         _ => "Mass Deposit",
                     },
@@ -387,10 +387,16 @@ namespace Satisvampory.Server
             {
                 var self = s.Container.Id;
                 var endSet = new HashSet<EngineId>(ends);
-                var moved = report.Moves.Where(m => side == ListSide.Output
+                var recent = _half.Ticker?.RecentMoves(s.Island.OwnerKey) ?? report.Moves;
+                var mine = recent.Where(m => side == ListSide.Output
                     ? m.From == self && (e.Kind == EntryKind.MassDeposit ? m.Why == "mass deposit" : endSet.Contains(m.To))
-                    : m.To == self && (e.Kind == EntryKind.MassDeposit || endSet.Contains(m.From))).Sum(m => m.Amount);
-                if (moved > 0) { row.Status = $"moving · {moved:N0} last tick"; row.Tone = 1; }
+                    : m.To == self && (e.Kind == EntryKind.MassDeposit || endSet.Contains(m.From))).ToList();
+                if (mine.Count > 0)
+                {
+                    var top = mine.GroupBy(m => m.Item).Select(g => (Item: g.Key, Amount: g.Sum(m => m.Amount))).OrderByDescending(x => x.Amount).ToList();
+                    row.Status = $"moving · {top[0].Amount:N0} {s.Catalog.NameOf(top[0].Item)}" + (top.Count > 1 ? $" and {top.Count - 1} more" : "") + " last minute";
+                    row.Tone = 1;
+                }
                 else if (report.Diagnostics.TryGetValue(self, out var codes) && codes.Count > 0) { row.Status = Explain(codes[0]); row.Tone = 2; }
             }
             return row;
@@ -406,16 +412,16 @@ namespace Satisvampory.Server
 
         static string Explain(string code) => code switch
         {
-            "raided" => "castle is under attack",
-            "disabled" => "logistics are off here",
-            "out-of-scope" => "on a plot outside your island",
-            "no-source" => "nothing in the input holds what is needed",
-            "not-enough" => "not enough for one full craft",
-            "reserve" => "only the reserve is left",
-            "cap" => "the island holds the production cap",
-            "sink-full" => "receiver full",
-            "not-wanted" => "no recipe switched on uses it",
-            "loop-waiting" => "loop waiting for a change",
+            "raided" => "Castle is under attack",
+            "disabled" => "Logistics are off for this castle, or the server disallows them",
+            "out-of-scope" => "This chest is on a plot outside the current sharing island",
+            "no-source" => "Nothing in the input holds what is needed",
+            "not-enough" => "Not enough for one full craft",
+            "reserve" => "Only the castle reserve remains",
+            "cap" => "The island already holds the production cap",
+            "sink-full" => "Destination has no free slot",
+            "not-wanted" => "No recipe switched on uses this item",
+            "loop-waiting" => "Loop finished its cycle; waiting for a change",
             _ => code,
         };
 

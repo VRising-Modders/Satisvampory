@@ -90,6 +90,20 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void Unit_spawner_fed_through_its_input_is_fed_two_crafts_deep()
+        {
+            var tomb = _w.Chest(Home, "Tomb", kind: NodeKind.Station);
+            tomb.Role = StationRole.UnitSpawner;
+            _w.StationRecipes[tomb.Id] = new List<Recipe> { new(9, new[] { new ItemStack(BloodEssence, 15) }, new ItemStack[0], true) };
+            var src = _w.Chest(Home, "Blood");
+            _w.Put(src, BloodEssence, 500);
+            _g.For(tomb.Id).Input.Add(ListEntry.Of(src.Id));
+
+            Tick();
+            Assert.Equal(30, _w.Count(tomb.Id, BloodEssence));
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

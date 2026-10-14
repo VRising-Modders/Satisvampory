@@ -65,6 +65,7 @@ namespace Satisvampory.Server
         T With<T>(Entity userEntity, TargetMsg target, Func<Session, T> body)
         {
             var user = _ctx.World!.EntityManager.GetComponentData<User>(userEntity);
+            _half.Catalog.Refresh(_ctx);
             var island = ServerActions.Resolve(_ctx, _half, userEntity, user)
                 ?? throw new RequestRefusedException("Stand on one of your or your clan's castles to change logistics.");
             var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);

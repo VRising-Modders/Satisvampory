@@ -24,8 +24,10 @@ namespace Satisvampory.Server
     {
         public const double TickSeconds = 5;
 
-        /// <summary>Blood Essence's prefab guid (a game fact). Replaced by a catalog lookup once ctx.Items.Catalog lands.</summary>
-        const int BloodEssence = 862477668;
+        /// <summary>Blood Essence's prefab guid as a fallback (a game fact); the catalog lookup wins when it resolves.</summary>
+        const int BloodEssenceFallback = 862477668;
+
+        ItemId BloodEssence => _half.Catalog.Current.TryResolveItem("Blood Essence", out var id) ? id : new ItemId(BloodEssenceFallback);
 
         readonly SatisContext _ctx;
         readonly ServerHalf _half;
@@ -61,6 +63,7 @@ namespace Satisvampory.Server
             if (_stopped) return;
             try
             {
+                _half.Catalog.Refresh(_ctx);
                 var server = _half.Config.Snapshot();
                 if (server.AllowLogistics) RunIslands(server);
             }
@@ -266,7 +269,7 @@ namespace Satisvampory.Server
                 Belts = state.Graph.BeltMembers(),
             };
 
-            var blood = new ItemId(BloodEssence);
+            var blood = BloodEssence;
             var fuel = castle.HeartFuel();
             var heart = new HeartInfo(plot, fuel.UnlockedSlots, fuel.FuelQuantity, true, true);
             var sources = ConveyorTick.HeartSources(world, deposit, state.Graph, new Engine.Model.ContainerId(castle.HeartId.Value), blood)

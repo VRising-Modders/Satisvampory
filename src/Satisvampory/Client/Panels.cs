@@ -297,7 +297,7 @@ namespace Satisvampory.Client
         void TryIt()
         {
             if (!int.TryParse(_tryAmount.Value, out var n) || n <= 0) n = 100;
-            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = _side == 0 ? 0 : 1, Item = _tryItem.Value, Amount = n }, r =>
+            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = _side == 0 ? 0 : 1, Item = ClientItems.Resolve(Owner.Ctx, _tryItem.Value), Amount = n }, r =>
             {
                 var lines = new List<string> { $"{n:N0} {r.Item}:" };
                 lines.AddRange(r.Steps.Select(x => $"  {x.Name} · {x.Where} — {x.Amount:N0}  ({x.Why})"));
@@ -410,12 +410,12 @@ namespace Satisvampory.Client
             for (var i = 0; i < _draft.Priorities.Count; i++)
             {
                 var p = _draft.Priorities[i];
-                items.Add(new UiListItem("p:" + i, p.Label.Length > 0 ? p.Label : p.Category) { Badge = (p.Adjust >= 0 ? "+" : "−") + Math.Abs(p.Adjust) });
+                items.Add(new UiListItem("p:" + i, p.Item != 0 ? ClientItems.NameOf(Owner.Ctx, p.Item, p.Label) : p.Label.Length > 0 ? p.Label : p.Category) { Badge = (p.Adjust >= 0 ? "+" : "−") + Math.Abs(p.Adjust) });
             }
             for (var i = 0; i < _draft.Bans.Count; i++)
             {
                 var b = _draft.Bans[i];
-                items.Add(new UiListItem("b:" + i, b.Label.Length > 0 ? b.Label : b.Category) { Badge = "Never" });
+                items.Add(new UiListItem("b:" + i, b.Item != 0 ? ClientItems.NameOf(Owner.Ctx, b.Item, b.Label) : b.Label.Length > 0 ? b.Label : b.Category) { Badge = "Never" });
             }
             _entries.SetItems(items);
         }
@@ -424,7 +424,10 @@ namespace Satisvampory.Client
         {
             var name = _entryName.Value.Trim();
             if (name.Length == 0) return;
-            var entry = new PriorityMsg { Category = name, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) };
+            var resolved = ClientItems.Resolve(Owner.Ctx, name);
+            var entry = int.TryParse(resolved, out var guid)
+                ? new PriorityMsg { Item = guid, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) }
+                : new PriorityMsg { Category = name, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) };
             (ban ? _draft.Bans : _draft.Priorities).Add(entry);
             _entryName.Value = string.Empty;
             DrawEntries();
@@ -443,7 +446,7 @@ namespace Satisvampory.Client
         }
 
         void TryIt() =>
-            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = 2, Item = _tryItem.Value, Amount = 1 }, r =>
+            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = 2, Item = ClientItems.Resolve(Owner.Ctx, _tryItem.Value), Amount = 1 }, r =>
             {
                 var here = Owner.State?.Name ?? "";
                 var first = r.Steps.FirstOrDefault();

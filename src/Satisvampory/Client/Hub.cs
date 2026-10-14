@@ -276,7 +276,7 @@ namespace Satisvampory.Client
             Track(In(MassDepositTab, p.Button("+ Add override")).OnClick(() =>
             {
                 var parts = _ovTarget.Value.Split('@');
-                _overrideDraft.Add(new OverrideMsg { Items = _ovItems.Value, TargetKind = _ovKind.Value, TargetName = parts[0].Trim(), TargetPlot = parts.Length > 1 ? parts[1].Trim() : "" });
+                _overrideDraft.Add(new OverrideMsg { Items = ClientItems.Resolve(_ctx, _ovItems.Value), TargetKind = _ovKind.Value, TargetName = parts[0].Trim(), TargetPlot = parts.Length > 1 ? parts[1].Trim() : "" });
                 SaveOverrides();
             }));
             In(MassDepositTab, p.Divider());
@@ -292,7 +292,7 @@ namespace Satisvampory.Client
             Track(In(MassDepositTab, p.Button("Try it")).OnClick(() =>
             {
                 if (!int.TryParse(_mdAmount.Value, out var n)) n = 100;
-                Send<IslandTryReq, TryItReply>(new IslandTryReq { Item = _mdItem.Value, Amount = n, Direction = int.Parse(_mdDirection.Value) },
+                Send<IslandTryReq, TryItReply>(new IslandTryReq { Item = ClientItems.Resolve(_ctx, _mdItem.Value), Amount = n, Direction = int.Parse(_mdDirection.Value) },
                     r => _mdResult.Text = TryText(n, r));
             }));
             _mdResult = In(MassDepositTab, p.Label(""));
@@ -366,8 +366,8 @@ namespace Satisvampory.Client
             _catName = In(BeltsTab, p.Input("Category", ""));
             _catItem = In(BeltsTab, p.Input("Item", ""));
             Track(In(BeltsTab, p.Button("+ New category")).OnClick(() => EditBelt(new BeltEditReq { Op = 10, Name = _catName.Value })));
-            Track(In(BeltsTab, p.Button("+ Add item to category")).OnClick(() => EditBelt(new BeltEditReq { Op = 11, Name = _catName.Value, Text = _catItem.Value })));
-            Track(In(BeltsTab, p.Button("− Remove item from category")).OnClick(() => EditBelt(new BeltEditReq { Op = 12, Name = _catName.Value, Text = _catItem.Value })));
+            Track(In(BeltsTab, p.Button("+ Add item to category")).OnClick(() => EditBelt(new BeltEditReq { Op = 11, Name = _catName.Value, Text = ClientItems.Resolve(_ctx, _catItem.Value) })));
+            Track(In(BeltsTab, p.Button("− Remove item from category")).OnClick(() => EditBelt(new BeltEditReq { Op = 12, Name = _catName.Value, Text = ClientItems.Resolve(_ctx, _catItem.Value) })));
             Track(In(BeltsTab, p.Button("Restore built-in / delete custom")).OnClick(() => EditBelt(new BeltEditReq { Op = 13, Name = _catName.Value })));
         }
 
@@ -430,7 +430,7 @@ namespace Satisvampory.Client
             _ruleKind = In(InventoryTab, p.Dropdown("Set", new[] { "0", "1" }, "0", new[] { "Reserve", "Cap" }));
             _ruleValue = In(InventoryTab, p.Number("Value (−1 clears)", -1, -1, 1_000_000));
             Track(In(InventoryTab, p.Button("Apply")).OnClick(() =>
-                Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = _ruleTarget.Value, Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, _ => LoadInventory())));
+                Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = ClientItems.Resolve(_ctx, _ruleTarget.Value), Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, _ => LoadInventory())));
         }
 
         void LoadInventory()
@@ -445,7 +445,7 @@ namespace Satisvampory.Client
             static string From(int f) => f switch { 2 => "", 1 => " (category)", _ => " (default)" };
             var lines = new List<string> { m.Island, "Item · total · here · chests · in stations · reserve · spare · cap · demand · status" };
             lines.AddRange(m.Rows.Take(60).Select(r =>
-                $"{r.Name} · {r.Total:N0} · {r.Here:N0} · {r.Chests} · {r.InStations:N0} · {r.Reserve:N0}{From(r.ReserveFrom)} · {r.Spare:N0} · {(r.Cap < 0 ? "—" : r.Cap.ToString("N0") + From(r.CapFrom))} · {r.Demand:N0} · {r.Status}"));
+                $"{ClientItems.NameOf(_ctx, r.Item, r.Name)} · {r.Total:N0} · {r.Here:N0} · {r.Chests} · {r.InStations:N0} · {r.Reserve:N0}{From(r.ReserveFrom)} · {r.Spare:N0} · {(r.Cap < 0 ? "—" : r.Cap.ToString("N0") + From(r.CapFrom))} · {r.Demand:N0} · {r.Status}"));
             if (m.Rows.Count > 60) lines.Add($"… {m.Rows.Count - 60} more; narrow with Search.");
             _invTable.Text = string.Join("\n", lines);
         }
@@ -461,7 +461,7 @@ namespace Satisvampory.Client
             Track(In(FindTab, p.Button("Take into bags")).OnClick(() =>
             {
                 int.TryParse(_pullAmount.Value, out var n);
-                Send<PullReq, TextReply>(new PullReq { Text = _findText.Value, Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
+                Send<PullReq, TextReply>(new PullReq { Text = ClientItems.Resolve(_ctx, _findText.Value), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
             }));
             _findResult = In(FindTab, p.Label(""));
         }

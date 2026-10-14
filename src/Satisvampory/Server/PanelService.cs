@@ -150,7 +150,8 @@ namespace Satisvampory.Server
                     if (r.Index < 0 || r.Index >= list.Count) throw new RequestRefusedException("That row is gone; the list changed.");
                     if (s.Role == ActorRole.Guest) throw new RequestRefusedException("Clan members can change logistics.");
                     var old = list[r.Index];
-                    list[r.Index] = new ListEntry { Kind = old.Kind, Container = old.Container, Belt = old.Belt, Sequence = old.Sequence, Filter = ToFilter(r.Entry.FilterSpec) };
+                    var filter = string.IsNullOrWhiteSpace(r.Entry.FilterSpec?.Text) ? ToFilter(r.Entry.FilterSpec) : ParseFilter(s.Catalog, r.Entry.FilterSpec!.Text);
+                    list[r.Index] = new ListEntry { Kind = old.Kind, Container = old.Container, Belt = old.Belt, Sequence = old.Sequence, Filter = filter };
                     break;
                 }
                 default:
@@ -463,6 +464,33 @@ namespace Satisvampory.Server
             foreach (var c in m.Categories) f.Categories.Add(NameFold.Fold(c));
             foreach (var i in m.ExcludeItems) f.ExcludeItems.Add(new ItemId(i));
             foreach (var c in m.ExcludeCategories) f.ExcludeCategories.Add(NameFold.Fold(c));
+            return f;
+        }
+
+        /// <summary>
+        /// "ore, iron ingot, -copper ore, category gems": comma-separated items or categories; a leading
+        /// "-" excludes; "category x" / "item x" settles a name that is both. Blank or "anything" clears.
+        /// </summary>
+        static ItemFilter ParseFilter(ItemCatalog catalog, string text)
+        {
+            var f = new ItemFilter();
+            foreach (var raw in text.Split(','))
+            {
+                var t = raw.Trim();
+                if (t.Length == 0 || t.Equals("anything", StringComparison.OrdinalIgnoreCase)) continue;
+                var exclude = t.StartsWith("-");
+                if (exclude) t = t.Substring(1).Trim();
+                var wantCategory = t.StartsWith("category ", StringComparison.OrdinalIgnoreCase);
+                var wantItem = t.StartsWith("item ", StringComparison.OrdinalIgnoreCase);
+                if (wantCategory) t = t.Substring(9).Trim();
+                if (wantItem) t = t.Substring(5).Trim();
+                if (!wantItem && catalog.TryResolveCategory(t, out var cat))
+                    (exclude ? f.ExcludeCategories : f.Categories).Add(cat);
+                else if (!wantCategory && TryItem(catalog, t, out var item))
+                    (exclude ? f.ExcludeItems : f.Items).Add(item);
+                else
+                    throw new RequestRefusedException($"\"{t}\" is not an item or category.");
+            }
             return f;
         }
 

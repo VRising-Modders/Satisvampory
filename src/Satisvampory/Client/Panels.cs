@@ -193,6 +193,16 @@ namespace Satisvampory.Client
     /// <summary>An Input (side 0) or Output (side 1) list.</summary>
     internal sealed class ListView : View
     {
+        int? _filterRow;
+        IUiInput _filterText = null!;
+        IUiButton _filterApply = null!;
+
+        string FilterText(FilterMsg f) => string.Join(", ",
+            f.Categories.Select(c => "category " + c)
+                .Concat(f.Items.Select(i => ClientItems.NameOf(Owner.Ctx, i, i.ToString())))
+                .Concat(f.ExcludeCategories.Select(c => "-category " + c))
+                .Concat(f.ExcludeItems.Select(i => "-" + ClientItems.NameOf(Owner.Ctx, i, i.ToString()))));
+
         protected override string? TipId => Help.ListsTip;
 
         readonly int _side;
@@ -246,6 +256,23 @@ namespace Satisvampory.Client
             ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));
             ctx.Track(_list.OnReorder(m => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = m.From, To = m.To })));
             ctx.Track(_list.OnRemove(item => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = int.Parse(item.Id) })));
+
+            // Row filter (spec 02): expand a row, type what it moves, Apply.
+            ctx.Track(_list.OnExpand((item, open) =>
+            {
+                _filterRow = open && int.TryParse(item.Id, out var i) ? i : null;
+                var rows = Owner.State == null ? null : _side == 0 ? Owner.State.Input : Owner.State.Output;
+                _filterText.Value = _filterRow is { } r && rows != null && r < rows.Count ? FilterText(rows[r].FilterSpec) : "";
+                _filterText.Visible = _filterApply.Visible = _filterRow != null && Owner.State?.CanEdit == true;
+            }));
+            _filterText = panel.Input("Open row moves (blank: anything; -x excludes)", "");
+            _filterApply = panel.Button("Set filter");
+            _filterText.Visible = _filterApply.Visible = false;
+            ctx.Track(_filterApply.OnClick(() =>
+            {
+                if (_filterRow is not { } row) return;
+                Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 4, Index = row, Entry = new RowMsg { FilterSpec = new FilterMsg { Text = string.IsNullOrWhiteSpace(_filterText.Value) ? "anything" : _filterText.Value } } });
+            }));
 
             ctx.Track(panel.Button("+ Add…").OnClick(() => Owner.OpenPicker(_side)));
             ctx.Track(panel.Button("◎ Pick in world").OnClick(PickInWorld));

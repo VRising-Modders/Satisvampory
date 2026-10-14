@@ -25,6 +25,8 @@ namespace Satisvampory.Net
         [Field(2)] public List<string> Categories = new();
         [Field(3)] public List<int> ExcludeItems = new();
         [Field(4)] public List<string> ExcludeCategories = new();
+        /// <summary>Typed form ("ore, iron ingot, -copper ore"); when set, the server resolves it and ignores the lists.</summary>
+        [Field(5)] public string Text = "";
     }
 
     /// <summary>One Input or Output row as the panel shows it.</summary>

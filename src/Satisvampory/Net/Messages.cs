@@ -236,4 +236,15 @@ namespace Satisvampory.Net
         [Field(3)] public List<EvalRowMsg> NotUsed = new();
         [Field(4)] public int Short;
     }
+
+    /// <summary>Take an item from one list row's chest or belt into bags (spec 07, "Take…").</summary>
+    [ModMessage("sv.take.row")]
+    public sealed class TakeFromRowReq
+    {
+        [Field(1)] public TargetMsg Target = new();
+        [Field(2)] public int Side;
+        [Field(3)] public int Index;
+        [Field(4)] public string Item = "";
+        [Field(5)] public int Amount;
+    }
 }

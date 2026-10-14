@@ -40,6 +40,7 @@ namespace Satisvampory.Server
         {
             _ctx.Requests.Handle<GetPanelReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Panel(s)));
             _ctx.Requests.Handle<EditListReq, PanelMsg>((u, r, i) => With(u, r.Target, s => EditList(s, r)));
+            _ctx.Requests.Handle<TakeFromRowReq, TextReply>((u, q, i) => With(u, q.Target, sess => TakeFromRow(u, sess, q)));
             _ctx.Requests.Handle<SetDepositReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetDeposit(s, r)));
             _ctx.Requests.Handle<PickerReq, PickerReply>((u, r, i) => With(u, r.Target, s => PickerRows(s, r)));
             _ctx.Requests.Handle<TryItReq, TryItReply>((u, r, i) => With(u, r.Target, s => TryIt(s, r)));
@@ -447,6 +448,45 @@ namespace Satisvampory.Server
                 else if (report.Diagnostics.TryGetValue(self, out var codes) && codes.Count > 0) { row.Status = Explain(codes[0]); row.Tone = 2; }
             }
             return row;
+        }
+
+        /// <summary>
+        /// Take from one row's chest (or every chest on its belt) into the player's bags. Same gates as
+        /// pull; ignores reserve; keeps each chest's last stack when the player asks for that.
+        /// </summary>
+        TextReply TakeFromRow(Entity userEntity, Session s, TakeFromRowReq q)
+        {
+            var server = _half.Config.Snapshot();
+            if (!server.AllowPull) throw new RequestRefusedException("Pulling is turned off on this server.");
+            var gate = ServerActions.StateGate(_ctx, userEntity);
+            if (gate != StateRefusal.None) throw new RequestRefusedException(ServerActions.Words(gate));
+            var lists = s.Island.State.Graph.For(s.Container.Id);
+            var list = q.Side == 0 ? lists.Input : lists.Output;
+            if (q.Index < 0 || q.Index >= list.Count) throw new RequestRefusedException("That row is gone; the list changed.");
+            var entry = list[q.Index];
+            var sources = entry.Kind == EntryKind.Container && entry.Container is { } one ? new List<Engine.Model.ContainerId> { one }
+                : entry.Kind == EntryKind.Belt && entry.Belt is { } b && s.Island.State.Graph.Belts.TryGetValue(b, out var belt) ? belt.Members.ToList()
+                : throw new RequestRefusedException("Take works on a chest or belt row.");
+            if (!TryItem(s.Catalog, q.Item ?? "", out var item)) throw new RequestRefusedException($"No item called \"{q.Item}\".");
+
+            var prefs = _half.PlayerFor(s.User.PlatformId);
+            var bag = s.World.AddBag(_ctx.Inventory.Of(s.User.LocalCharacter._Entity), player: true);
+            var want = q.Amount > 0 ? q.Amount : s.Catalog.MaxStack(item);
+            var took = 0;
+            foreach (var id in sources)
+            {
+                if (took >= want) break;
+                var c = s.World.Find(id);
+                if (c == null || c.Kind == NodeKind.Heart || c.Deposit.Special == SpecialKind.Skip) continue;
+                // Spec 06: guests use the standing plot's own storage only.
+                if (s.Role == ActorRole.Guest && c.Plot != ProgenitorWorld.PlotOf(s.Island.Standing)) continue;
+                var have = s.World.Count(id, item);
+                var keep = prefs.NeverPullLastStack ? Math.Min(have, s.Catalog.MaxStack(item)) : 0;
+                var n = Math.Min(want - took, have - keep);
+                if (n > 0) took += s.World.Transfer(id, InvPart.Main, bag, item, n);
+            }
+            var name = s.Catalog.NameOf(item);
+            return new TextReply { Text = took == 0 ? $"No {name} to take there" + (prefs.NeverPullLastStack ? " (last stacks stay)." : ".") : $"Took {took:N0} {name}." };
         }
 
         // ---------------- helpers ----------------

@@ -104,6 +104,24 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void Reserve_and_cap_are_reported_as_the_reason_a_station_waits()
+        {
+            _rules.DefaultReserve = 100;
+            var f = Furnace();
+            var ore = _w.Chest(Home, "Ore in");
+            _w.Put(ore, IronOre, 60).Put(ore, Coal, 500);
+            _g.For(f.Id).Input.Add(ListEntry.Of(ore.Id));
+            var report = Tick();
+            Assert.Contains("reserve", report.Diagnostics[f.Id]);
+
+            _rules.DefaultReserve = 0;
+            _rules.ItemCap[IronIngot] = 5;
+            _w.Put(_w.Chest(Home, "Ingots"), IronIngot, 10);
+            report = Tick();
+            Assert.Contains("cap", report.Diagnostics[f.Id]);
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

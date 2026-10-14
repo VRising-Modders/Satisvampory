@@ -179,8 +179,10 @@ namespace Satisvampory.Engine.Lists
             }
             var lists = _graph.For(station.Id);
             var massInput = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit);
-            var recipes = _world.Recipes(station.Id)
-                .Select(r => r.Enabled && CapAllows(r) ? r : r with { Enabled = false })
+            var original = _world.Recipes(station.Id);
+            var capped = original.Where(r => r.Enabled && !CapAllows(r)).Select(r => r.Id).ToHashSet();
+            var recipes = original
+                .Select(r => r.Enabled && !capped.Contains(r.Id) ? r : r with { Enabled = false })
                 .ToList();
 
             var held = _world.Contents(station.Id);
@@ -225,8 +227,14 @@ namespace Satisvampory.Engine.Lists
 
             if (!final) return;
 
+            if (capped.Count > 0) _report.Diag(station.Id, "cap");
             foreach (var r in recipes.Where(r => r.Enabled && plan.Crafts.TryGetValue(r.Id, out var c) && c == 0))
-                _report.Diag(station.Id, plan.Missing.ContainsKey(r.Id) ? "not-enough" : "no-source");
+            {
+                if (!plan.Missing.TryGetValue(r.Id, out var short1)) { _report.Diag(station.Id, "no-source"); continue; }
+                // Stock is there but the reserve holds it back (spec 02 "reserve").
+                var inSources = SourcesFor(short1).Sum(id => SourceCount(id, short1));
+                _report.Diag(station.Id, inSources > Available(short1) ? "reserve" : "not-enough");
+            }
 
             // Leftovers: returned after the grace period, to where they came from, else their home.
             foreach (var key in _state.LeftoverSince.Keys.Where(k => k.Station == station.Id && !plan.Leftovers.ContainsKey(k.Item)).ToList())

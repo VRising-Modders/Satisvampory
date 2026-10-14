@@ -202,6 +202,8 @@ namespace Satisvampory.Client
         int? _filterRow;
         IUiInput _filterText = null!;
         IUiButton _filterApply = null!;
+        IUiInput _takeItem = null!, _takeAmount = null!;
+        IUiButton _takeButton = null!;
 
         string FilterText(FilterMsg f) => string.Join(", ",
             f.Categories.Select(c => "category " + c)
@@ -270,10 +272,23 @@ namespace Satisvampory.Client
                 var rows = Owner.State == null ? null : _side == 0 ? Owner.State.Input : Owner.State.Output;
                 _filterText.Value = _filterRow is { } r && rows != null && r < rows.Count ? FilterText(rows[r].FilterSpec) : "";
                 _filterText.Visible = _filterApply.Visible = _filterRow != null && Owner.State?.CanEdit == true;
+                var takeable = _filterRow is { } t && rows != null && t < rows.Count && rows[t].Kind is 0 or 1;
+                _takeItem.Visible = _takeAmount.Visible = _takeButton.Visible = takeable;
             }));
             _filterText = panel.Input("Open row moves (blank: anything; -x excludes)", "");
             _filterApply = panel.Button("Set filter");
             _filterText.Visible = _filterApply.Visible = false;
+            _takeItem = panel.Input("Take from the open row: item", "");
+            _takeAmount = panel.Input("Amount (blank: one stack)", "");
+            _takeButton = panel.Button("Take…");
+            _takeItem.Visible = _takeAmount.Visible = _takeButton.Visible = false;
+            ctx.Track(_takeButton.OnClick(() =>
+            {
+                if (_filterRow is not { } row) return;
+                int.TryParse(_takeAmount.Value, out var n);
+                Owner.Send<TakeFromRowReq, TextReply>(new TakeFromRowReq { Target = Owner.Target(), Side = _side, Index = row, Item = ClientItems.Resolve(ctx, _takeItem.Value), Amount = n },
+                    r => ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 4));
+            }));
             ctx.Track(_filterApply.OnClick(() =>
             {
                 if (_filterRow is not { } row) return;

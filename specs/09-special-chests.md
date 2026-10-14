@@ -8,7 +8,6 @@ A container's **special kind** is set from the chest's Deposit settings panel (`
 | **Skip** | Never a source or dest for anything. | — | — |
 | **Salvage** | Feeds the devourer on the same plot. | Allow salvage (ON) | Castle setting **Feed salvage to the devourer** OFF |
 | **Spawner** | Feeds unit spawners on the plot, two crafts deep. | Allow spawner chests (ON) | on when the chest exists |
-| **Brazier** | Keeps braziers on the plot fuelled, leaving at least 10 in the chest. Variants **Night** (only at night) and **Proximity** (only when a player is within 20 m). Tick 2.5 s. | Allow brazier chests (ON), Allow night and proximity (ON) | on when the chest exists |
 | **Trash** | Can be emptied by a clan member from its panel (**Empty**, with confirm). Admins can empty every trash chest on a plot. Never a tidy dest. | Allow trash (ON) | — |
 | **Spoils** | Servant-loot overflow. Tidy source only. | — | — |
 

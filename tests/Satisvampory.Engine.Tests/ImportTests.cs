@@ -15,7 +15,7 @@ namespace Satisvampory.Engine.Tests
         [InlineData("Ore r3 S4", "Ore", SpecialKind.None, 0)]
         [InlineData("Gems++", "Gems", SpecialKind.None, 2)]
         [InlineData("Weapons --copper --iron", "Weapons", SpecialKind.None, 0)]
-        [InlineData("brazier night", "", SpecialKind.BrazierNight, 0)]
+        [InlineData("brazier night", "", SpecialKind.None, 0)]
         [InlineData("night shift", "night shift", SpecialKind.None, 0)]
         [InlineData("''Hidden", "Hidden", SpecialKind.Skip, 0)]
         [InlineData("stuff NS", "stuff", SpecialKind.Skip, 0)]
@@ -27,6 +27,31 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal(clean, n.CleanName);
             Assert.Equal(special, n.Special);
             Assert.Equal(priority, n.Priority);
+        }
+
+        [Fact]
+        public void A_brazier_chest_becomes_an_input_of_its_plots_braziers()
+        {
+            var w = new FakeWorld();
+            var p = new PlotId(1);
+            var chest = w.Chest(p, "brazier prox");
+            w.Put(chest, Coal, 40);
+            var b1 = w.Chest(p, "Brazier", kind: NodeKind.Station);
+            b1.Role = StationRole.Brazier;
+            var far = w.Chest(new PlotId(2), "Brazier", kind: NodeKind.Station);
+            far.Role = StationRole.Brazier;
+            var g = new LogisticsGraph();
+
+            var report = LegacyImporter.Apply(new[] { chest, b1, far }, Catalog(), g, w);
+            Assert.Equal(chest.Id, g.For(b1.Id).Input.Single().Container);
+            Assert.Empty(g.For(far.Id).Input);
+            Assert.Equal(SpecialKind.None, chest.Deposit.Special);
+            Assert.Equal(Takes.OnlyListed, chest.Deposit.Takes);
+            Assert.True(chest.Deposit.ItemPriority.ContainsKey(Coal));
+            Assert.Equal("", report.CleanNames[chest.Id]);
+
+            LegacyImporter.Apply(new[] { chest, b1, far }, Catalog(), g, w);
+            Assert.Single(g.For(b1.Id).Input);
         }
 
         [Fact]

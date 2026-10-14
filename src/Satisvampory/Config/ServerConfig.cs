@@ -45,8 +45,6 @@ namespace Satisvampory.Config
             c.Flag(ctx, "AllowServantLootStash", d.AllowServantLootStash, "Allow servant loot stash", "Returning servants' loot goes home.", (s, v) => s.AllowServantLootStash = v);
             c.Flag(ctx, "AllowSalvage", d.AllowSalvage, "Allow salvage chests", "Salvage chests feed the devourer.", (s, v) => s.AllowSalvage = v);
             c.Flag(ctx, "AllowSpawnerChests", d.AllowSpawnerChests, "Allow spawner chests", "Spawner chests feed unit spawners.", (s, v) => s.AllowSpawnerChests = v);
-            c.Flag(ctx, "AllowBrazierChests", d.AllowBrazierChests, "Allow brazier chests", "Brazier chests keep braziers fuelled.", (s, v) => s.AllowBrazierChests = v);
-            c.Flag(ctx, "AllowNightAndProximity", d.AllowNightAndProximity, "Allow night and proximity braziers", "Brazier chests may switch braziers on and off.", (s, v) => s.AllowNightAndProximity = v);
             c.Flag(ctx, "AllowTrash", d.AllowTrash, "Allow trash chests", "Trash chests can be emptied.", (s, v) => s.AllowTrash = v);
             c.Flag(ctx, "AllowHeartBloodFeed", d.AllowHeartBloodFeed, "Allow heart blood feed", "Hearts are topped up on visit or login.", (s, v) => s.AllowHeartBloodFeed = v);
             c.Flag(ctx, "AllowRepeatHunts", d.AllowRepeatHunts, "Allow repeat hunts", "Servants go back out on the same hunt.", (s, v) => s.AllowRepeatHunts = v);

@@ -48,8 +48,6 @@ namespace Satisvampory.Engine.Persistence
         public int LoopMovesPerTick { get; set; } = 12;
         public bool AllowSalvage { get; set; } = true;
         public bool AllowSpawnerChests { get; set; } = true;
-        public bool AllowBrazierChests { get; set; } = true;
-        public bool AllowNightAndProximity { get; set; } = true;
         public bool AllowTrash { get; set; } = true;
         public bool AllowHeartBloodFeed { get; set; } = true;
         public bool AllowRepeatHunts { get; set; }

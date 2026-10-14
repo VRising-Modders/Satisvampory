@@ -70,6 +70,26 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void Brazier_takes_fuel_from_its_input_up_to_its_room_and_the_reserve()
+        {
+            _rules.DefaultReserve = 5;
+            var b = _w.Chest(Home, "Brazier", capacity: 30, kind: NodeKind.Station);
+            b.Role = StationRole.Brazier;
+            var fuel = _w.Chest(Home, "Fuel");
+            _w.Put(fuel, Coal, 20).Put(fuel, Plank, 50).Put(fuel, IronOre, 9);
+            _w.Refuse(b, IronOre); // not fuel: the game gives it no room
+            var entry = ListEntry.Of(fuel.Id);
+            entry.Filter.Items.Add(Coal);
+            entry.Filter.Items.Add(IronOre);
+            _g.For(b.Id).Input.Add(entry);
+
+            Tick();
+            Assert.Equal(15, _w.Count(b.Id, Coal));      // 20 minus reserve 5
+            Assert.Equal(0, _w.Count(b.Id, Plank));      // filtered out
+            Assert.Equal(9, _w.Count(fuel.Id, IronOre)); // refused
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

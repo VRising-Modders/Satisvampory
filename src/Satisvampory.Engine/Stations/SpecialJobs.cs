@@ -15,8 +15,6 @@ namespace Satisvampory.Engine.Stations
         public bool AllowSalvage { get; init; } = true;
         public bool CastleFeedsSalvage { get; init; }
         public bool AllowSpawner { get; init; } = true;
-        public bool AllowBrazier { get; init; } = true;
-        public bool AllowNightAndProximity { get; init; } = true;
         public bool AllowTrash { get; init; } = true;
     }
 
@@ -25,18 +23,15 @@ namespace Satisvampory.Engine.Stations
     public sealed class JobReport
     {
         public List<JobMove> Moves { get; } = new();
-        public Dictionary<ContainerId, bool> LitChanges { get; } = new();
         public Dictionary<ItemId, int> Destroyed { get; } = new();
     }
 
     /// <summary>
-    /// Salvage, spawner and brazier chests work on their own plot only, never across an island
+    /// Salvage and spawner chests work on their own plot only, never across an island
     /// (spec 09). Trash is emptied on request.
     /// </summary>
     public static class SpecialJobs
     {
-        public const int BrazierKeepInChest = 10;
-        public const float ProximityMetres = 20f;
         public const int SpawnerFeedCrafts = 2;
 
         /// <summary>Salvage chests feed every devourer on the same plot.</summary>
@@ -84,45 +79,6 @@ namespace Satisvampory.Engine.Stations
                         left -= moved;
                     }
                 }
-            }
-        }
-
-        /// <summary>
-        /// Brazier chests keep braziers on the plot fuelled, always leaving at least 10 of each
-        /// fuel in the chest. Night chests light braziers only at night; proximity chests only while
-        /// a player is within 20 m, and put them out otherwise. Plain brazier chests never change
-        /// the lit state.
-        /// </summary>
-        public static void Braziers(IWorld world, PlotId plot, SpecialSwitches sw, bool isNight, IReadOnlyList<(float X, float Z)> players, JobReport report)
-        {
-            if (!sw.AllowBrazier || world.IsRaided(plot)) return;
-            var on = world.ContainersOn(plot);
-            var chests = on.Where(c => c.Kind == NodeKind.Chest && SpecialKinds.IsBrazier(c.Deposit.Special)).ToList();
-            if (chests.Count == 0) return;
-            var braziers = on.Where(c => c.Role == StationRole.Brazier).ToList();
-
-            foreach (var b in braziers)
-            {
-                foreach (var chest in chests)
-                    foreach (var stack in world.Contents(chest.Id))
-                    {
-                        var spare = stack.Amount - BrazierKeepInChest;
-                        var room = world.FreeSpace(b.Id, stack.Item);
-                        var take = Math.Min(spare, room);
-                        if (take <= 0) continue;
-                        var moved = world.Transfer(chest.Id, InvPart.Main, b.Id, stack.Item, take);
-                        if (moved > 0) report.Moves.Add(new JobMove(chest.Id, b.Id, stack.Item, moved, "brazier"));
-                    }
-
-                if (!sw.AllowNightAndProximity) continue;
-                var mode = chests.Select(c => c.Deposit.Special).FirstOrDefault(k => k != SpecialKind.Brazier);
-                bool? want = mode switch
-                {
-                    SpecialKind.BrazierNight => isNight,
-                    SpecialKind.BrazierProximity => players.Any(p => (p.X - b.X) * (p.X - b.X) + (p.Z - b.Z) * (p.Z - b.Z) <= ProximityMetres * ProximityMetres),
-                    _ => null,
-                };
-                if (want is { } lit && world.SetLit(b.Id, lit)) report.LitChanges[b.Id] = lit;
             }
         }
 

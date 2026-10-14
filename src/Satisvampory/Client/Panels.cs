@@ -364,8 +364,8 @@ namespace Satisvampory.Client
 
         static readonly string[] TakesValues = { "0", "1", "2" };
         static readonly string[] TakesLabels = { "Anything", "Only what's listed", "Nothing" };
-        static readonly string[] SpecialValues = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
-        static readonly string[] SpecialLabels = { "None", "Overflow", "Skip", "Salvage", "Spawner", "Brazier", "Brazier (night)", "Brazier (proximity)", "Trash", "Spoils" };
+        static readonly string[] SpecialValues = { "0", "1", "2", "3", "4", "5", "6" };
+        static readonly string[] SpecialLabels = { "None", "Overflow", "Skip", "Salvage", "Spawner", "Trash", "Spoils" };
 
         protected override void Build(IUiPanel panel)
         {
@@ -432,7 +432,7 @@ namespace Satisvampory.Client
             _base.Value = d.BasePriority;
             _special.Value = d.Special.ToString();
             _belts.Text = d.Belts.Count == 0 ? "On no belts." : "On belts: " + string.Join(", ", d.Belts);
-            _empty.Visible = d.Special == 8 && s.CanEdit;
+            _empty.Visible = d.Special == (int)Satisvampory.Engine.Model.SpecialKind.Trash && s.CanEdit;
             DrawEntries();
         }
 

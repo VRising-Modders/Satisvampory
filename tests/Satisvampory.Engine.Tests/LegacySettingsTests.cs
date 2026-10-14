@@ -35,7 +35,7 @@ namespace Satisvampory.Engine.Tests
 
             Assert.False(r.Server.AllowCraftFromStorage);
             Assert.False(r.Server.AllowSpawnerChests);
-            Assert.False(r.Server.AllowNightAndProximity);
+            Assert.Contains(r.NotImported, n => n.StartsWith("Named:"));
             Assert.False(r.Server.AllowStashFromAnywhere);
             Assert.True(r.Server.AllowRepeatHunts);
             Assert.True(r.Server.RepeatHuntsOnlyWhileClanOnline);

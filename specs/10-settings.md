@@ -79,8 +79,6 @@ Same switches as 1.x's server toggles, rewritten. Every allow defaults ON except
 | Loop move budget per tick | 12 |
 | Allow salvage | ON |
 | Allow spawner chests | ON |
-| Allow brazier chests | ON |
-| Allow night and proximity braziers | ON |
 | Allow trash | ON |
 | Allow heart blood feed | ON |
 | Allow repeat hunts | **OFF** |

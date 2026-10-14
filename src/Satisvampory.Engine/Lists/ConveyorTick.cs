@@ -168,6 +168,11 @@ namespace Satisvampory.Engine.Lists
 
         void FeedStation(ContainerInfo station, List<ContainerId> sources, int crafts, double now, bool final)
         {
+            if (station.Role == StationRole.Brazier)
+            {
+                if (final) FeedBrazier(station, sources);
+                return;
+            }
             var lists = _graph.For(station.Id);
             var massInput = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit);
             var recipes = _world.Recipes(station.Id)
@@ -319,6 +324,32 @@ namespace Satisvampory.Engine.Lists
         }
 
         // ---------------- helpers ----------------
+
+        /// <summary>
+        /// A brazier has no recipes: it takes whatever fuel its Input sources hold, as much as it
+        /// has room for, in list order. Island reserves still apply. The game decides what is fuel
+        /// (a brazier has no room for anything else).
+        /// </summary>
+        void FeedBrazier(ContainerInfo brazier, List<ContainerId> sources)
+        {
+            var filters = _graph.For(brazier.Id).Input;
+            foreach (var src in sources)
+            {
+                if (!Budget(src)) break;
+                foreach (var stack in _world.Contents(src).ToList())
+                {
+                    if (!filters.Any(e => _graph.Expand(e).Contains(src) && e.Filter.Allows(stack.Item, Catalog))
+                        && !_graph.For(src).Output.Any(e => _graph.Expand(e).Contains(brazier.Id) && e.Filter.Allows(stack.Item, Catalog)))
+                        continue;
+                    var room = _world.FreeSpace(brazier.Id, stack.Item);
+                    var aboveReserve = IslandTotal(stack.Item) - _rules.Reserve(stack.Item, Catalog);
+                    var want = (int)Math.Min(Math.Min(room, SourceCount(src, stack.Item)), Math.Max(0, aboveReserve));
+                    if (want <= 0) continue;
+                    var moved = Move(src, PartOf(src), brazier.Id, stack.Item, want, "brazier fuel");
+                    if (moved > 0) _islandTotals[stack.Item] = IslandTotal(stack.Item) - moved;
+                }
+            }
+        }
 
         /// <summary>
         /// A stable's Output gives up only what the mount generates, never feed (spec 01). The

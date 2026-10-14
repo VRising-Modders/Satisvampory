@@ -310,7 +310,7 @@ namespace Satisvampory.Server
                 PullOrder = (int)lists.PullOrder,
                 SendOrder = (int)lists.SendOrder,
                 HasDemand = EditService.HasDemand(c),
-                HasOutput = c.Role != StationRole.UnitSpawner,
+                HasOutput = c.Role is not (StationRole.UnitSpawner or StationRole.Brazier),
             };
             var report = _half.Ticker?.LastReport(s.Island.OwnerKey);
             foreach (var e in lists.Input) msg.Input.Add(Row(s, e, ListSide.Input, report));

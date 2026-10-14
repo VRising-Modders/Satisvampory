@@ -75,6 +75,8 @@ namespace Satisvampory.Engine.Import
             ["NeedTargets"] = "need goals are not in 2.0",
             ["HeartFeed"] = "per-plot heart feed values are ambiguous in the file; hearts keep the default (ON)",
             ["Pull"] = "pull has no per-player switch in 2.0",
+            ["Named"] = "night and proximity braziers are not in 2.0",
+            ["Brazier"] = "brazier chests are not in 2.0; braziers are fed from their Input list",
             ["AppliedSgAllOn"] = "bookkeeping only",
             ["ConveyorLoops"] = "1.x guarded name-made loops; 2.0 loops are explicit and guarded, so the 2.0 default (ON) applies",
         };
@@ -125,8 +127,6 @@ namespace Satisvampory.Engine.Import
             s.AllowLogistics = Bool(r, "Conveyor", s.AllowLogistics);
             s.AllowSalvage = Bool(r, "Salvage", s.AllowSalvage);
             s.AllowSpawnerChests = Bool(r, "UnitSpawner", s.AllowSpawnerChests);
-            s.AllowBrazierChests = Bool(r, "Brazier", s.AllowBrazierChests);
-            s.AllowNightAndProximity = Bool(r, "Named", s.AllowNightAndProximity);
             s.AllowTrash = Bool(r, "Trash", s.AllowTrash);
             s.AllowStashFromAnywhere = Bool(r, "RrGlobalAllow", s.AllowStashFromAnywhere);
             s.AllowRepeatHunts = Bool(r, "RepeatHunt", s.AllowRepeatHunts);

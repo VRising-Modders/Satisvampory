@@ -44,4 +44,4 @@ When a player crafts by hand at a table, repairs, or uses the forge, missing ing
 |---|---|---|
 | Unit spawner | Feeds two crafts deep | Spawned units are not items; no output |
 | Devourer | Salvage chests (`09-special-chests.md`) | Its product to the output list |
-| Brazier | Fuel; leaves at least 10 in each source | none |
+| Brazier | Fuel: whatever its Input sources hold that the game accepts as fuel, as much as it has room for. Reserves still apply. | none |

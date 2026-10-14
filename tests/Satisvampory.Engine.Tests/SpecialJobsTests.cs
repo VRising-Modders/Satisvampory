@@ -58,32 +58,6 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
-        public void Brazier_leaves_ten_and_night_and_proximity_control_light()
-        {
-            var night = Special(Home, SpecialKind.BrazierNight);
-            _w.Put(night, Coal, 25);
-            var b = Station(Home, StationRole.Brazier, x: 0);
-            var r = new JobReport();
-            SpecialJobs.Braziers(_w, Home, new SpecialSwitches(), isNight: false, new List<(float, float)>(), r);
-            Assert.Equal(10, _w.Count(night.Id, Coal));
-            Assert.Equal(15, _w.Count(b.Id, Coal));
-            Assert.False(_w.Lit[b.Id]);
-            SpecialJobs.Braziers(_w, Home, new SpecialSwitches(), isNight: true, new List<(float, float)>(), r);
-            Assert.True(_w.Lit[b.Id]);
-
-            var w2 = new FakeWorld();
-            var prox = w2.Chest(Away, "p");
-            prox.Deposit.Special = SpecialKind.BrazierProximity;
-            var b2 = w2.Chest(Away, "b", kind: NodeKind.Station);
-            b2.Role = StationRole.Brazier;
-            b2.X = 100;
-            SpecialJobs.Braziers(w2, Away, new SpecialSwitches(), false, new List<(float, float)> { (90, 0) }, new JobReport());
-            Assert.True(w2.Lit[b2.Id]);
-            SpecialJobs.Braziers(w2, Away, new SpecialSwitches(), false, new List<(float, float)> { (0, 0) }, new JobReport());
-            Assert.False(w2.Lit[b2.Id]);
-        }
-
-        [Fact]
         public void Trash_empties_only_trash_chests()
         {
             var trash = Special(Home, SpecialKind.Trash);

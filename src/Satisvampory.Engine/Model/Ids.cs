@@ -61,9 +61,6 @@ namespace Satisvampory.Engine.Model
         Skip,
         Salvage,
         Spawner,
-        Brazier,
-        BrazierNight,
-        BrazierProximity,
         Trash,
         Spoils,
     }
@@ -72,12 +69,8 @@ namespace Satisvampory.Engine.Model
     {
         /// <summary>Kinds that are never a Mass Deposit home unless a row or rule names them.</summary>
         public static bool IsSpecialPurpose(SpecialKind kind) =>
-            kind is SpecialKind.Salvage or SpecialKind.Spawner or SpecialKind.Brazier
-                or SpecialKind.BrazierNight or SpecialKind.BrazierProximity
+            kind is SpecialKind.Salvage or SpecialKind.Spawner
                 or SpecialKind.Trash or SpecialKind.Spoils;
-
-        public static bool IsBrazier(SpecialKind kind) =>
-            kind is SpecialKind.Brazier or SpecialKind.BrazierNight or SpecialKind.BrazierProximity;
     }
 
     internal static class Guard

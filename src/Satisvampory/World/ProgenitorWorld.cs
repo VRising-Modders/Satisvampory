@@ -183,9 +183,6 @@ namespace Satisvampory.World
             return res.Ok ? res.Done : 0;
         }
 
-        /// <summary>Light or put out a brazier through Progenitor; false when the game refused.</summary>
-        public bool SetLit(EngineId brazier, bool lit) =>
-            _stations != null && _nodes.TryGetValue(brazier, out var n) && _stations.SetBrazierEnabled(n.Entity, lit).Ok;
 
         bool TryRef(EngineId id, InvPart part, out InventoryRef r)
         {

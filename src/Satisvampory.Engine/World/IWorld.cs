@@ -41,9 +41,6 @@ namespace Satisvampory.Engine.World
 
         /// <summary>Destroys up to <paramref name="amount"/> (trash chests only); returns how many were removed.</summary>
         int Destroy(ContainerId from, ItemId item, int amount);
-
-        /// <summary>Lights or puts out a brazier. Returns false when the game refused.</summary>
-        bool SetLit(ContainerId brazier, bool lit);
     }
 
     public interface IWorld : IWorldView, IWorldMutator

@@ -76,7 +76,8 @@ The 1.x name codes, and the plain names 1.x read as purposes, are converted **on
 | Any other name | Takes: only listed · the items it holds now (1.x sent a named chest only what it already held) |
 | Trailing `+`, `++`, … | Base priority 1, 2, … |
 | `--word` | A ban on the item or category *word* matched |
-| `overflow`, `salvage`, `spoils`, `trash`, `spawner`, `brazier`, `night`, `prox` | Special kind |
+| `overflow`, `salvage`, `spoils`, `trash`, `spawner` | Special kind |
+| `brazier` (with `night` / `prox`) | No special kind: the chest is added to the Input of every brazier on its plot and takes only the fuel it holds; the words are dropped |
 | `NS`, or `''` at start or end | Special kind Skip |
 
 After import, nothing is parsed from names. A player who types `--copper` on a chest later just has a chest named that.

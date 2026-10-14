@@ -24,7 +24,7 @@ From the chest's deposit settings:
 | **Base priority** | −10 to +10, default 0. |
 | **Item and category priorities** | Each entry is added to the base for those items. An item's own entry beats any category entry; between categories the larger number wins. On an "Only what's listed" chest, an entry is also what makes the chest take the item. |
 | **Never deposit here** | Items and categories this chest never takes. |
-| **Special kind** | Overflow chests are the last resort for anything. Skip chests are never homes. Salvage, spawner, brazier, trash and spoils chests are homes only when an override or rule names them (`09-special-chests.md`). |
+| **Special kind** | Overflow chests are the last resort for anything. Skip chests are never homes. Salvage, spawner, trash and spoils chests are homes only when an override or rule names them (`09-special-chests.md`). |
 
 Order of homes for an item:
 

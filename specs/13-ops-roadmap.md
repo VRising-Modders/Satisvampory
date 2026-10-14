@@ -49,7 +49,7 @@ Built and tested outside the game; nothing has run in-game yet.
 | Crafting and building from shared storage | waits on Progenitor P3 merge; policy done |
 | Double-tap sort to stash | done (Progenitor sort event) |
 | Servants (loot stash, repeat hunts, notices, hunt log, throne targeting) | done (Progenitor servants API) |
-| Brazier lighting (night, proximity) | done (Progenitor brazier, time and position APIs) |
+| Braziers fed from their Input list | done |
 | Pick in world, Locate | done (Progenitor network-id resolver) |
 | Data-table inventory, term tooltips, tip cards | wait on Progenitor P7b; text versions in place |
 | Stash skipping the hotbar exactly; stash/pull/tidy refused while downed, dead, in PvP combat | waits on Progenitor slot transfer and player state (in progress) |

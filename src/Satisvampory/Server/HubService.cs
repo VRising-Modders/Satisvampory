@@ -147,15 +147,69 @@ namespace Satisvampory.Server
                 Exclude = settings.ExcludeFromSharing,
                 Need = need,
                 TidyResult = tidy,
+                Aliases = string.Join("; ", s.Island.State.Categories.Aliases.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} = {s.Catalog.NameOf(kv.Value)}")),
+                Clan = ClanLines(s),
             };
+        }
+
+        /// <summary>Clan page (spec 10): every castle of the standing castle's clan (or owner).</summary>
+        List<string> ClanLines(Session s)
+        {
+            var lines = new List<string>();
+            foreach (var c in ClanCastles(s))
+            {
+                var cs = Stores.Castle(_ctx.Save, c.Territory.Index);
+                lines.Add($"{Labels.Name(_ctx.Save, c)} · level {c.Level} · {c.Owner.Name}"
+                    + (cs.ExcludeFromSharing ? " · excluded from sharing" : "")
+                    + $" · repeat hunts {(cs.RepeatHunts ? "on" : "off")}"
+                    + (c.Raided ? " · under attack" : ""));
+            }
+            return lines;
+        }
+
+        List<ICastleHandle> ClanCastles(Session s)
+        {
+            var owner = s.Island.Standing.Owner.User.ToEntity();
+            var clan = _ctx.Clans.Of(owner);
+            return (clan.IsNone ? _ctx.Castles.AllForUser(owner) : _ctx.Clans.Castles(clan)).Where(c => c.Enabled).ToList();
         }
 
         CastleMsg SetCastle(Session s, CastleMsg m)
         {
             MustEdit(s, "castle settings");
+            if (m.RepeatAllOn)
+            {
+                foreach (var cc in ClanCastles(s))
+                {
+                    var cs = Stores.Castle(_ctx.Save, cc.Territory.Index);
+                    if (cs.RepeatHunts) continue;
+                    cs.RepeatHunts = true;
+                    Stores.SetCastle(_ctx.Save, cc.Territory.Index, cs);
+                }
+                return Castle(s);
+            }
             var c = s.Island.Standing;
             var settings = Stores.Castle(_ctx.Save, c.Territory.Index);
-            settings.PlotLabel = (m.PlotLabel ?? string.Empty).Trim();
+            var label = (m.PlotLabel ?? string.Empty).Trim();
+            if (label != settings.PlotLabel && label != Labels.Name(_ctx.Save, c))
+            {
+                if (s.Role != ActorRole.Owner) throw new RequestRefusedException("Only the castle's owner can rename its plot label.");
+                settings.PlotLabel = label;
+            }
+            var aliases = s.Island.State.Categories.Aliases;
+            var wanted = new Dictionary<string, ItemId>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in (m.Aliases ?? "").Split(new[] { ';', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var eq = raw.IndexOf('=');
+                if (eq <= 0) throw new RequestRefusedException($"\"{raw.Trim()}\": write alias = item.");
+                var alias = raw.Substring(0, eq).Trim();
+                var name = raw.Substring(eq + 1).Trim();
+                if (!TryItem(s.Catalog, name, out var item)) throw new RequestRefusedException($"No item called \"{name}\".");
+                if (_half.Catalog.Current.TryResolveItem(alias, out _)) throw new RequestRefusedException($"\"{alias}\" is already a server alias or item name.");
+                wanted[alias] = item;
+            }
+            aliases.Clear();
+            foreach (var kv in wanted) aliases[kv.Key] = kv.Value;
             settings.FeedSalvage = m.FeedSalvage;
             settings.HeartAutoFeed = m.HeartAutoFeed;
             settings.RepeatHunts = m.RepeatHunts;

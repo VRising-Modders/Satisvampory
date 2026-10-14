@@ -36,6 +36,12 @@ namespace Satisvampory.Net
         /// <summary>Top station inputs short on the island: "Iron Ore · wants 50 · spare 30".</summary>
         [Field(13)] public List<string> Need = new();
         [Field(14)] public string TidyResult = "";
+        /// <summary>The island's item aliases: "rb = Ruby; ior = Iron Ore".</summary>
+        [Field(15)] public string Aliases = "";
+        /// <summary>Clan page: one line per castle.</summary>
+        [Field(16)] public List<string> Clan = new();
+        /// <summary>Request only: turn repeat hunts on for every clan castle.</summary>
+        [Field(17)] public bool RepeatAllOn;
     }
 
     [ModMessage("sv.castle.get")]

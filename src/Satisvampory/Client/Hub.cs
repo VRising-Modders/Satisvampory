@@ -259,6 +259,7 @@ namespace Satisvampory.Client
             _heartFeed = In(CastleTab, p.Toggle("Heart fuel auto-feed", true));
             _repeat = In(CastleTab, p.Toggle("Repeat hunts on this castle", true));
             _exclude = In(CastleTab, p.Toggle("Exclude this castle from sharing (owner only)", false));
+            _aliases = In(CastleTab, p.Input("Item aliases (this island): rb = Ruby; ior = Iron Ore", ""));
             Track(In(CastleTab, p.Button("Save castle settings")).OnClick(() =>
                 Send<SetCastleReq, CastleMsg>(new SetCastleReq
                 {
@@ -271,12 +272,24 @@ namespace Satisvampory.Client
                         HeartAutoFeed = _heartFeed.Value,
                         RepeatHunts = _repeat.Value,
                         Exclude = _exclude.Value,
+                        Aliases = _aliases.Value,
                     },
                 }, c => { DrawCastle(c); _ctx.Hud.Notify("Castle settings saved.", kind: UiNoticeKind.Success, seconds: 3); })));
             Track(In(CastleTab, p.Button("Tidy now")).OnClick(() => Send<TidyReq, CastleMsg>(new TidyReq(), DrawCastle)));
             _tidyResult = In(CastleTab, p.Label(""));
+            Track(In(CastleTab, p.Button("Inventory: reserves and caps")).OnClick(() => OpenTab(InventoryTab)));
+            Track(In(CastleTab, p.Button("Belts and categories")).OnClick(() => OpenTab(BeltsTab)));
+            Track(In(CastleTab, p.Button("Mass Deposit")).OnClick(() => OpenTab(MassDepositTab)));
             _need = In(CastleTab, p.Label(""));
+            Track(In(CastleTab, p.Button("Show all short items")).OnClick(() => { _ = Panel; _invShort.Value = true; OpenTab(InventoryTab); }));
+            In(CastleTab, p.Divider());
+            _clan = In(CastleTab, p.Label(""));
+            Track(In(CastleTab, p.Button("Repeat hunts: all on")).OnClick(() =>
+                Send<SetCastleReq, CastleMsg>(new SetCastleReq { Castle = new CastleMsg { RepeatAllOn = true } }, DrawCastle)));
         }
+
+        IUiInput _aliases = null!;
+        IUiLabel _clan = null!;
 
         void DrawCastle(CastleMsg c)
         {
@@ -292,6 +305,8 @@ namespace Satisvampory.Client
             _exclude.Value = c.Exclude;
             _tidyResult.Text = c.TidyResult;
             _need.Text = c.Need.Count == 0 ? "Need: nothing is short." : "Need (short on the island):\n  " + string.Join("\n  ", c.Need);
+            _aliases.Value = c.Aliases;
+            _clan.Text = c.Clan.Count == 0 ? "" : "Clan castles:\n  " + string.Join("\n  ", c.Clan);
         }
 
         // ---------------- Mass Deposit ----------------

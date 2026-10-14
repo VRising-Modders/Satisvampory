@@ -95,6 +95,7 @@ namespace Satisvampory
                 NoticeCode.Refused => "Satisvampory: not here. Stand on one of your or your clan's castles.",
                 NoticeCode.Stashed => $"Stashed {n.A} stacks into {n.B} chests.",
                 NoticeCode.Tidied => $"Tidied {n.A} items across {n.B} chests.",
+                NoticeCode.NotNow => "Satisvampory: " + Server.ServerActions.Words((StateRefusal)n.A),
                 _ => null,
             };
             if (text == null) return;

@@ -477,9 +477,11 @@ namespace Satisvampory.Server
         {
             var server = _half.Config.Snapshot();
             if (!server.AllowPull) throw new RequestRefusedException("Pulling is turned off on this server.");
+            var gate = ServerActions.StateGate(_ctx, s.UserEntity);
+            if (gate != StateRefusal.None) throw new RequestRefusedException(ServerActions.Words(gate));
             var prefs = _half.PlayerFor(s.User.PlatformId);
             var character = s.User.LocalCharacter._Entity;
-            var bag = s.World.AddBag(_ctx.Inventory.Of(character));
+            var bag = s.World.AddBag(_ctx.Inventory.Of(character), player: true);
             var text = (q.Text ?? "").Trim();
             ActionResult result;
             if (s.Catalog.TryResolveCategory(text.StartsWith("category ", StringComparison.OrdinalIgnoreCase) ? text.Substring(9) : text, out var cat) && !s.Catalog.TryResolveItem(text, out _))

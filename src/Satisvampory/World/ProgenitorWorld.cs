@@ -26,6 +26,8 @@ namespace Satisvampory.World
             public InventoryRef Output;
             public ICastleHandle Castle = null!;
             public Unity.Entities.Entity Entity;
+            /// <summary>Which source slots a move may draw from; a player's bag skips the action bar.</summary>
+            public InventorySlotFilter SourceSlots;
         }
 
         readonly PluginInventory _inv;
@@ -82,10 +84,17 @@ namespace Satisvampory.World
         /// Register the actor's bag for one action. It gets a throwaway id, is never on a plot, so it
         /// is never a home or a source for anything but the action that registered it.
         /// </summary>
-        public EngineId AddBag(InventoryRef bag)
+        /// <param name="player">A player's bag: moves out of it never touch the action bar (slots 0-7).</param>
+        public EngineId AddBag(InventoryRef bag, bool player = false)
         {
             var id = EngineId.New();
-            _nodes[id] = new Node { Info = new ContainerInfo(id, default, NodeKind.Chest, "bag"), Main = bag, Output = default };
+            _nodes[id] = new Node
+            {
+                Info = new ContainerInfo(id, default, NodeKind.Chest, "bag"),
+                Main = bag,
+                Output = default,
+                SourceSlots = player ? InventorySlotFilter.SkipActionBar : InventorySlotFilter.All,
+            };
             return id;
         }
 
@@ -172,7 +181,8 @@ namespace Satisvampory.World
         public int Transfer(EngineId from, InvPart fromPart, EngineId to, ItemId item, int amount)
         {
             if (amount <= 0 || !TryRef(from, fromPart, out var a) || !TryRef(to, InvPart.Main, out var b)) return 0;
-            var r = _inv.Transfer(a, b, item.Guid, amount);
+            var slots = fromPart == InvPart.Main && _nodes.TryGetValue(from, out var n) ? n.SourceSlots : InventorySlotFilter.All;
+            var r = _inv.Transfer(a, b, item.Guid, amount, slots);
             return r.Ok ? r.Done : 0;
         }
 

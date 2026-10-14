@@ -63,6 +63,17 @@ namespace Satisvampory.Net
         Refused = 2,
         Stashed = 3,
         Tidied = 4,
+        /// <summary>Refused because of the player's state; A is a <see cref="StateRefusal"/>.</summary>
+        NotNow = 5,
+    }
+
+    public enum StateRefusal
+    {
+        None = 0,
+        Dead = 1,
+        Downed = 2,
+        PvpCombat = 3,
+        NoCharacter = 4,
     }
 
     /// <summary>Server → client: a short UTF-8 text reply (admin results), length first.</summary>

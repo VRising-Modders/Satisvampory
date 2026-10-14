@@ -52,4 +52,4 @@ Built and tested outside the game; nothing has run in-game yet.
 | Braziers fed from their Input list | done |
 | Pick in world, Locate | done (Progenitor network-id resolver) |
 | Data-table inventory, term tooltips, tip cards | wait on Progenitor P7b; text versions in place |
-| Stash skipping the hotbar exactly; stash/pull/tidy refused while downed, dead, in PvP combat | waits on Progenitor slot transfer and player state (in progress) |
+| Stash skipping the hotbar exactly; stash/pull/tidy refused while downed, dead, in PvP combat | done (Progenitor slot filters and player state) |

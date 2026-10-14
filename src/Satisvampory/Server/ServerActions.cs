@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Progenitor.Castles;
+using Progenitor.Players;
 using ProjectM.Network;
 using Satisvampory.Engine.Deposit;
 using Satisvampory.Engine.Model;
@@ -107,8 +108,40 @@ namespace Satisvampory.Server
             };
         }
 
+        /// <summary>
+        /// Stash, pull and tidy gates (spec 07): refused while dead, downed or in PvP combat. Bat
+        /// and other forms are fine. When Progenitor cannot read the state at all the action runs.
+        /// </summary>
+        internal static StateRefusal StateGate(SatisContext ctx, Entity userEntity)
+        {
+            var st = ctx.Players.State(userEntity);
+            switch (st.Status)
+            {
+                case PlayerStateStatus.Unavailable: return StateRefusal.None;
+                case PlayerStateStatus.Ok: break;
+                default: return StateRefusal.NoCharacter;
+            }
+            // An offline character keeps its last buffs; only an online one's state means anything.
+            if (!st.Online) return StateRefusal.NoCharacter;
+            if (st.Dead) return StateRefusal.Dead;
+            if (st.Downed) return StateRefusal.Downed;
+            if (st.InPvpCombat) return StateRefusal.PvpCombat;
+            return StateRefusal.None;
+        }
+
+        internal static string Words(StateRefusal r) => r switch
+        {
+            StateRefusal.Dead => "Not while dead.",
+            StateRefusal.Downed => "Not while downed.",
+            StateRefusal.PvpCombat => "Not during PvP combat.",
+            StateRefusal.NoCharacter => "Your character is not in the world.",
+            _ => "Not now.",
+        };
+
         internal static NoticePacket Run(SatisContext ctx, ServerHalf half, Entity userEntity, User user, ActionKind kind)
         {
+            var gate = StateGate(ctx, userEntity);
+            if (gate != StateRefusal.None) return Notice(NoticeCode.NotNow, (int)gate);
             var server = half.Config.Snapshot();
             var island = Resolve(ctx, half, userEntity, user);
             if (island == null && kind == ActionKind.Stash && server.AllowStashFromAnywhere && half.PlayerFor(user.PlatformId).StashFromAnywhere)
@@ -138,7 +171,7 @@ namespace Satisvampory.Server
                     if (!server.AllowQuickStash) return Notice(NoticeCode.Refused);
                     var character = user.LocalCharacter._Entity;
                     var bagRef = ctx.Inventory.Of(character);
-                    var bagId = world.AddBag(bagRef);
+                    var bagId = world.AddBag(bagRef, player: true);
                     var stashable = ctx.Inventory.Read(bagRef).Slots
                         .Where(s => s.Slot >= HotbarSlots && s.Item != 0 && s.Amount > 0)
                         .Select(s => new ItemStack(new ItemId(s.Item), s.Amount))

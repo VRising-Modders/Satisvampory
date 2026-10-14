@@ -39,6 +39,63 @@ namespace Satisvampory.Server
         int _rotate;
 
         /// <summary>The last conveyor report for an island, for the panels' row status lines.</summary>
+        // ---------------- destroyed containers (spec 12) ----------------
+
+        const double SweepSeconds = 60, MissingGraceSeconds = 120;
+        double _lastSweep;
+        readonly Dictionary<(string Key, Engine.Model.ContainerId Id), double> _missingSince = new();
+        readonly Dictionary<Engine.Model.ContainerId, int> _removedNotes = new();
+
+        /// <summary>A panel shows this once: how many entries its lists lost because a chest was destroyed.</summary>
+        internal string TakeRemovedNote(Engine.Model.ContainerId id)
+        {
+            if (!_removedNotes.Remove(id, out var n)) return "";
+            return n == 1 ? "1 entry removed: chest destroyed" : $"{n} entries removed: chest destroyed";
+        }
+
+        /// <summary>
+        /// Lists and belts that name a container which is on none of the settings owner's castles
+        /// for two minutes lose those entries; the container's own record goes too. The grace
+        /// covers castles that load late.
+        /// </summary>
+        void SweepDestroyed(List<ICastleHandle> castles)
+        {
+            if (Now - _lastSweep < SweepSeconds) return;
+            _lastSweep = Now;
+            var like = new PluginContextLike(_ctx);
+            foreach (var group in castles.GroupBy(c => Stores.SettingsKey(like, c)))
+            {
+                try
+                {
+                    var ids = new HashSet<Engine.Model.ContainerId>(ProgenitorWorld.ContainerIds(group));
+                    var state = Stores.Load(_ctx.Save, group.Key, ids);
+                    var gone = state.Graph.Referenced().Where(id => !ids.Contains(id)).ToList();
+                    foreach (var k in _missingSince.Keys.Where(k => k.Key == group.Key && !gone.Contains(k.Id)).ToList()) _missingSince.Remove(k);
+                    var forget = new List<Engine.Model.ContainerId>();
+                    foreach (var id in gone)
+                    {
+                        if (!_missingSince.TryGetValue((group.Key, id), out var since)) _missingSince[(group.Key, id)] = Now;
+                        else if (Now - since >= MissingGraceSeconds) forget.Add(id);
+                    }
+                    if (forget.Count == 0) continue;
+                    var removed = 0;
+                    foreach (var id in forget)
+                    {
+                        removed += state.Graph.Forget(id, _removedNotes);
+                        _missingSince.Remove((group.Key, id));
+                        _ctx.Save.Remove("container/" + id.Value.ToString("N"));
+                    }
+                    Stores.Save(_ctx.Save, group.Key, state);
+                    _half.MaterialPolicy.Invalidate();
+                    _ctx.Log.LogInfo($"Satisvampory: {forget.Count} destroyed container(s) left the lists of {group.Key} ({removed} entries).");
+                }
+                catch (Exception e)
+                {
+                    _ctx.Log.LogError($"Satisvampory: destroyed-container sweep for {group.Key} failed: {e.Message}");
+                }
+            }
+        }
+
         internal TickReport? LastReport(string islandKey) => _lastReports.TryGetValue(islandKey, out var r) ? r : null;
 
         /// <summary>Moves on an island in the last minute (spec 02 status line), newest last.</summary>
@@ -91,6 +148,7 @@ namespace Satisvampory.Server
         {
             var sharing = Sharing(server);
             var castles = _ctx.Castles.All().Where(c => c.Enabled).ToList();
+            SweepDestroyed(castles);
             var done = new HashSet<PlotId>();
             var budget = server.MovesPerTick;
             if (castles.Count == 0) return;

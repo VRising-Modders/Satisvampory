@@ -307,6 +307,7 @@ namespace Satisvampory.Server
                 NodeKind = c.Kind switch { NodeKind.Station => 1, NodeKind.Heart => 2, _ => 0 },
                 CanEdit = s.Role != ActorRole.Guest,
                 ReadOnlyReason = s.Role == ActorRole.Guest ? "Clan members can change logistics" : "",
+                Notice = _half.Ticker?.TakeRemovedNote(c.Id) ?? "",
                 PullOrder = (int)lists.PullOrder,
                 SendOrder = (int)lists.SendOrder,
                 HasDemand = EditService.HasDemand(c),

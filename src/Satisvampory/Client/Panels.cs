@@ -278,7 +278,7 @@ namespace Satisvampory.Client
             _redrawing = true;
             try
             {
-                _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason);
+                _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "");
                 _order.Value = (_side == 0 ? s.PullOrder : s.SendOrder).ToString();
                 var rows = _side == 0 ? s.Input : s.Output;
                 _list.SetItems(rows.Select((r, i) => new UiListItem(i.ToString(), r.Name)
@@ -437,7 +437,7 @@ namespace Satisvampory.Client
                 Bans = d.Bans.ToList(),
                 Belts = d.Belts.ToList(),
             };
-            _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason);
+            _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "");
             _takes.Value = d.Takes.ToString();
             _base.Value = d.BasePriority;
             _special.Value = d.Special.ToString();

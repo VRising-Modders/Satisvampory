@@ -171,18 +171,34 @@ namespace Satisvampory.Engine.Lists
             return order.Select(k => byPair[k]).ToList();
         }
 
-        /// <summary>Remove a destroyed container from every list and group. Returns entries removed.</summary>
-        public int Forget(ContainerId id)
+        /// <summary>
+        /// Remove a destroyed container from every list and belt. Returns entries removed;
+        /// <paramref name="byContainer"/>, when given, collects how many each other container's lists lost.
+        /// </summary>
+        public int Forget(ContainerId id, IDictionary<ContainerId, int>? byContainer = null)
         {
             var removed = 0;
             Lists.Remove(id);
-            foreach (var l in Lists.Values)
+            foreach (var (owner, l) in Lists)
             {
-                removed += l.Input.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id);
-                removed += l.Output.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id);
+                var n = l.Input.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id)
+                    + l.Output.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id);
+                if (n > 0 && byContainer != null) byContainer[owner] = (byContainer.TryGetValue(owner, out var had) ? had : 0) + n;
+                removed += n;
             }
             foreach (var g in Belts.Values) removed += g.Members.RemoveAll(m => m == id);
             return removed;
+        }
+
+        /// <summary>Every container a list entry or belt names (not the list owners themselves).</summary>
+        public HashSet<ContainerId> Referenced()
+        {
+            var set = new HashSet<ContainerId>();
+            foreach (var l in Lists.Values)
+                foreach (var e in l.Input.Concat(l.Output))
+                    if (e.Kind == EntryKind.Container && e.Container is { } c) set.Add(c);
+            foreach (var g in Belts.Values) set.UnionWith(g.Members);
+            return set;
         }
     }
 }

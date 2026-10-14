@@ -107,5 +107,27 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal(new[] { a }, copy!.Members);
             Assert.NotEqual(grp.Id, copy.Id);
         }
+    
+        [Fact]
+        public void Forget_removes_a_destroyed_chest_everywhere_and_reports_per_list()
+        {
+            var g = new LogisticsGraph();
+            var a = ContainerId.New();
+            var b = ContainerId.New();
+            var gone = ContainerId.New();
+            g.For(a).Input.Add(ListEntry.Of(gone));
+            g.For(b).Output.Add(ListEntry.Of(gone));
+            g.For(b).Output.Add(ListEntry.Of(a));
+            var belt = g.BeltOrCreate("Ore in");
+            belt.Members.Add(gone);
+            Assert.Contains(gone, g.Referenced());
+
+            var by = new System.Collections.Generic.Dictionary<ContainerId, int>();
+            Assert.Equal(3, g.Forget(gone, by));
+            Assert.Equal(1, by[a]);
+            Assert.Equal(1, by[b]);
+            Assert.DoesNotContain(gone, g.Referenced());
+            Assert.Single(g.For(b).Output);
+        }
     }
 }

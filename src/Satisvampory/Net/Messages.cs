@@ -102,6 +102,8 @@ namespace Satisvampory.Net
         /// <summary>0 cycle once, 1 even distribution, 2 off.</summary>
         [Field(16)] public int LoopMode;
         [Field(17)] public List<RecipeMsg> Recipes = new();
+        /// <summary>One-shot notice, e.g. "2 entries removed: chest destroyed" (spec 12).</summary>
+        [Field(18)] public string Notice = "";
     }
 
     [ModMessage("sv.recipe")]

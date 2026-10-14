@@ -74,6 +74,8 @@ namespace Satisvampory.Net
         /// <summary>The engine's SpecialKind as an int.</summary>
         [Field(5)] public int Special;
         [Field(6)] public List<string> Belts = new();
+        /// <summary>Belt ids, same order as <see cref="Belts"/>.</summary>
+        [Field(7)] public List<string> BeltIds = new();
     }
 
     /// <summary>Everything one container's panels show.</summary>
@@ -106,6 +108,9 @@ namespace Satisvampory.Net
         [Field(17)] public List<RecipeMsg> Recipes = new();
         /// <summary>One-shot notice, e.g. "2 entries removed: chest destroyed" (spec 12).</summary>
         [Field(18)] public string Notice = "";
+        /// <summary>Links another container set up that reach this one (spec 02, "set on A"): into this one, and out of it.</summary>
+        [Field(19)] public List<string> InputFromOthers = new();
+        [Field(20)] public List<string> OutputFromOthers = new();
     }
 
     [ModMessage("sv.recipe")]
@@ -152,7 +157,8 @@ namespace Satisvampory.Net
         [Field(1)] public TargetMsg Target = new();
         /// <summary>0 input, 1 output.</summary>
         [Field(2)] public int Side;
-        /// <summary>0 add, 1 remove, 2 move, 3 set orders, 4 set filter.</summary>
+        /// <summary>0 add, 1 remove, 2 move, 3 set orders, 4 set filter, 5 put this container on a belt
+        /// (Entry.BeltId, or a new belt named Entry.Name), 6 take it off belt Entry.BeltId.</summary>
         [Field(3)] public int Op;
         [Field(4)] public int Index;
         [Field(5)] public int To;

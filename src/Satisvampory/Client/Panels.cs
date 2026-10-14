@@ -194,6 +194,8 @@ namespace Satisvampory.Client
     /// <summary>An Input (side 0) or Output (side 1) list.</summary>
     internal sealed class ListView : View
     {
+        IUiLabel _others = null!;
+
         int? _filterRow;
         IUiInput _filterText = null!;
         IUiButton _filterApply = null!;
@@ -277,6 +279,7 @@ namespace Satisvampory.Client
 
             ctx.Track(panel.Button("+ Add…").OnClick(() => Owner.OpenPicker(_side)));
             ctx.Track(panel.Button("◎ Pick in world").OnClick(PickInWorld));
+            _others = panel.Label("");
             _loop = panel.Label("");
             _loopMode = panel.Dropdown("Loop mode", new[] { "0", "1", "2" }, "0", new[] { "Cycle once, then wait", "Even distribution", "Off (closing edge never runs)" });
             ctx.Track(_loopMode.OnChanged(v =>
@@ -316,6 +319,9 @@ namespace Satisvampory.Client
                     Detail = r.Filter,
                     Removable = s.CanEdit,
                 }));
+                var others = _side == 0 ? s.InputFromOthers : s.OutputFromOthers;
+                _others.Text = others.Count == 0 ? "" : (_side == 0 ? "Also pulled in by other lists:\n  " : "Also taken by other lists:\n  ") + string.Join("\n  ", others.Take(12));
+                _others.Visible = others.Count > 0;
                 _loop.Text = s.LoopBanner;
                 _loop.Visible = s.LoopBanner.Length > 0;
                 _loopMode.Visible = s.LoopKey.Length > 0;
@@ -388,7 +394,8 @@ namespace Satisvampory.Client
         IUiInput _entryName = null!;
         IUiNumber _entryAdjust = null!;
         IUiDropdown _special = null!;
-        IUiLabel _belts = null!;
+        IUiChips _belts = null!;
+        IUiInput _beltToAdd = null!;
         IUiButton _empty = null!;
         float _emptyArmedAt = -10;
         IUiInput _tryAmountDeposit = null!;
@@ -435,7 +442,16 @@ namespace Satisvampory.Client
             ctx.Track(panel.Button("+ Add priority").OnClick(() => AddEntry(ban: false)));
             ctx.Track(panel.Button("+ Never deposit here").OnClick(() => AddEntry(ban: true)));
             _special = panel.Dropdown("Special kind", SpecialValues, "0", SpecialLabels);
-            _belts = panel.Label("");
+            _belts = panel.Chips("dep.belts", Array.Empty<UiChip>(), new UiChipsOptions { Remove = true, Add = true, AddText = "+ belt", AddTooltip = "Put this chest on the belt named below (made if new)", EmptyText = "On no belts." });
+            ctx.Track(_belts.Term("Belt"));
+            _beltToAdd = panel.Input("Belt to put this chest on", "");
+            ctx.Track(_belts.OnRemove(chip => Owner.Edit(new EditListReq { Target = Owner.Target(), Op = 6, Entry = new RowMsg { BeltId = chip.Id } })));
+            ctx.Track(_belts.OnAdd(() =>
+            {
+                var name = (_beltToAdd.Value ?? "").Trim();
+                if (name.Length == 0) { ctx.Hud.Notify("Type a belt name first.", kind: UiNoticeKind.Info, seconds: 3); return; }
+                Owner.Edit(new EditListReq { Target = Owner.Target(), Op = 5, Entry = new RowMsg { Name = name } });
+            }));
             ctx.Track(panel.Button("Save").OnClick(Save));
             _empty = panel.Button("Empty trash");
             ctx.Track(_empty.OnClick(() =>
@@ -485,7 +501,7 @@ namespace Satisvampory.Client
             _takes.Value = d.Takes.ToString();
             _base.Value = d.BasePriority;
             _special.Value = d.Special.ToString();
-            _belts.Text = d.Belts.Count == 0 ? "On no belts." : "On belts: " + string.Join(", ", d.Belts);
+            _belts.SetChips(d.Belts.Select((name, i) => new UiChip(i < d.BeltIds.Count ? d.BeltIds[i] : name, name) { Removable = s.CanEdit }));
             _empty.Visible = d.Special == (int)Satisvampory.Engine.Model.SpecialKind.Trash && s.CanEdit;
             DrawEntries();
         }

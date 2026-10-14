@@ -101,9 +101,13 @@ namespace Satisvampory.Client
             _ctx.Track(stash.Tooltip("Put everything but your hotbar where it belongs (Mass Deposit).", "Stash"));
             AttachTooltip();
             _ctx.Events.On<InventorySortUsed>(OnSort);
-            var open = inv.Button("Satisvampory");
-            _ctx.Track(open.OnClick(() => Open(CastleTab)));
-            _ctx.Track(open.Tooltip("Castle, Mass Deposit, belts and categories, inventory, find.", "Satisvampory"));
+            // Spec 15 and 07: Inventory beside Stash, and Find from the same place; the hub's other tabs are one click away.
+            var open = inv.Button("Inventory");
+            _ctx.Track(open.OnClick(() => Open(InventoryTab)));
+            _ctx.Track(open.Tooltip("Everything on your island, with reserves and caps. Castle, Mass Deposit and belts are tabs in the same window.", "Inventory"));
+            var find = inv.Button("Find");
+            _ctx.Track(find.OnClick(() => Open(FindTab)));
+            _ctx.Track(find.Tooltip("Find an item, category or chest on your island and take it.", "Find"));
         }
 
         readonly Dictionary<int, (double At, string Line)> _storageCache = new();

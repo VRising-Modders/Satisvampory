@@ -144,6 +144,28 @@ namespace Satisvampory.Server
                 case 3:
                     Must(s.Edits.SetOrders(s.Role, s.Container.Id, (PullOrder)r.PullOrder, (SendOrder)r.SendOrder));
                     break;
+                case 5:
+                {
+                    var graph = s.Island.State.Graph;
+                    BeltId belt;
+                    if (Guid.TryParse(r.Entry.BeltId, out var g) && graph.Belts.ContainsKey(new BeltId(g))) belt = new BeltId(g);
+                    else if (graph.FindBelt(r.Entry.Name ?? "") is { } named) belt = named.Id;
+                    else
+                    {
+                        Must(s.Edits.CreateBelt(s.Role, r.Entry.Name ?? "", out var made));
+                        belt = made!.Id;
+                    }
+                    Must(s.Edits.AddBeltMembers(s.Role, belt, new[] { s.Container.Id }));
+                    break;
+                }
+                case 6:
+                {
+                    if (s.Role == ActorRole.Guest) throw new RequestRefusedException("Clan members can change belts.");
+                    if (!Guid.TryParse(r.Entry.BeltId, out var g) || !s.Island.State.Graph.Belts.TryGetValue(new BeltId(g), out var belt))
+                        throw new RequestRefusedException("That belt no longer exists.");
+                    belt.Members.RemoveAll(m => m == s.Container.Id);
+                    break;
+                }
                 case 4:
                 {
                     var list = side == ListSide.Input ? s.Island.State.Graph.For(s.Container.Id).Input : s.Island.State.Graph.For(s.Container.Id).Output;
@@ -339,7 +361,17 @@ namespace Satisvampory.Server
             foreach (var (cat, adj) in d.CategoryPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Adjust = adj });
             foreach (var item in d.BannedItems) msg.Deposit.Bans.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item) });
             foreach (var cat in d.BannedCategories) msg.Deposit.Bans.Add(new PriorityMsg { Category = cat, Label = "Category " + cat });
-            msg.Deposit.Belts.AddRange(graph.Belts.Values.Where(b => b.Members.Contains(c.Id)).Select(b => b.Name));
+            foreach (var b in graph.Belts.Values.Where(b => b.Members.Contains(c.Id)).OrderBy(b => b.Name))
+            {
+                msg.Deposit.Belts.Add(b.Name);
+                msg.Deposit.BeltIds.Add(b.Id.Value.ToString("N"));
+            }
+            string NameOf(Engine.Model.ContainerId id) => s.World.Find(id) is { } x ? $"{x.DisplayName} · {PlotLabel(s.Island, x.Plot)}" : "a chest";
+            foreach (var edge in graph.Edges().Where(x => x.DefinedOn != c.Id))
+            {
+                if (edge.To == c.Id) msg.InputFromOthers.Add($"{NameOf(edge.From)} (set on {(edge.DefinedOn == edge.From ? "its Output" : NameOf(edge.DefinedOn) + "'s Input")})");
+                else if (edge.From == c.Id) msg.OutputFromOthers.Add($"{NameOf(edge.To)} (set on {(edge.DefinedOn == edge.To ? "its Input" : NameOf(edge.DefinedOn) + "'s Output")})");
+            }
 
             var loop = report?.Loops.FirstOrDefault(l => l.Members.Contains(c.Id));
             if (loop != null)

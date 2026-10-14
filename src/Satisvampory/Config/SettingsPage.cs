@@ -17,7 +17,18 @@ namespace Satisvampory.Config
             {
                 page.Section("Me");
                 foreach (var (entry, label, help) in player.Rows)
-                    page.Toggle(entry, label: label, help: help);
+                {
+                    // Spec 06: when the server does not let players leave a share, the row shows locked at ON.
+                    var key = entry.Definition.Key;
+                    System.Func<bool>? enable = key switch
+                    {
+                        "ShareBetweenMyCastles" => () => server.Snapshot().PlayersMayLeaveCastleShare,
+                        "TakePartInClanShare" => () => server.Snapshot().PlayersMayLeaveClanShare,
+                        _ => null,
+                    };
+                    var shown = enable == null ? help : help + " Locked on when the server does not let players leave it.";
+                    page.Toggle(entry, label: label, help: shown, enableIf: enable);
+                }
                 page.Button("Open", () => admin.OpenHub?.Invoke(5), label: "Hunt log", help: "Your servants' hunts and what they brought back.");
                 page.Button("Show again", () => UiTerms.ShowMarkers(ctx.Guid), label: "Show term hints (ⓘ) again",
                     help: "Brings back the small ⓘ markers you have hovered away.");

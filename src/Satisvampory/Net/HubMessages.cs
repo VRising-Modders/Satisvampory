@@ -239,6 +239,20 @@ namespace Satisvampory.Net
         [Field(2)] public int Amount;
     }
 
+    /// <summary>Inventory tooltip line (spec 07, "Find"): how many of an item the island stores.</summary>
+    [ModMessage("sv.storage.count")]
+    public sealed class StorageCountReq
+    {
+        [Field(1)] public int Item;
+    }
+
+    [ModMessage("sv.storage.count.reply")]
+    public sealed class StorageCountReply
+    {
+        [Field(1)] public long Total;
+        [Field(2)] public int Chests;
+    }
+
     [ModMessage("sv.text")]
     public sealed class TextReply
     {

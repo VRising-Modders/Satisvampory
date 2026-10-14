@@ -84,9 +84,40 @@ namespace Satisvampory.Client
             var stash = inv.Button("Stash");
             _ctx.Track(stash.OnClick(() => _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash })));
             _ctx.Track(stash.Tooltip("Put everything but your hotbar where it belongs (Mass Deposit).", "Stash"));
+            AttachTooltip();
             var open = inv.Button("Satisvampory");
             _ctx.Track(open.OnClick(() => Open(CastleTab)));
             _ctx.Track(open.Tooltip("Castle, Mass Deposit, belts and categories, inventory, find.", "Satisvampory"));
+        }
+
+        readonly Dictionary<int, (double At, string Line)> _storageCache = new();
+
+        /// <summary>"In storage: 1,240 (3 chests)" on item tooltips while on a plot; cached ten seconds per item.</summary>
+        void AttachTooltip()
+        {
+            var tip = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid);
+            _ctx.Track(tip);
+            _ctx.Track(tip.OnPanel(e =>
+            {
+                if (e.Change == VanillaPanelChange.Closed || e.Target.ItemGuid == 0)
+                {
+                    tip.SetRows(Array.Empty<string>());
+                    return;
+                }
+                var item = e.Target.ItemGuid;
+                var now = _clock.Elapsed.TotalSeconds;
+                if (_storageCache.TryGetValue(item, out var hit) && now - hit.At < 10)
+                {
+                    tip.SetRows(hit.Line.Length == 0 ? Array.Empty<string>() : new[] { hit.Line });
+                    return;
+                }
+                _ctx.Requests.Send<StorageCountReq, StorageCountReply>(new StorageCountReq { Item = item }, r =>
+                {
+                    var line = r.Ok && r.Reply != null && r.Reply.Total > 0 ? $"In storage: {r.Reply.Total:N0} ({r.Reply.Chests} chest{(r.Reply.Chests == 1 ? "" : "s")})" : "";
+                    _storageCache[item] = (_clock.Elapsed.TotalSeconds, line);
+                    if (tip.IsOpen && tip.Target.ItemGuid == item) tip.SetRows(line.Length == 0 ? Array.Empty<string>() : new[] { line });
+                });
+            }));
         }
 
         void OnKey(string id)

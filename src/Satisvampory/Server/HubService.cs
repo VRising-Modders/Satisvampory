@@ -50,6 +50,8 @@ namespace Satisvampory.Server
             r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => SetRule(s, q)));
             r.Handle<FindReq, FindReply>((u, q, i) => With(u, s => Find(s, q)));
             r.Handle<PullReq, TextReply>((u, q, i) => With(u, s => Pull(s, q)));
+            r.Handle<StorageCountReq, StorageCountReply>((u, q, i) => With(u, s => StorageCount(s, q)),
+                new Progenitor.Networking.RequestOptions { Burst = 20, PerSecond = 10 });
         }
 
         sealed class Session
@@ -489,6 +491,20 @@ namespace Satisvampory.Server
             if (result.Items == 0) return new TextReply { Text = "Nothing to take: none on the island, or only last stacks left." };
             if (prefs.SilentPull) return new TextReply { Text = $"Took {result.Items:N0}." };
             return new TextReply { Text = $"Took {result.Items:N0} from {result.Containers(byDestination: false)} chests." + (result.Left.Count > 0 ? $" Short by {result.Left.Values.Sum():N0}." : "") };
+        }
+
+        StorageCountReply StorageCount(Session s, StorageCountReq q)
+        {
+            var item = new ItemId(q.Item);
+            var reply = new StorageCountReply();
+            foreach (var c in IslandScope.Chests(s.World, s.Island.Scope))
+            {
+                var n = s.World.Count(c.Id, item);
+                if (n <= 0) continue;
+                reply.Total += n;
+                reply.Chests++;
+            }
+            return reply;
         }
 
         // ---------------- helpers ----------------

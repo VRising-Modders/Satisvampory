@@ -103,6 +103,13 @@ namespace Satisvampory.Engine.Lists
 
         public long NextSequence() => ++_sequence;
 
+        /// <summary>The last sequence handed out; saved so new edges keep sorting after old ones.</summary>
+        public long Sequence
+        {
+            get => _sequence;
+            set => _sequence = value > _sequence ? value : _sequence;
+        }
+
         public IoLists For(ContainerId id)
         {
             if (!Lists.TryGetValue(id, out var l)) Lists[id] = l = new IoLists();

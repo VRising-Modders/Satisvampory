@@ -31,6 +31,7 @@ namespace Satisvampory.Server
         /// the order chests are drained in.
         /// </summary>
         const long CacheMs = 30000;
+        const long NoIslandMs = 2000;
 
         // Time spent inside this provider; warns when a 30 s window costs more than a second.
         long _spentTicks, _lastReport = Environment.TickCount64;
@@ -185,17 +186,20 @@ namespace Satisvampory.Server
             {
                 _ctx.Log.LogError("Satisvampory: material sources failed: " + e.Message);
             }
-            _cache[key] = (now + CacheMs, revision, result);
+            // A "nothing to govern" answer is cheap to redo and may be a moment's mismatch; keep it briefly.
+            _cache[key] = (now + (result == null ? NoIslandMs : CacheMs), revision, result);
             return result;
         }
 
         Resolved? Build(in MaterialContext context)
         {
             if (!Allowed(context, out var user)) return null;
-            var island = ServerActions.Resolve(_ctx, _half, context.User.ToEntity(), user, cachedRows: true);
+            // Off a plot Progenitor governs nothing; on one, it names the plot, so use that rather than
+            // asking again (a fresh teleport can leave the two disagreeing for a moment).
+            if (context.StandingTerritory < 0) return null;
+            var island = ServerActions.Resolve(_ctx, _half, context.User.ToEntity(), user, cachedRows: true, standingTerritory: context.StandingTerritory);
             // Only the castle's own people craft from its chests; allies and visitors stay vanilla.
             if (island == null || island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return null;
-            if (context.StandingTerritory >= 0 && island.Standing.Territory.Index != context.StandingTerritory) return null;
 
             // The island's shape is cached; the counts are re-read at most once a second (StockMs),
             // one read per chest, and every per-item ranking then runs from memory.

@@ -38,11 +38,14 @@ namespace Satisvampory.Server
 
         /// <summary>Null when the player is not standing on a plot they or their clan may use.</summary>
         /// <param name="cachedRows">Reuse castles' container rows while their structure holds (background callers only).</param>
-        internal static Island? Resolve(SatisContext ctx, ServerHalf half, Entity userEntity, User user, bool cachedRows = false)
+        /// <param name="standingTerritory">The plot to resolve from, when the caller already knows it (Progenitor's material context); otherwise where the character stands.</param>
+        internal static Island? Resolve(SatisContext ctx, ServerHalf half, Entity userEntity, User user, bool cachedRows = false, int? standingTerritory = null)
         {
             var character = user.LocalCharacter._Entity;
-            var standing = ctx.Castles.At(character);
-            if (!standing.Enabled) return null;
+            var standing = standingTerritory is { } t
+                ? ctx.Castles.All().FirstOrDefault(c => c.Enabled && c.Territory.Index == t)
+                : ctx.Castles.At(character);
+            if (standing == null || !standing.Enabled) return null;
 
             var relation = ctx.Castles.RelationTo(userEntity, standing);
             if (relation is CastleRelation.None) return null;

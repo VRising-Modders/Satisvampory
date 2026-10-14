@@ -51,11 +51,12 @@ namespace Satisvampory.Client
         }
 
         /// <summary>Shows a tip card beside <paramref name="anchor"/> unless the player has dismissed it.</summary>
-        internal static void Tip(SatisContext ctx, string id, IUiPanel? anchor)
+        /// <param name="control">The control the tip explains: the card shows only while it is on screen.</param>
+        internal static void Tip(SatisContext ctx, string id, IUiPanel? anchor, IUiHandle? control = null)
         {
             var t = Tips.FirstOrDefault(x => x.Id == id);
             if (t.Id == null || ctx.Hud.IsTipSeen(id)) return;
-            ctx.Hud.Tip(t.Id, t.Title, t.Body, new UiTipOptions { Anchor = anchor });
+            ctx.Hud.Tip(t.Id, t.Title, t.Body, new UiTipOptions { Anchor = anchor, AnchorControl = control });
         }
     }
 }

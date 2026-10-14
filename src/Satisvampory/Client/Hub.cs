@@ -195,14 +195,14 @@ namespace Satisvampory.Client
 
         void TabTip(int tab)
         {
-            var id = tab switch
+            (string? id, IUiHandle? control) = tab switch
             {
-                MassDepositTab => Help.MassDepositTip,
-                BeltsTab => Help.BeltsTip,
-                InventoryTab => Help.InventoryTip,
-                _ => null,
+                MassDepositTab => (Help.MassDepositTip, (IUiHandle?)_homes),
+                BeltsTab => (Help.BeltsTip, _beltsMd),
+                InventoryTab => (Help.InventoryTip, _invTable),
+                _ => (null, null),
             };
-            if (id != null && _panel != null) Help.Tip(_ctx, id, _panel);
+            if (id != null && _panel != null) Help.Tip(_ctx, id, _panel, control);
         }
 
         void Refresh(int tab)

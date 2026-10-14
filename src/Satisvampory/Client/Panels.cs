@@ -111,10 +111,11 @@ namespace Satisvampory.Client
         {
             _state = reply;
             _containerId = reply.ContainerId;
-            _input.Redraw();
-            _output.Redraw();
-            _deposit.Redraw();
-            _recipes.Redraw();
+            // Only open views: redrawing builds a view's panel, and a built panel shows.
+            _input.RedrawIfOpen();
+            _output.RedrawIfOpen();
+            _deposit.RedrawIfOpen();
+            _recipes.RedrawIfOpen();
         }
 
         internal void Send<TReq, TReply>(TReq req, Action<TReply> ok) where TReq : class, new() where TReply : class, new() =>
@@ -183,6 +184,7 @@ namespace Satisvampory.Client
 
         public void Show()
         {
+            _open = true;
             Redraw();
             UiApi.Show(Panel);
             if (TipId != null) Help.Tip(Owner.Ctx, TipId, Panel);
@@ -190,7 +192,15 @@ namespace Satisvampory.Client
 
         public void Hide()
         {
+            _open = false;
             if (_panel != null) UiApi.Hide(_panel);
+        }
+
+        bool _open;
+
+        public void RedrawIfOpen()
+        {
+            if (_open) Redraw();
         }
     }
 

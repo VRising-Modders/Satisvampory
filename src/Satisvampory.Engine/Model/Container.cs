@@ -28,7 +28,7 @@ namespace Satisvampory.Engine.Model
         public string FurnitureName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Item group a dest-typed furniture stands for (Jewel Storage → "jewels"), or null for
+        /// Category a dest-typed furniture stands for (Jewel Storage → "jewels"), or null for
         /// generic furniture.
         /// </summary>
         public string? FurnitureGroup { get; set; }
@@ -58,13 +58,13 @@ namespace Satisvampory.Engine.Model
 
         public Dictionary<ItemId, int> ItemPriority { get; } = new();
 
-        /// <summary>Keyed by folded item group name.</summary>
-        public Dictionary<string, int> GroupPriority { get; } = new();
+        /// <summary>Keyed by folded category name.</summary>
+        public Dictionary<string, int> CategoryPriority { get; } = new();
 
         public HashSet<ItemId> BannedItems { get; } = new();
 
-        /// <summary>Folded item group names.</summary>
-        public HashSet<string> BannedGroups { get; } = new();
+        /// <summary>Folded category names.</summary>
+        public HashSet<string> BannedCategories { get; } = new();
 
         public SpecialKind Special { get; set; } = SpecialKind.None;
     }

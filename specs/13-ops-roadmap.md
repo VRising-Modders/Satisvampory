@@ -14,7 +14,7 @@ Satisvampory 1.x must not be loaded on the test server alongside 2.0.
 
 ## Headless admin commands
 
-For testing without a client only, admin-gated, one group: `.sv version`, `.sv dump <container>` (lists, groups, last moves), `.sv tick`, `.sv import`. Players never need chat.
+For testing without a client only, admin-gated, one group: `.sv version`, `.sv dump <container>` (lists, belts, last moves), `.sv tick`, `.sv import`. Players never need chat.
 
 ## Milestones
 
@@ -22,10 +22,10 @@ For testing without a client only, admin-gated, one group: `.sv version`, `.sv d
 |---|---|---|
 | **P-a** | Progenitor P1 inventory, P4 castles and clans, P5 ids, with samples and tests | `.items`-style sample moves 50 Iron Ore between two chests on the test save, atomically; counts match the vanilla panel |
 | **P-b** | Progenitor P3 material availability spike | Crafting at a tailoring bench on plot A shows and spends cloth sitting in a bare-floor chest on plot B |
-| **S1** | Engine: lists, groups, Mass Deposit Simple, stations whole-craft and leftovers, reserve, cap, fair share, diagnostics, persistence, headless commands, 1.x import | Imported 1.x lines from the test save run; a furnace pulls only full crafts and returns leftovers when a recipe is switched off |
+| **S1** | Engine: lists, belts, categories, Mass Deposit Simple, stations whole-craft and leftovers, reserve, cap, fair share, diagnostics, persistence, headless commands, 1.x import | Imported 1.x lines from the test save run; a furnace pulls only full crafts and returns leftovers when a recipe is switched off |
 | **P-c** | Progenitor P6 panel sites, P7 widgets, P8 messages | Buttons appear on a chest and a furnace; list reorders round-trip |
-| **S2** | Input and output panels, pickers, pick in world, plot labels | Link a chest on plot 2 into a furnace on plot 1 from the panel without typing a name |
-| **S3** | Mass Deposit screen, Simple and Advanced, preview | An Advanced rule moves gems to a named vault; preview names the rule |
+| **S2** | Input and output panels, pickers, pick in world, plot labels, Belts and categories screen | Link a chest on plot 2 into a furnace on plot 1 from the panel without typing a name; rename a belt used by three lists and all three follow |
+| **S3** | Mass Deposit screen, Simple and Advanced, preview; Inventory page | An Advanced rule moves gems to a named vault; preview names the rule |
 | **S4** | Castle share and clan share, crafting hook live | Castle share: crafting on plot A uses a chest on the same owner's plot B; clan share off hides a clanmate's plots; both off sees only the standing plot, any floor |
 | **S5** | Loops, both modes | A four-chest loop cycles once and sleeps; adding an item wakes it |
 | **S6** | Stash, pull, find, tidy hotkey | Tidy key with confirm moves strays home; find locates across plots |

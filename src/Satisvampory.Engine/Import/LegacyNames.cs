@@ -127,13 +127,13 @@ namespace Satisvampory.Engine.Import
                 if (n.Special != SpecialKind.None) c.Deposit.Special = n.Special;
                 foreach (var word in n.Bans)
                 {
-                    if (catalog.TryResolveGroup(word, out var g)) c.Deposit.BannedGroups.Add(g);
+                    if (catalog.TryResolveCategory(word, out var g)) c.Deposit.BannedCategories.Add(g);
                     else if (catalog.TryResolveItem(word, out var item)) c.Deposit.BannedItems.Add(item);
-                    else report.Unmapped.Add($"{c.Name}: ban '--{word}' matches no item or item group");
+                    else report.Unmapped.Add($"{c.Name}: ban '--{word}' matches no item or category");
                 }
             }
 
-            // Each line's senders become one chest group; every receiver takes that group as input.
+            // Each line's senders become one belt; every receiver takes that group as input.
             var lines = parsed.SelectMany(p => p.N.SendsOn.Concat(p.N.ReceivesOn)).Distinct().OrderBy(n => n);
             foreach (var line in lines)
             {
@@ -146,8 +146,8 @@ namespace Satisvampory.Engine.Import
                 }
 
                 var name = $"Line {line}";
-                var existed = graph.Groups.ContainsKey(NameFold.Fold(name));
-                var group = graph.GroupOrCreate(name);
+                var existed = graph.FindBelt(name) != null;
+                var group = graph.BeltOrCreate(name);
                 if (!existed) report.GroupsCreated++;
                 foreach (var s in senders)
                     if (!group.Members.Contains(s.Id)) group.Members.Add(s.Id);
@@ -155,8 +155,8 @@ namespace Satisvampory.Engine.Import
                 foreach (var r in receivers)
                 {
                     var input = graph.For(r.Id).Input;
-                    if (input.Any(e => e.Kind == EntryKind.ChestGroup && e.Group == NameFold.Fold(name))) continue;
-                    input.Add(ListEntry.OfGroup(name, graph.NextSequence()));
+                    if (input.Any(e => e.Kind == EntryKind.Belt && e.Belt == group.Id)) continue;
+                    input.Add(ListEntry.OfBelt(group.Id, graph.NextSequence()));
                     report.EntriesCreated++;
                 }
             }

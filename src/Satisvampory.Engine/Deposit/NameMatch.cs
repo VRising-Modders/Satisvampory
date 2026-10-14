@@ -12,8 +12,8 @@ namespace Satisvampory.Engine.Deposit
         Custom,
         /// <summary>Blank, a generic word, or the furniture's own name.</summary>
         Generic,
-        /// <summary>The name is an item group the item is in, or dest-typed furniture for it.</summary>
-        ItemGroup,
+        /// <summary>The name is a category the item is in, or dest-typed furniture for it.</summary>
+        Category,
         /// <summary>The name is the item's name or an exact alias.</summary>
         Exact,
     }
@@ -31,23 +31,23 @@ namespace Satisvampory.Engine.Deposit
             var name = NameFold.Fold(chest.Name);
 
             if (name.Length == 0)
-                return chest.FurnitureGroup != null && catalog.InGroup(item, chest.FurnitureGroup)
-                    ? NameMatchKind.ItemGroup
+                return chest.FurnitureGroup != null && catalog.InCategory(item, chest.FurnitureGroup)
+                    ? NameMatchKind.Category
                     : NameMatchKind.Generic;
 
             if (catalog.TryResolveItem(name, out var exact))
                 return exact == item ? NameMatchKind.Exact : NameMatchKind.Custom;
 
-            if (catalog.TryResolveGroup(name, out var wholeGroup))
-                return catalog.InGroup(item, wholeGroup) ? NameMatchKind.ItemGroup : NameMatchKind.Custom;
+            if (catalog.TryResolveCategory(name, out var wholeGroup))
+                return catalog.InCategory(item, wholeGroup) ? NameMatchKind.Category : NameMatchKind.Custom;
 
             if (IsGeneric(name, chest)) return NameMatchKind.Generic;
 
-            // Multi-word names: any word that is an item group the item belongs to. Group words
+            // Multi-word names: any word that is a category the item belongs to. Group words
             // match by membership only, never by substring ("Blood Jewel" is a jewel, not blood).
             foreach (var word in name.Split(' '))
-                if (catalog.TryResolveGroup(word, out var g) && catalog.InGroup(item, g))
-                    return NameMatchKind.ItemGroup;
+                if (catalog.TryResolveCategory(word, out var g) && catalog.InCategory(item, g))
+                    return NameMatchKind.Category;
 
             return NameMatchKind.Custom;
         }
@@ -70,8 +70,8 @@ namespace Satisvampory.Engine.Deposit
             var o = chest.Deposit;
             if (o.ItemPriority.TryGetValue(item, out var p)) return o.BasePriority + p;
             var best = 0;
-            foreach (var kv in o.GroupPriority)
-                if (catalog.InGroup(item, kv.Key) && Math.Abs(kv.Value) > Math.Abs(best))
+            foreach (var kv in o.CategoryPriority)
+                if (catalog.InCategory(item, kv.Key) && Math.Abs(kv.Value) > Math.Abs(best))
                     best = kv.Value;
             return o.BasePriority + best;
         }
@@ -80,8 +80,8 @@ namespace Satisvampory.Engine.Deposit
         {
             var o = chest.Deposit;
             if (o.BannedItems.Contains(item)) return true;
-            foreach (var g in o.BannedGroups)
-                if (catalog.InGroup(item, g)) return true;
+            foreach (var g in o.BannedCategories)
+                if (catalog.InCategory(item, g)) return true;
             return false;
         }
     }

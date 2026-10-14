@@ -2,7 +2,7 @@
 
 Castle logistics for V Rising, built on [Progenitor](https://github.com/VRising-Modders/Progenitor).
 
-- Every chest, station and castle heart gets an **Input** and an **Output** button in its own vanilla panel, each opening an ordered list of chests, chest groups, Mass Deposit and special chests.
+- Every chest, station and castle heart gets an **Input** and an **Output** button in its own vanilla panel, each opening an ordered list of chests, belts, Mass Deposit and special chests.
 - **Mass Deposit** decides where every item lives, with a Simple priority list and an Advanced rule script.
 - **Castle share** joins one player's castles and **clan share** joins the whole clan, so crafting and building at any station can use any chest on any shared plot. Treasury floor is not required.
 - Stations pull only whole crafts and return leftovers. Explicit loops run once or balance evenly.

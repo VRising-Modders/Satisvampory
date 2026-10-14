@@ -31,8 +31,8 @@ namespace Satisvampory.Engine.Deposit
 
         public CompiledScript Script { get; init; } = CompiledScript.Empty;
 
-        /// <summary>Chest groups by folded name, members in group order.</summary>
-        public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> ChestGroups { get; init; } =
+        /// <summary>Belts by folded name, members in group order.</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> Belts { get; init; } =
             new Dictionary<string, IReadOnlyList<ContainerId>>();
 
         public Func<PlotId, string> PlotLabel { get; init; } = p => p.ToString();
@@ -224,9 +224,9 @@ namespace Satisvampory.Engine.Deposit
             return row.BuiltIn switch
             {
                 BuiltInRow.PriorityChests => priority > 0 && (match != NameMatchKind.Custom || holds),
-                BuiltInRow.AlreadyHolding => holds && match is NameMatchKind.Exact or NameMatchKind.ItemGroup,
+                BuiltInRow.AlreadyHolding => holds && match is NameMatchKind.Exact or NameMatchKind.Category,
                 BuiltInRow.ExactNames => match == NameMatchKind.Exact,
-                BuiltInRow.ItemGroupNames => match == NameMatchKind.ItemGroup,
+                BuiltInRow.CategoryNames => match == NameMatchKind.Category,
                 BuiltInRow.General => match == NameMatchKind.Generic,
                 BuiltInRow.HoldingAnyName => match == NameMatchKind.Custom && holds,
                 _ => false,
@@ -240,8 +240,8 @@ namespace Satisvampory.Engine.Deposit
                 case TargetKind.Chest:
                     return NameFold.Fold(chest.DisplayName) == NameFold.Fold(t.Name)
                         && (t.Plot == null || NameFold.Fold(ctx.PlotLabel(chest.Plot)) == NameFold.Fold(t.Plot));
-                case TargetKind.ChestGroup:
-                    return ctx.ChestGroups.TryGetValue(NameFold.Fold(t.Name), out var members) && members.Contains(chest.Id);
+                case TargetKind.Belt:
+                    return ctx.Belts.TryGetValue(NameFold.Fold(t.Name), out var members) && members.Contains(chest.Id);
                 case TargetKind.Plot:
                     return NameFold.Fold(ctx.PlotLabel(chest.Plot)) == NameFold.Fold(t.Name);
                 case TargetKind.Overflow:

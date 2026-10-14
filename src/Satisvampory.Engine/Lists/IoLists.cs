@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Satisvampory.Engine.Model;
@@ -8,7 +9,7 @@ namespace Satisvampory.Engine.Lists
     public enum EntryKind
     {
         Container,
-        ChestGroup,
+        Belt,
         MassDeposit,
     }
 
@@ -16,19 +17,19 @@ namespace Satisvampory.Engine.Lists
     public sealed class ItemFilter
     {
         public HashSet<ItemId> Items { get; } = new();
-        /// <summary>Folded item group names.</summary>
-        public HashSet<string> Groups { get; } = new();
+        /// <summary>Folded category names.</summary>
+        public HashSet<string> Categories { get; } = new();
         public HashSet<ItemId> ExcludeItems { get; } = new();
-        public HashSet<string> ExcludeGroups { get; } = new();
+        public HashSet<string> ExcludeCategories { get; } = new();
 
-        public bool IsAnything => Items.Count == 0 && Groups.Count == 0 && ExcludeItems.Count == 0 && ExcludeGroups.Count == 0;
+        public bool IsAnything => Items.Count == 0 && Categories.Count == 0 && ExcludeItems.Count == 0 && ExcludeCategories.Count == 0;
 
         public bool Allows(ItemId item, ItemCatalog catalog)
         {
             if (ExcludeItems.Contains(item)) return false;
-            if (ExcludeGroups.Any(g => catalog.InGroup(item, g))) return false;
-            if (Items.Count == 0 && Groups.Count == 0) return true;
-            return Items.Contains(item) || Groups.Any(g => catalog.InGroup(item, g));
+            if (ExcludeCategories.Any(g => catalog.InCategory(item, g))) return false;
+            if (Items.Count == 0 && Categories.Count == 0) return true;
+            return Items.Contains(item) || Categories.Any(g => catalog.InCategory(item, g));
         }
     }
 
@@ -36,14 +37,14 @@ namespace Satisvampory.Engine.Lists
     {
         public EntryKind Kind { get; init; }
         public ContainerId Container { get; init; }
-        /// <summary>Folded chest group name for <see cref="EntryKind.ChestGroup"/>.</summary>
-        public string Group { get; init; } = string.Empty;
+        /// <summary>The belt for <see cref="EntryKind.Belt"/>. By id, so a rename never breaks the entry.</summary>
+        public BeltId Belt { get; init; }
         public ItemFilter Filter { get; init; } = new();
         /// <summary>Creation order across the whole graph; the newest edge of a loop is the one that closes it.</summary>
         public long Sequence { get; init; }
 
         public static ListEntry Of(ContainerId id, long seq = 0) => new() { Kind = EntryKind.Container, Container = id, Sequence = seq };
-        public static ListEntry OfGroup(string group, long seq = 0) => new() { Kind = EntryKind.ChestGroup, Group = NameFold.Fold(group), Sequence = seq };
+        public static ListEntry OfBelt(BeltId belt, long seq = 0) => new() { Kind = EntryKind.Belt, Belt = belt, Sequence = seq };
         public static ListEntry MassDeposit(long seq = 0) => new() { Kind = EntryKind.MassDeposit, Sequence = seq };
     }
 
@@ -68,23 +69,35 @@ namespace Satisvampory.Engine.Lists
         public SendOrder SendOrder { get; set; } = SendOrder.FillInOrder;
     }
 
-    public sealed class ChestGroup
+    public readonly record struct BeltId(Guid Value)
     {
-        public ChestGroup(string name) => Name = name;
+        public static BeltId New() => new(Guid.NewGuid());
+        public override string ToString() => "g-" + Value.ToString("N");
+    }
 
-        public string Name { get; set; }
+    public sealed class Belt
+    {
+        public Belt(BeltId id, string name)
+        {
+            Id = id;
+            Name = name;
+        }
+
+        public BeltId Id { get; }
+
+        /// <summary>Unique on the island, compared after <see cref="NameFold"/>. Change it with <see cref="BeltOps.Rename"/>.</summary>
+        public string Name { get; internal set; }
         public List<ContainerId> Members { get; } = new();
     }
 
     /// <summary>A directed edge after lists and groups are expanded.</summary>
     public sealed record Edge(ContainerId From, ContainerId To, ItemFilter Filter, ContainerId DefinedOn, bool DefinedAsOutput, long Sequence);
 
-    /// <summary>All lists and chest groups in one scope, and the edges they make.</summary>
+    /// <summary>All lists and belts in one scope, and the edges they make.</summary>
     public sealed class LogisticsGraph
     {
         public Dictionary<ContainerId, IoLists> Lists { get; } = new();
-        /// <summary>Keyed by folded group name.</summary>
-        public Dictionary<string, ChestGroup> Groups { get; } = new();
+        public Dictionary<BeltId, Belt> Belts { get; } = new();
 
         long _sequence;
 
@@ -96,21 +109,30 @@ namespace Satisvampory.Engine.Lists
             return l;
         }
 
-        public ChestGroup GroupOrCreate(string name)
+        public Belt? FindBelt(string name)
         {
             var key = NameFold.Fold(name);
-            if (!Groups.TryGetValue(key, out var g)) Groups[key] = g = new ChestGroup(name);
+            return Belts.Values.FirstOrDefault(g => NameFold.Fold(g.Name) == key);
+        }
+
+        public Belt BeltOrCreate(string name)
+        {
+            var g = FindBelt(name);
+            if (g != null) return g;
+            g = new Belt(BeltId.New(), name.Trim());
+            Belts[g.Id] = g;
             return g;
         }
 
-        public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> GroupMembers() =>
-            Groups.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<ContainerId>)kv.Value.Members);
+        /// <summary>Members by folded group name, for Mass Deposit targets and scripts (which name groups).</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> BeltMembers() =>
+            Belts.Values.ToDictionary(g => NameFold.Fold(g.Name), g => (IReadOnlyList<ContainerId>)g.Members);
 
         /// <summary>Containers an entry stands for (a group expands to its members in order).</summary>
         public IEnumerable<ContainerId> Expand(ListEntry e) => e.Kind switch
         {
             EntryKind.Container => new[] { e.Container },
-            EntryKind.ChestGroup => Groups.TryGetValue(e.Group, out var g) ? g.Members : Enumerable.Empty<ContainerId>(),
+            EntryKind.Belt => Belts.TryGetValue(e.Belt, out var g) ? g.Members : Enumerable.Empty<ContainerId>(),
             _ => Enumerable.Empty<ContainerId>(),
         };
 
@@ -152,7 +174,7 @@ namespace Satisvampory.Engine.Lists
                 removed += l.Input.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id);
                 removed += l.Output.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id);
             }
-            foreach (var g in Groups.Values) removed += g.Members.RemoveAll(m => m == id);
+            foreach (var g in Belts.Values) removed += g.Members.RemoveAll(m => m == id);
             return removed;
         }
     }

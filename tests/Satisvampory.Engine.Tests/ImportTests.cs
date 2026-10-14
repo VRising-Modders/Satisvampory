@@ -44,10 +44,10 @@ namespace Satisvampory.Engine.Tests
             var report = LegacyImporter.Apply(new[] { s1, s1b, r1, banned }, cat, g);
             Assert.Equal(1, report.GroupsCreated);
             Assert.Equal(1, report.EntriesCreated);
-            Assert.Equal(2, g.Groups["line 1"].Members.Count);
-            Assert.Equal(EntryKind.ChestGroup, g.For(r1.Id).Input.Single().Kind);
+            Assert.Equal(2, g.FindBelt("line 1")!.Members.Count);
+            Assert.Equal(EntryKind.Belt, g.For(r1.Id).Input.Single().Kind);
             Assert.Contains(IronSwordFreeCheck(banned), new[] { true });
-            Assert.Contains("ore", banned.Deposit.BannedGroups);
+            Assert.Contains("ore", banned.Deposit.BannedCategories);
             Assert.Contains(report.Unmapped, u => u.Contains("unobtainium"));
             Assert.Equal("plank", report.CleanNames[s1.Id]);
 

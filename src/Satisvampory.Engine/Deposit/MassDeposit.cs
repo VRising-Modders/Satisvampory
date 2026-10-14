@@ -12,13 +12,13 @@ namespace Satisvampory.Engine.Deposit
         PriorityChests,
         AlreadyHolding,
         ExactNames,
-        ItemGroupNames,
+        CategoryNames,
         General,
         HoldingAnyName,
         Overflow,
     }
 
-    /// <summary>A row in the Simple list: a built-in, a chest group, one chest, or a target from a rule.</summary>
+    /// <summary>A row in the Simple list: a built-in, a belt, one chest, or a target from a rule.</summary>
     public sealed class DepositRow
     {
         DepositRow(BuiltInRow? builtIn, Target? target)
@@ -40,7 +40,7 @@ namespace Satisvampory.Engine.Deposit
     public enum TargetKind
     {
         Chest,
-        ChestGroup,
+        Belt,
         General,
         Overflow,
         Plot,
@@ -53,7 +53,7 @@ namespace Satisvampory.Engine.Deposit
         public override string ToString() => Kind switch
         {
             TargetKind.Chest => Plot == null ? $"chest \"{Name}\"" : $"chest \"{Name}\" @ \"{Plot}\"",
-            TargetKind.ChestGroup => $"group \"{Name}\"",
+            TargetKind.Belt => $"belt \"{Name}\"",
             TargetKind.Plot => $"plot \"{Name}\"",
             TargetKind.Special => $"special {Special}",
             _ => Kind.ToString().ToLowerInvariant(),
@@ -81,7 +81,7 @@ namespace Satisvampory.Engine.Deposit
     }
 
     /// <summary>Which items a rule applies to.</summary>
-    public sealed record ItemSelector(ItemSelectorKind Kind, ItemId Item = default, string Group = "")
+    public sealed record ItemSelector(ItemSelectorKind Kind, ItemId Item = default, string Category = "")
     {
         public static ItemSelector Any { get; } = new(ItemSelectorKind.Any);
 
@@ -89,7 +89,7 @@ namespace Satisvampory.Engine.Deposit
         {
             ItemSelectorKind.Any => true,
             ItemSelectorKind.Item => Item == item,
-            ItemSelectorKind.Group => catalog.InGroup(item, Group),
+            ItemSelectorKind.Category => catalog.InCategory(item, Category),
             _ => false,
         };
     }
@@ -98,6 +98,6 @@ namespace Satisvampory.Engine.Deposit
     {
         Any,
         Item,
-        Group,
+        Category,
     }
 }

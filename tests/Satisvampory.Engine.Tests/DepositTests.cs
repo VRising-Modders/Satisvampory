@@ -26,9 +26,9 @@ namespace Satisvampory.Engine.Tests
         [Theory]
         [InlineData("Iron Ore", NameMatchKind.Exact)]
         [InlineData("iron  ORE", NameMatchKind.Exact)]
-        [InlineData("ore", NameMatchKind.ItemGroup)]
-        [InlineData("ores", NameMatchKind.ItemGroup)]
-        [InlineData("East ore", NameMatchKind.ItemGroup)]
+        [InlineData("ore", NameMatchKind.Category)]
+        [InlineData("ores", NameMatchKind.Category)]
+        [InlineData("East ore", NameMatchKind.Category)]
         [InlineData("", NameMatchKind.Generic)]
         [InlineData("misc", NameMatchKind.Generic)]
         [InlineData("Large Chest", NameMatchKind.Generic)]
@@ -45,7 +45,7 @@ namespace Satisvampory.Engine.Tests
         {
             var c = _w.Chest(Home, "blood");
             Assert.Equal(NameMatchKind.Custom, NameMatch.Classify(c, BloodJewel, _cat));
-            Assert.Equal(NameMatchKind.ItemGroup, NameMatch.Classify(c, BloodEssence, _cat));
+            Assert.Equal(NameMatchKind.Category, NameMatch.Classify(c, BloodEssence, _cat));
         }
 
         [Fact]
@@ -82,13 +82,13 @@ namespace Satisvampory.Engine.Tests
         public void Item_priority_wins_over_group_priority_and_bans_remove_a_home()
         {
             var a = _w.Chest(Home, "misc");
-            a.Deposit.GroupPriority["ore"] = 5;
+            a.Deposit.CategoryPriority["ore"] = 5;
             a.Deposit.ItemPriority[IronOre] = -1;
             Assert.Equal(-1, NameMatch.EffectivePriority(a, IronOre, _cat));
             Assert.Equal(5, NameMatch.EffectivePriority(a, CopperOre, _cat));
 
             var b = _w.Chest(Home, "misc");
-            b.Deposit.BannedGroups.Add("ore");
+            b.Deposit.BannedCategories.Add("ore");
             Assert.DoesNotContain(DepositRanker.Rank(Ctx(), IronOre).InOrder, c => c.Chest == b);
         }
 
@@ -102,7 +102,7 @@ namespace Satisvampory.Engine.Tests
             Assert.Empty(DepositRanker.Rank(Ctx(), Sword).InOrder);
 
             var s = new MassDepositSettings();
-            s.ItemRules.Add((new ItemSelector(ItemSelectorKind.Group, Group: "weapons"), new Target(TargetKind.Special, Special: SpecialKind.Trash)));
+            s.ItemRules.Add((new ItemSelector(ItemSelectorKind.Category, Category: "weapons"), new Target(TargetKind.Special, Special: SpecialKind.Trash)));
             Assert.Equal(trash, DepositRanker.Rank(Ctx(s), Sword).Best!.Chest);
         }
 
@@ -166,7 +166,7 @@ namespace Satisvampory.Engine.Tests
 
             var script = AdvancedScript.Compile(@"
                 # gems to the vault first, never overflow
-                for itemgroup gems: first chest ""Gem vault"" @ ""Plot 2""
+                for category gems: first chest ""Gem vault"" @ ""Plot 2""
                 for any: never plot ""Plot 2"" when rank = general
                 for ""Coal"": only general, then overflow
                 for ""Iron Ore"": move ""General chests"" above ""Exact names""

@@ -45,7 +45,7 @@ namespace Satisvampory.Engine.Tests
             var b = _w.Chest(Away, "out");
             _w.Put(a, IronOre, 50).Put(a, Plank, 20);
             var entry = ListEntry.Of(b.Id);
-            entry.Filter.Groups.Add("ore");
+            entry.Filter.Categories.Add("ore");
             _g.For(a.Id).Output.Add(entry);
 
             Tick();

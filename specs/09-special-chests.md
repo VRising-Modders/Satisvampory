@@ -1,6 +1,6 @@
 # 09 — Special chests
 
-A container's **special kind** is set from the chest's Deposit options panel (`01-containers-groups.md`). 1.x name words are converted once by the importer. Pickers list special chests under their own names and kinds, so they can be chosen directly in any input or output list.
+A container's **special kind** is set from the chest's Deposit options panel (`01-containers.md`). 1.x name words are converted once by the importer. Pickers list special chests under their own names and kinds, so they can be chosen directly in any input or output list.
 
 | Kind | Behavior | Admin allow | Default for a castle |
 |---|---|---|---|

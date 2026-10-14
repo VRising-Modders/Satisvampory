@@ -26,7 +26,7 @@ Each player has **Take part in clan share** (Me page, default ON). Once taking p
 ## What the island gives
 
 - Craft, build, repair, and use any station with materials sitting in **any** chest on the island, with no items moved in advance. The station's "available materials" shows island totals, and the craft takes from the chests directly.
-- Put chests from any island plot in input and output lists and groups.
+- Put chests from any island plot in input and output lists and belts.
 - Quick stash, pull, find, and tidy across the island.
 
 Treasury floor is **not** required for any of this. A plain chest on bare floor on another plot counts.

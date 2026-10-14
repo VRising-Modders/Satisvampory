@@ -104,13 +104,13 @@ namespace Satisvampory.Engine.Tests
             c.AddItem(Coal, "Coal");
             c.AddItem(Sword, "Iron Sword", 1);
             c.AddAlias("be", BloodEssence);
-            c.AddGroup("ore", new[] { IronOre, CopperOre }, "ores");
-            c.AddGroup("ingots", new[] { IronIngot }, "ingot");
-            c.AddGroup("wood", new[] { Plank, Lumber });
-            c.AddGroup("gems", new[] { Ruby }, "gem");
-            c.AddGroup("jewels", new[] { BloodJewel }, "jewel");
-            c.AddGroup("blood", new[] { BloodEssence });
-            c.AddGroup("weapons", new[] { Sword }, "weapon");
+            c.AddCategory("ore", new[] { IronOre, CopperOre }, "ores");
+            c.AddCategory("ingots", new[] { IronIngot }, "ingot");
+            c.AddCategory("wood", new[] { Plank, Lumber });
+            c.AddCategory("gems", new[] { Ruby }, "gem");
+            c.AddCategory("jewels", new[] { BloodJewel }, "jewel");
+            c.AddCategory("blood", new[] { BloodEssence });
+            c.AddCategory("weapons", new[] { Sword }, "weapon");
             return c;
         }
     }

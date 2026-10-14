@@ -7,7 +7,7 @@ Rewritten 2026-10-13 around input and output lists on every chest and station, M
 | Spec | Covers |
 |---|---|
 | [00-product.md](00-product.md) | Scope, license (AGPL), Progenitor-first rule, what is out, frozen rules |
-| [01-containers-groups.md](01-containers-groups.md) | Containers, plot labels, chest groups, item groups, name modifiers |
+| [01-containers.md](01-containers.md) | Containers, plot labels, belts, categories, name modifiers |
 | [02-io-lists.md](02-io-lists.md) | Input and output buttons, lists, pull and send order, pickers, pick in world, diagnostics |
 | [03-mass-deposit.md](03-mass-deposit.md) | Simple priority list, Advanced rule script, preview |
 | [04-stations.md](04-stations.md) | Recipe switches, whole crafts only, leftover return |
@@ -20,3 +20,6 @@ Rewritten 2026-10-13 around input and output lists on every chest and station, M
 | [11-progenitor-api.md](11-progenitor-api.md) | Everything Progenitor must add |
 | [12-protocol-persistence.md](12-protocol-persistence.md) | Messages, stores, 1.x import |
 | [13-ops-roadmap.md](13-ops-roadmap.md) | Dev loop, test save, milestones |
+| [14-belts-categories.md](14-belts-categories.md) | Belts and categories screen: members, used-by, rename and delete |
+| [15-inventory.md](15-inventory.md) | Sortable inventory page with reserves, caps, demand and status |
+| [16-help.md](16-help.md) | Glossary (what a Belt is, and the other terms), hover definitions, empty states, tips, Help tab |

@@ -19,8 +19,13 @@ Built on Progenitor's settings pages (`ctx.Settings.Page`) and keybinds (`ctx.Ke
 | Top up hearts when I visit | ON |
 | Top up my island's hearts when I log in | OFF |
 | Also top up hearts outside my island | OFF |
-| Keybinds: Mass Deposit, Find, Tidy, Stash, Hunt log | all unbound; the player picks keys, checked against vanilla bindings |
+| Keybinds: Mass Deposit, Belts and categories, Inventory, Find, Tidy, Stash, Hunt log | all unbound; the player picks keys, checked against vanilla bindings |
 | Hunt log | button |
+| Show term hints (ⓘ) again | button |
+
+## Help
+
+The glossary and "How it fits together" (`16-help.md`).
 
 ## Castle
 
@@ -31,10 +36,8 @@ Header: plot label, level, owner, which sharing applies here (none, castle share
 | Logistics (lists run) | ON |
 | Plot label | castle name, else "Plot n" |
 | Default reserve | 10 (0 disables) |
-| Reserves by item or item group | empty |
-| Production caps by item or item group | empty |
-| Chest groups | list editor |
-| Item groups | built-ins, castle copy on first edit, restore |
+| Inventory: reserves and caps per item and category | opens the Inventory page (`15-inventory.md`) |
+| Belts and categories | opens that screen (`14-belts-categories.md`) |
 | Item aliases (castle) | empty |
 | Mass Deposit | opens `03-mass-deposit.md` screen |
 | Feed salvage to the devourer | OFF |
@@ -42,7 +45,7 @@ Header: plot label, level, owner, which sharing applies here (none, castle share
 | Repeat hunts on this castle | ON when allowed |
 | Exclude this castle from sharing | OFF, owner only |
 | Tidy now | button |
-| Need: top ten station inputs short on the island | read-only |
+| Need: top ten station inputs short on the island | read-only; **Show all** opens the Inventory page filtered to Short |
 
 ## Clan
 

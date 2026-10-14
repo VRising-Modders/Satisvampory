@@ -48,7 +48,7 @@ namespace Satisvampory.Engine.Deposit
     public sealed class ScriptNames
     {
         public ISet<string>? ChestNames { get; init; }
-        public ISet<string>? ChestGroups { get; init; }
+        public ISet<string>? Belts { get; init; }
         public ISet<string>? PlotLabels { get; init; }
     }
 
@@ -113,8 +113,8 @@ namespace Satisvampory.Engine.Deposit
             foreach (var rule in result.Rules)
                 if (rule.Ops.Count == 0)
                     result.Messages.Add(new(rule.Line, "This rule has no clauses and does nothing", false));
-                else if (rule.Selector.Kind == ItemSelectorKind.Group && catalog.Members(rule.Selector.Group).Count == 0)
-                    result.Messages.Add(new(rule.Line, $"Item group '{rule.Selector.Group}' has no items", false));
+                else if (rule.Selector.Kind == ItemSelectorKind.Category && catalog.Members(rule.Selector.Category).Count == 0)
+                    result.Messages.Add(new(rule.Line, $"Category '{rule.Selector.Category}' has no items", false));
 
             return result;
         }
@@ -191,21 +191,21 @@ namespace Satisvampory.Engine.Deposit
         static ItemSelector ParseSelector(Reader r, ItemCatalog catalog)
         {
             if (r.PeekWord("any")) { r.Next(); return ItemSelector.Any; }
-            if (r.PeekWord("itemgroup"))
+            if (r.PeekWord("category"))
             {
                 r.Next();
-                var g = r.WordOrQuoted("an item group name");
-                if (!catalog.TryResolveGroup(g, out var key)) throw new ScriptError(r.Line, $"Unknown item group '{g}'");
-                return new ItemSelector(ItemSelectorKind.Group, Group: key);
+                var g = r.WordOrQuoted("a category name");
+                if (!catalog.TryResolveCategory(g, out var key)) throw new ScriptError(r.Line, $"Unknown category '{g}'");
+                return new ItemSelector(ItemSelectorKind.Category, Category: key);
             }
-            var name = r.Quoted("\"item name\", itemgroup <name>, or any");
+            var name = r.Quoted("\"item name\", category <name>, or any");
             if (!catalog.TryResolveItem(name, out var id)) throw new ScriptError(r.Line, $"Unknown item '{name}'");
             return new ItemSelector(ItemSelectorKind.Item, Item: id);
         }
 
         static Target ParseTarget(Reader r, ScriptNames names)
         {
-            var kind = r.Word("a target (chest, group, general, overflow, plot, special)");
+            var kind = r.Word("a target (chest, belt, general, overflow, plot, special)");
             switch (kind)
             {
                 case "chest":
@@ -221,11 +221,11 @@ namespace Satisvampory.Engine.Deposit
                     }
                     return new Target(TargetKind.Chest, name, plot);
                 }
-                case "group":
+                case "belt":
                 {
-                    var name = r.Quoted("a chest group name");
-                    CheckKnown(names.ChestGroups, name, "chest group", r.Line);
-                    return new Target(TargetKind.ChestGroup, name);
+                    var name = r.Quoted("a belt name");
+                    CheckKnown(names.Belts, name, "belt", r.Line);
+                    return new Target(TargetKind.Belt, name);
                 }
                 case "general": return new Target(TargetKind.General);
                 case "overflow": return new Target(TargetKind.Overflow);
@@ -256,7 +256,7 @@ namespace Satisvampory.Engine.Deposit
                 "priority" or "priority chests" => BuiltInRow.PriorityChests,
                 "holding" or "already holding it" => BuiltInRow.AlreadyHolding,
                 "exact" or "exact names" => BuiltInRow.ExactNames,
-                "itemgroup" or "item group names" => BuiltInRow.ItemGroupNames,
+                "category" or "category names" => BuiltInRow.CategoryNames,
                 "general" or "general chests" => BuiltInRow.General,
                 "holding-any" or "holding it, any name" => BuiltInRow.HoldingAnyName,
                 "overflow" => BuiltInRow.Overflow,
@@ -269,7 +269,7 @@ namespace Satisvampory.Engine.Deposit
             BuiltInRow.PriorityChests => "Priority chests",
             BuiltInRow.AlreadyHolding => "Already holding it",
             BuiltInRow.ExactNames => "Exact names",
-            BuiltInRow.ItemGroupNames => "Item group names",
+            BuiltInRow.CategoryNames => "Category names",
             BuiltInRow.General => "General chests",
             BuiltInRow.HoldingAnyName => "Holding it, any name",
             _ => "Overflow",

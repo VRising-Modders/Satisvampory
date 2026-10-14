@@ -8,7 +8,7 @@ Rewritten 2026-10-13. It replaces an earlier, unpublished Flow Map design.
 
 - One DLL, `[ProgenitorSide(Side.Both)]`. The server decides every item move; the client draws what the server sent and sends requests back. A client never moves an item.
 - Dependencies: BepInEx and Progenitor. Nothing else.
-- **License: AGPL-3.0, original work.** 2.0 is a complete rework that owes nothing to 1.x or KindredLogistics, so no attribution to either is expected or included. 1.x may be read to learn *what* it does (behavior, settings, defaults), never copied: no code, comments, data tables (group member lists, prefab-name JSON, alias tables), strings, or doc sentences carry over. Group membership is regenerated from the game's own catalog.
+- **License: AGPL-3.0, original work.** 2.0 is a complete rework that owes nothing to 1.x or KindredLogistics, so no attribution to either is expected or included. 1.x may be read to learn *what* it does (behavior, settings, defaults), never copied: no code, comments, data tables (category member lists, prefab-name JSON, alias tables), strings, or doc sentences carry over. Category membership is regenerated from the game's own catalog.
 - **Progenitor first.** Any inventory, station, castle, clan, or UI capability the mod needs is added to Progenitor as public API and called from the mod (`11-progenitor-api.md`). The mod does not reach into ECS for something Progenitor should own.
 - Settings use Progenitor's settings pages and keybinds (`10-settings.md`).
 
@@ -16,7 +16,10 @@ Rewritten 2026-10-13. It replaces an earlier, unpublished Flow Map design.
 
 | Feature | Spec |
 |---|---|
-| Containers, groups, plot labels | `01-containers-groups.md` |
+| Containers, belts, categories, plot labels | `01-containers.md` |
+| Belts and categories screen | `14-belts-categories.md` |
+| Inventory page (sortable, with reserves and caps) | `15-inventory.md` |
+| Explaining the words: glossary, hover definitions, empty states, tips | `16-help.md` |
 | Input and output lists on chests and stations, pickers | `02-io-lists.md` |
 | Mass Deposit (Simple and Advanced) | `03-mass-deposit.md` |
 | Stations: recipe toggles, whole-craft pulls, leftover return | `04-stations.md` |
@@ -44,7 +47,7 @@ Rewritten 2026-10-13. It replaces an earlier, unpublished Flow Map design.
 | Action | Who |
 |---|---|
 | See a container's lists | Anyone allied with the heart |
-| Change lists, groups, Mass Deposit, castle settings | A clan member of the heart owner's clan, or the owner |
+| Change lists, belts, categories, Mass Deposit, castle settings | A clan member of the heart owner's clan, or the owner |
 | Clan settings | Any clan member |
 | Server settings | Admin (`adminlist.txt` plus in-game admin auth) |
 

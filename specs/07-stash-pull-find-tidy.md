@@ -16,7 +16,7 @@ Dump the player's inventory, except the hotbar, into Mass Deposit homes.
 Take items from storage into bags.
 
 - From any list or picker row showing "holds n": **Take…** asks for an amount.
-- From the **Find** window (below): pull an item, or one stack (or n) of each item in an item group.
+- From the **Find** window (below): pull an item, or one stack (or n) of each item in a category.
 - Order: reverse Mass Deposit priority. Ignores reserve. Never skip chests or hearts.
 - **Never pull the last stack** (player, default ON) leaves each chest's last stack of that item.
 - **Silent pull** hides the breakdown.
@@ -25,7 +25,7 @@ Take items from storage into bags.
 
 A small search window, opened by keybind (default unbound; set it in Settings) or from the inventory panel's Stash button menu.
 
-- Type an item, item group, or chest name. Autofill, with icons.
+- Type an item, category, or chest name. Autofill, with icons.
 - Item results: every chest holding it, grouped by plot label with heart level, standing plot first as **here**, with counts, **Take…**, and **Locate** (a ping on the chest for ten seconds).
 - Chest results: name, plot, what it holds, **Locate**.
 - Ambiguous names show a pick list; nothing is guessed.
@@ -44,7 +44,7 @@ Restack items already in chests toward their Mass Deposit homes.
 |---|---|---|
 | Heart, skip | no | no |
 | Overflow, spoils | yes | no |
-| Any chest in an input or output list or group | **no** | yes, when it is the item's top-ranked home or within the top two Mass Deposit rows |
+| Any chest in an input or output list or on a belt | **no** | yes, when it is the item's top-ranked home or within the top two Mass Deposit rows |
 | Special chests (salvage, trash, brazier, spawner) | no | no |
 | Anything else, any floor | yes | yes |
 

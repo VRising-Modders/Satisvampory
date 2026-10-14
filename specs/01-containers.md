@@ -1,4 +1,4 @@
-# 01 — Containers, groups, plot labels
+# 01 — Containers, belts, categories, plot labels
 
 ## Containers
 
@@ -13,7 +13,7 @@ Each container has:
 | Plot | The castle territory it stands on |
 | Input list, output list | `02-io-lists.md` |
 | Special kind | None, or one of the kinds in `09-special-chests.md` |
-| Groups | Every group it belongs to |
+| Belts | Every belt it is on |
 
 **Stations** (refinement and crafting stations, spawners, the devourer, braziers) and **castle hearts** also have input and output lists. Station rules are in `04-stations.md`, hearts in `09-special-chests.md`.
 
@@ -43,21 +43,23 @@ Ore · Plot 2 (Hollow Keep) · 14 m
 - Distance is shown when the player is on the same plot.
 - Unnamed containers show the furniture name: "Large Chest · here · 6 m".
 
-## Groups
+## Belts
 
-A **group** is a named, ordered set of containers and stations on a castle (island-wide under castle share or clan share). A group replaces a 1.x belt or line (`s3` / `r3`). Example: "Ore in" = the three chests beside the furnaces.
+A **belt** is a named, ordered set of containers and stations, island-wide under castle share or clan share. It replaces a 1.x line (`s3` / `r3`). Example: "Ore in" is the three chests beside the furnaces.
 
-- Created, renamed, and deleted from any list editor ("New group…") or from the Castle settings page.
-- A member is added by picking it (`02-io-lists.md`, "Pickers"). Order inside a group matters only when a list says "respect order".
-- A container may be in any number of groups.
-- Deleting a group removes it from every list that used it; the lists show what was removed.
-- Under sharing, a group may hold members from several plots. Each member row shows its plot label.
+- Defined and managed on the **Belts and categories** screen (`14-belts-categories.md`). A belt can also be created on the spot from any list editor ("New belt…").
+- A member is added by picking it (`02-io-lists.md`, "Pickers"). Order inside a belt matters only when a list says "respect order".
+- A container may be on any number of belts.
+- Deleting a belt removes it from every list that used it, and those lists show what was removed.
+- Under sharing, a belt may hold members from several plots. Each member row shows its plot label.
 
-## Item groups
+## Categories
 
-Separate from container groups. An **item group** is a set of items (ore, gems, planks, …) used as filters in lists and as Mass Deposit match terms. The built-in item groups and their aliases (`be`, `gbe`, `dsi`, …) cover the same ground as 1.x, but membership is generated fresh from the game's item catalog by 2.0's own rules; no 1.x list is copied. Clan members may edit a castle copy; admins edit server aliases. Built-ins can be restored.
+A **category** is a set of items (ore, gems, planks, flowers, …). Categories are used as filters in lists, in deposit options, as Mass Deposit match terms, and for reserves and caps.
 
-In the UI, container groups and item groups are labelled differently ("Chest group" vs "Item group") and never share a name field, so "Ore" the chest group and "ore" the item group cannot be confused.
+The built-in categories and their aliases (`be`, `gbe`, `dsi`, …) cover the same ground as 1.x. Their membership is generated fresh from the game's item catalog by 2.0's own rules; no 1.x list is copied. Clan members may edit a castle copy, and admins edit server aliases. Built-ins can be restored.
+
+The UI always says **Belt** or **Category**, never just "group". The two are never offered in the same field, so "Ore" the belt and "ore" the category cannot be confused.
 
 ## Names still matter for Mass Deposit
 
@@ -67,9 +69,9 @@ The 1.x name codes are read **once** by the importer (`12-protocol-persistence.m
 
 | 1.x name code | Becomes |
 |---|---|
-| `s#`, `r#` | Chest groups and input entries |
+| `s#`, `r#` | Belts and input entries |
 | trailing `+`, `++`, … | Base priority 1, 2, … |
-| `--word` | A ban on the item or item group *word* matched |
+| `--word` | A ban on the item or category *word* matched |
 | `overflow`, `salvage`, `spoils`, `trash`, `spawner`, `brazier`, `night`, `prox` | Special kind |
 | `NS`, or `''` at start or end | Special kind Skip |
 
@@ -84,22 +86,22 @@ A third control on the container panel, a small gear beside the rename field, se
 │ Base priority        [  2  ] (−10 … +10, 0)     │
 │                                                 │
 │ Item priorities                                 │
-│   Item group: gems           [ +3 ]   ✕         │
+│   Category: gems           [ +3 ]   ✕         │
 │   Onyx Tear                  [ −2 ]   ✕         │
-│   [+ Add item or item group…]                   │
+│   [+ Add item or category…]                   │
 │                                                 │
 │ Never deposit here                              │
-│   Item group: weapons                  ✕        │
+│   Category: weapons                  ✕        │
 │   Copper Ingot                         ✕        │
-│   [+ Add item or item group…]                   │
+│   [+ Add item or category…]                   │
 │                                                 │
 │ Special kind   [ None ▾ ]                       │
 └─────────────────────────────────────────────────┘
 ```
 
 - **Base priority**: an integer, default 0. Higher wins among chests in the same Mass Deposit row for an item. Negative values sink a chest below its peers. Two chests at the same priority split deposits between them.
-- **Item priorities**: per item or item group, a number added to the base priority for those items only. When an item matches several entries, the item entry wins over the item group entry; between groups, the larger magnitude wins.
-- **Never deposit here** (bans): items or item groups that Mass Deposit never puts in this chest, whatever its name or the castle's Mass Deposit rules say. Bans apply to Mass Deposit uses (quick stash, tidy, servant loot, leftovers, "Mass Deposit" outputs). An explicit output list entry that points at this chest still delivers, but it shows a warning that it conflicts with a ban.
+- **Item priorities**: per item or category, a number added to the base priority for those items only. When an item matches several entries, the item entry wins over the category entry; between categories, the larger magnitude wins.
+- **Never deposit here** (bans): items or categories that Mass Deposit never puts in this chest, whatever its name or the castle's Mass Deposit rules say. Bans apply to Mass Deposit uses (quick stash, tidy, servant loot, leftovers, "Mass Deposit" outputs). An explicit output list entry that points at this chest still delivers, but it shows a warning that it conflicts with a ban.
 - **Special kind**: the same dropdown as `09-special-chests.md`.
 - A chest whose effective priority for an item is above 0 and that accepts it counts as a **priority chest** for that item (Mass Deposit Simple row 1).
 

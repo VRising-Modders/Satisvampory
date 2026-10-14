@@ -69,7 +69,7 @@ namespace Satisvampory.Engine.Player
             return result;
         }
 
-        /// <summary>Pull <paramref name="perItem"/> (default one stack) of every item in an item group.</summary>
+        /// <summary>Pull <paramref name="perItem"/> (default one stack) of every item in a category.</summary>
         public static ActionResult PullGroup(IWorld world, DepositContext ctx, ContainerId bag, string group, int? perItem, bool neverLastStack)
         {
             var result = new ActionResult();
@@ -102,7 +102,7 @@ namespace Satisvampory.Engine.Player
         /// <summary>
         /// Move items already in chests to strictly better homes. Ignores reserve.
         /// Sources: ordinary chests, overflow and spoils. Never hearts, skip chests, special-purpose
-        /// chests, or anything in a list or chest group. Dests: ordinary chests; a list or group
+        /// chests, or anything in a list or belt. Dests: ordinary chests; a list or group
         /// member only when it is within the item's top two rows; never overflow or spoils.
         /// </summary>
         public static ActionResult Tidy(IWorld world, DepositContext ctx, LogisticsGraph graph)
@@ -158,7 +158,7 @@ namespace Satisvampory.Engine.Player
             }
             foreach (var (id, lists) in graph.Lists)
                 if (lists.Input.Count > 0 || lists.Output.Count > 0) set.Add(id);
-            foreach (var g in graph.Groups.Values)
+            foreach (var g in graph.Belts.Values)
                 foreach (var m in g.Members) set.Add(m);
             return set;
         }

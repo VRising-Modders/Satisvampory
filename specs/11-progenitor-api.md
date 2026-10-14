@@ -69,7 +69,10 @@ Each site reports open, close, and which entity the panel is showing. Missing af
 ## P7 UI widgets (client)
 
 - **Ordered list** with drag reorder, up and down buttons, per-row expand, per-row remove, scroll.
-- **Entity and item picker** with search, autofill, sections, greyed rows with reasons, icons.
+- **Entity and item picker** with search, autofill, sections, greyed rows with reasons, icons, and multi-select.
+- **Pick in world** repeat mode (stay in pick mode until Esc) for adding several belt members.
+- **Master-detail layout** with a tab strip (Belts and categories screen).
+- **Data table**: sortable columns (multi-key), hideable columns, row expand, multi-select, inline number edit with pending state, grouped rows with subtotals, virtualised scrolling for hundreds of rows (Inventory page).
 - **Pick in world** mode: capture the next interact on a container or station, suppress its panel, Esc to cancel.
 - **Code text area** with line numbers, colour spans, and line errors (Mass Deposit Advanced).
 - **Notifications** in the vanilla style, and **Locate** ping on a world entity.

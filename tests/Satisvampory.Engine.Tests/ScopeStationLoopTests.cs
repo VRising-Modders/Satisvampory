@@ -175,8 +175,10 @@ namespace Satisvampory.Engine.Tests
         {
             var g = new LogisticsGraph();
             var (a, b, c) = (Id(), Id(), Id());
-            g.GroupOrCreate("Ore in").Members.AddRange(new[] { b, c });
-            g.For(a).Output.Add(ListEntry.OfGroup("ore IN"));
+            var group = g.BeltOrCreate("Ore in");
+            group.Members.AddRange(new[] { b, c });
+            Assert.Same(group, g.FindBelt("ore IN"));
+            g.For(a).Output.Add(ListEntry.OfBelt(group.Id));
             Assert.Equal(2, g.Edges().Count);
             Assert.Equal(1, g.Forget(b));
             Assert.Single(g.Edges());

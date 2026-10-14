@@ -345,7 +345,7 @@ namespace Satisvampory.Engine.Lists
         }
 
         IEnumerable<ItemId> FilterItems(ItemFilter f) =>
-            f.Items.Concat(f.Groups.SelectMany(Catalog.Members)).Distinct().Where(i => f.Allows(i, Catalog));
+            f.Items.Concat(f.Categories.SelectMany(Catalog.Members)).Distinct().Where(i => f.Allows(i, Catalog));
 
         // ---------------- helpers ----------------
 

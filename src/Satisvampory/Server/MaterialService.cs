@@ -192,7 +192,7 @@ namespace Satisvampory.Server
         Resolved? Build(in MaterialContext context)
         {
             if (!Allowed(context, out var user)) return null;
-            var island = ServerActions.Resolve(_ctx, _half, context.User.ToEntity(), user, ProgenitorWorld.BackgroundRowsMs);
+            var island = ServerActions.Resolve(_ctx, _half, context.User.ToEntity(), user, cachedRows: true);
             // Only the castle's own people craft from its chests; allies and visitors stay vanilla.
             if (island == null || island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return null;
             if (context.StandingTerritory >= 0 && island.Standing.Territory.Index != context.StandingTerritory) return null;
@@ -204,7 +204,7 @@ namespace Satisvampory.Server
             // Only the island's shape depends on the castles' buildings (the ticker invalidates on
             // built or destroyed containers), so the world is built once here over cached rows.
             var live = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, ProgenitorWorld.BackgroundRowsMs);
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true);
             DepositContext ReadStock() =>
                 new(catalog, new SnapshotView(live), island.Scope, ProgenitorWorld.PlotOf(island.Standing))
                 {

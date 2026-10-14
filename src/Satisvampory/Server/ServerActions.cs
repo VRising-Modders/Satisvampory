@@ -37,8 +37,8 @@ namespace Satisvampory.Server
         }
 
         /// <summary>Null when the player is not standing on a plot they or their clan may use.</summary>
-        /// <param name="maxRowAgeMs">How old the castles' container rows may be (background callers only).</param>
-        internal static Island? Resolve(SatisContext ctx, ServerHalf half, Entity userEntity, User user, long maxRowAgeMs = 0)
+        /// <param name="cachedRows">Reuse castles' container rows while their structure holds (background callers only).</param>
+        internal static Island? Resolve(SatisContext ctx, ServerHalf half, Entity userEntity, User user, bool cachedRows = false)
         {
             var character = user.LocalCharacter._Entity;
             var standing = ctx.Castles.At(character);
@@ -83,7 +83,7 @@ namespace Satisvampory.Server
                 Castles = castles,
                 Scope = scope,
                 OwnerKey = ownerKey,
-                State = Stores.Load(ctx.Save, ownerKey, ProgenitorWorld.ContainerIds(castles, maxRowAgeMs)),
+                State = Stores.Load(ctx.Save, ownerKey, ProgenitorWorld.ContainerIds(castles, cachedRows)),
                 Relation = relation,
             };
         }

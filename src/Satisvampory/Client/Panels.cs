@@ -81,6 +81,9 @@ namespace Satisvampory.Client
             }));
         }
 
+        /// <summary>Opens the hub on a tab (set by the client half).</summary>
+        internal Action<int>? OpenHub { get; set; }
+
         internal TargetMsg Target() => new()
         {
             NetIndex = _target.NetworkIdIndex,
@@ -278,6 +281,7 @@ namespace Satisvampory.Client
             }));
 
             ctx.Track(panel.Button("+ Add…").OnClick(() => Owner.OpenPicker(_side)));
+            ctx.Track(panel.Button("Mass Deposit screen…").OnClick(() => Owner.OpenHub?.Invoke(1)));
             ctx.Track(panel.Button("◎ Pick in world").OnClick(PickInWorld));
             _others = panel.Label("");
             _loop = panel.Label("");

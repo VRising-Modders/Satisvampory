@@ -45,6 +45,7 @@ namespace Satisvampory.Server
             r.Handle<TidyReq, CastleMsg>((u, q, i) => With(u, s => Tidy(s)));
             r.Handle<GetMassDepositReq, MassDepositMsg>((u, q, i) => With(u, s => MassDeposit(s)));
             r.Handle<SetMassDepositReq, MassDepositMsg>((u, q, i) => With(u, s => SetMassDeposit(s, q)));
+            r.Handle<SetHomePriorityReq, MassDepositMsg>((u, q, i) => With(u, s => SetHomePriority(s, q)));
             r.Handle<IslandTryReq, TryItReply>((u, q, i) => With(u, s => IslandTry(s, q)));
             r.Handle<GetBeltsReq, BeltsMsg>((u, q, i) => With(u, s => Belts(s)));
             r.Handle<BeltEditReq, BeltsMsg>((u, q, i) => With(u, s => EditBelts(s, q)));
@@ -257,7 +258,60 @@ namespace Satisvampory.Server
                 if (homes.Count == 0) continue;
                 msg.Overview.Add($"{s.Catalog.NameOf(item)} → " + string.Join(", ", homes.Select(h => $"{h.Chest.DisplayName} · {Label(s.Island, h.Chest.Plot)} ({h.Why})")));
             }
+            Homes(s, msg);
             return msg;
+        }
+
+        /// <summary>
+        /// Spec 03 Overview: categories with the chests that list them, by priority; and every item
+        /// stored or listed, with its first homes in Mass Deposit order. Priorities edit in place.
+        /// </summary>
+        void Homes(Session s, MassDepositMsg msg)
+        {
+            var chests = IslandScope.Chests(s.World, s.Island.Scope).ToList();
+            HomeRowMsg Row(string key, string label, ContainerInfo c, int priority, string why)
+            {
+                var row = new HomeRowMsg { Key = key, Label = label, ContainerId = c.Id.Value.ToString("N"), Chest = c.DisplayName, Where = Label(s.Island, c.Plot), Priority = priority, Why = why };
+                if (TargetResolver.Words(_ctx, c.Id, out var ni, out var ng, out var nt)) { row.NetIndex = ni; row.NetGeneration = ng; row.NetType = nt; }
+                return row;
+            }
+            foreach (var cat in chests.SelectMany(c => c.Deposit.CategoryPriority.Keys).Distinct().OrderBy(x => x))
+                foreach (var c in chests.Where(c => c.Deposit.CategoryPriority.ContainsKey(cat)).OrderByDescending(c => c.Deposit.CategoryPriority[cat] + c.Deposit.BasePriority))
+                    msg.Homes.Add(Row("c:" + cat, "category " + cat, c, c.Deposit.CategoryPriority[cat], c.Deposit.BasePriority != 0 ? $"base {c.Deposit.BasePriority:+0;-0}" : ""));
+
+            var items = chests.SelectMany(c => c.Deposit.ItemPriority.Keys)
+                .Concat(chests.SelectMany(c => s.World.Contents(c.Id)).Select(x => x.Item))
+                .Distinct().OrderBy(s.Catalog.NameOf).Take(150);
+            foreach (var item in items)
+            {
+                var label = s.Catalog.NameOf(item);
+                foreach (var h in DepositRanker.Rank(s.Deposit, item).InOrder.Take(5))
+                {
+                    var d = h.Chest.Deposit;
+                    var p = d.ItemPriority.TryGetValue(item, out var ip) ? ip
+                        : d.CategoryPriority.Where(kv => s.Catalog.InCategory(item, kv.Key)).Select(kv => kv.Value).DefaultIfEmpty(0).Max();
+                    msg.Homes.Add(Row("i:" + item.Guid, label, h.Chest, p, h.Why));
+                }
+            }
+        }
+
+        MassDepositMsg SetHomePriority(Session s, SetHomePriorityReq q)
+        {
+            MustEdit(s, "deposit settings");
+            if (!Guid.TryParse(q.ContainerId, out var g)) throw new RequestRefusedException("That chest is gone.");
+            var id = new Engine.Model.ContainerId(g);
+            if (s.World.Find(id) == null) throw new RequestRefusedException("That chest is not on this island.");
+            var p = Math.Clamp(q.Priority, DepositOptions.MinPriority, DepositOptions.MaxPriority);
+            var key = q.Key ?? "";
+            Must(s.Edits.SetDepositOptions(s.Role, id, d =>
+            {
+                if (key.StartsWith("c:")) d.CategoryPriority[key.Substring(2)] = p;
+                else if (key.StartsWith("i:") && int.TryParse(key.Substring(2), out var item)) d.ItemPriority[new ItemId(item)] = p;
+                else throw new RequestRefusedException("Unknown home.");
+                if (d.Takes == Takes.Nothing) d.Takes = Takes.OnlyListed;
+            }));
+            Save(s);
+            return MassDeposit(s);
         }
 
         MassDepositMsg SetMassDeposit(Session s, SetMassDepositReq q)

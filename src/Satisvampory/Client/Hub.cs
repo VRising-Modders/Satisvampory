@@ -39,6 +39,8 @@ namespace Satisvampory.Client
 
         // Mass Deposit
         IUiLabel _overview = null!;
+        IUiDataTable _homes = null!;
+        readonly List<HomeRowMsg> _homeRows = new();
         IUiOrderedList _overrides = null!;
         IUiInput _ovItems = null!, _ovTarget = null!;
         IUiDropdown _ovKind = null!;
@@ -321,6 +323,30 @@ namespace Satisvampory.Client
         {
             Track(In(MassDepositTab, p.Label("Each chest's deposit settings decide where items go. Overrides and rules below change that island-wide.")).Term("Mass Deposit"));
             _overview = In(MassDepositTab, p.Label(""));
+            _homes = In(MassDepositTab, p.DataTable("md.homes", new[]
+            {
+                new UiTableColumn("chest", "Chest") { Hideable = false },
+                new UiTableColumn("where", "Plot"),
+                new UiTableColumn("priority", "Priority", UiTableColumnKind.Number) { Editable = true, Format = "+0;-0;0", Term = "Priority" },
+                new UiTableColumn("why", "Why"),
+            }, new UiDataTableOptions { VisibleRows = 10, Grouped = true, TotalRow = false, Sort = Array.Empty<UiTableSortKey>(), EmptyText = "No chest lists anything yet; stash still fills chests that take anything." }));
+            Track(_homes.OnEdit(e =>
+            {
+                if (!int.TryParse(e.RowId, out var i) || i >= _homeRows.Count || e.NewValue is not { } v) { e.Reject("Type a priority from -10 to 10."); return; }
+                var h = _homeRows[i];
+                _ctx.Requests.Send<SetHomePriorityReq, MassDepositMsg>(new SetHomePriorityReq { ContainerId = h.ContainerId, Key = h.Key, Priority = (int)Math.Round(v) }, r =>
+                {
+                    if (r.Ok && r.Reply != null) { e.Resolve(); DrawMassDeposit(r.Reply); }
+                    else e.Reject(r.Reason.Length > 0 ? r.Reason : "Not saved: " + r.Status);
+                });
+            }));
+            Track(In(MassDepositTab, p.Button("Locate selected chest")).OnClick(() =>
+            {
+                foreach (var id in _homes.Selected)
+                    if (int.TryParse(id, out var i) && i < _homeRows.Count && _homeRows[i].NetType != 0
+                        && _ctx.Hud.TryFindByNetworkId(_homeRows[i].NetIndex, _homeRows[i].NetGeneration, _homeRows[i].NetType, out var entity, out _))
+                        _ctx.Hud.Locate(entity, _homeRows[i].Chest, 10);
+            }));
             In(MassDepositTab, p.Divider());
             _overrides = In(MassDepositTab, p.OrderedList("md.overrides", Array.Empty<UiListItem>(), new UiOrderedListOptions { EmptyText = "No overrides. Chests' own settings decide." }));
             Track(_overrides.OnReorder(m =>
@@ -357,11 +383,27 @@ namespace Satisvampory.Client
             _mdDirection = In(MassDepositTab, p.Dropdown("Direction", new[] { "0", "1" }, "0", new[] { "Push: where would it go", "Pull: where would it come from" }));
             Track(In(MassDepositTab, p.Button("Try it")).OnClick(() =>
             {
-                if (!int.TryParse(_mdAmount.Value, out var n)) n = 100;
-                Send<IslandTryReq, TryItReply>(new IslandTryReq { Item = ClientItems.Resolve(_ctx, _mdItem.Value), Amount = n, Direction = int.Parse(_mdDirection.Value) },
-                    r => _mdResult.Text = TryText(n, r));
+                RunTry();
+                if (!_tryWatching) { _tryWatching = true; Progenitor.Dev.MainThread.PostDelayed(5, RefreshTry, _ctx.Owner); }
             }));
             _mdResult = In(MassDepositTab, p.Label(""));
+        }
+
+        bool _tryWatching;
+
+        void RunTry()
+        {
+            if (!int.TryParse(_mdAmount.Value, out var n)) n = 100;
+            Send<IslandTryReq, TryItReply>(new IslandTryReq { Item = ClientItems.Resolve(_ctx, _mdItem.Value), Amount = n, Direction = int.Parse(_mdDirection.Value) },
+                r => _mdResult.Text = TryText(n, r));
+        }
+
+        /// <summary>The evaluator's answer follows the island while the Mass Deposit tab stays open.</summary>
+        void RefreshTry()
+        {
+            if (_panel == null || !_panel.Visible || _tabs.Selected != MassDepositTab) { _tryWatching = false; return; }
+            RunTry();
+            Progenitor.Dev.MainThread.PostDelayed(5, RefreshTry, _ctx.Owner);
         }
 
         void SaveOverrides() =>
@@ -371,7 +413,16 @@ namespace Satisvampory.Client
         {
             _ = Panel;
             _overrideDraft = m.Overrides.ToList();
-            _overview.Text = m.Overview.Count == 0 ? "Nothing stored on the island yet." : string.Join("\n", m.Overview.Take(25)) + (m.Overview.Count > 25 ? $"\n… {m.Overview.Count - 25} more" : "");
+            _overview.Text = "Homes by item and category, best first. Edit a priority to move a chest up or down; it is saved in that chest's own deposit settings.";
+            _homeRows.Clear();
+            _homeRows.AddRange(m.Homes);
+            _homes.SetRows(m.Homes.Select((h, i) =>
+            {
+                var row = new UiTableRow(i.ToString()) { Groups = new[] { h.Label } };
+                row.Text("chest", h.Chest).Text("where", h.Where).Number("priority", h.Priority).Text("why", h.Why);
+                row.Locked = !m.CanEdit;
+                return row;
+            }));
             _overrides.SetItems(m.Overrides.Select((o, i) => new UiListItem(i.ToString(), $"{o.Items} → {o.TargetKind} {o.TargetName}" + (o.TargetPlot.Length > 0 ? " @ " + o.TargetPlot : "")) { Removable = m.CanEdit }));
             if (_script.Value != m.Script && m.Messages.Count == 0) _script.Value = m.Script;
             _script.SetErrors(m.Messages.Where(x => x.IsError).Select(x => new UiLineError(x.Line, x.Text)).ToList());

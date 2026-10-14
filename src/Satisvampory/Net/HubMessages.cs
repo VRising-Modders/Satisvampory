@@ -86,6 +86,33 @@ namespace Satisvampory.Net
         [Field(5)] public bool CanEdit;
         /// <summary>Overview: "Iron Ore → Ore bin · here (Category ore +3 on base 0), Ore 2 · Plot 2 …".</summary>
         [Field(6)] public List<string> Overview = new();
+        /// <summary>Overview table: every item and category with a home, its homes in order and each chest's priority.</summary>
+        [Field(7)] public List<HomeRowMsg> Homes = new();
+    }
+
+    [ModMessage("sv.md.home")]
+    public sealed class HomeRowMsg
+    {
+        /// <summary>"i:&lt;guid&gt;" for an item, "c:&lt;name&gt;" for a category.</summary>
+        [Field(1)] public string Key = "";
+        [Field(2)] public string Label = "";
+        [Field(3)] public string ContainerId = "";
+        [Field(4)] public string Chest = "";
+        [Field(5)] public string Where = "";
+        [Field(6)] public int Priority;
+        [Field(7)] public string Why = "";
+        [Field(8)] public int NetIndex;
+        [Field(9)] public int NetGeneration;
+        [Field(10)] public int NetType;
+    }
+
+    /// <summary>Overview edit: set one chest's priority for one item or category (written into that chest's settings).</summary>
+    [ModMessage("sv.md.home.set")]
+    public sealed class SetHomePriorityReq
+    {
+        [Field(1)] public string ContainerId = "";
+        [Field(2)] public string Key = "";
+        [Field(3)] public int Priority;
     }
 
     [ModMessage("sv.md.get")]

@@ -33,6 +33,7 @@ namespace Satisvampory
             _ctx.Net.OnReceive(EventIds.Text, OnText);
             _admin.Request = SendAction;
             _ctx.Track(new OnDispose(() => _admin.Request = null));
+            new Client.Panels(_ctx).Attach();
             SendPrefs();
         }
 

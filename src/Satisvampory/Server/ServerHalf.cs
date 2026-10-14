@@ -33,13 +33,22 @@ namespace Satisvampory.Server
 
         internal SatisContext Context => _ctx;
 
+        internal CatalogProvider Catalog { get; } = new();
+
+        /// <summary>Policy half of crafting from shared storage; registered with Progenitor's material source when that lands.</summary>
+        internal Engine.World.MaterialPolicy MaterialPolicy { get; } = new();
+
+        internal Ticker? Ticker { get; private set; }
+
         internal unsafe void Attach()
         {
             _active = this;
             _ctx.Track(new OnDispose(() => { if (ReferenceEquals(_active, this)) _active = null; }));
             _ctx.Net.OnReceiveFromClient(EventIds.PlayerPrefs, OnPrefs);
             _ctx.Net.OnReceiveFromClient(EventIds.Action, OnAction);
-            new Ticker(_ctx, this).Attach();
+            Ticker = new Ticker(_ctx, this);
+            Ticker.Attach();
+            new PanelService(_ctx, this).Attach();
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }
 

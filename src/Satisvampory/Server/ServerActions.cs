@@ -96,7 +96,7 @@ namespace Satisvampory.Server
             if (island == null) return Notice(NoticeCode.Refused);
 
             var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
-            var deposit = new DepositContext(new ItemCatalog(), world, island.Scope, ProgenitorWorld.PlotOf(island.Standing))
+            var deposit = new DepositContext(half.Catalog.Current.WithEdits(island.State.Categories), world, island.Scope, ProgenitorWorld.PlotOf(island.Standing))
             {
                 Settings = island.State.MassDeposit,
                 Belts = island.State.Graph.BeltMembers(),

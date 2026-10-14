@@ -32,6 +32,10 @@ namespace Satisvampory.Server
         readonly Stopwatch _clock = Stopwatch.StartNew();
         readonly Dictionary<string, TickState> _tickStates = new();
         readonly Dictionary<PlotId, double> _heartFed = new();
+        readonly Dictionary<string, TickReport> _lastReports = new();
+
+        /// <summary>The last conveyor report for an island, for the panels' row status lines.</summary>
+        internal TickReport? LastReport(string islandKey) => _lastReports.TryGetValue(islandKey, out var r) ? r : null;
         bool _stopped;
 
         internal Ticker(SatisContext ctx, ServerHalf half)
@@ -90,7 +94,7 @@ namespace Satisvampory.Server
 
                 var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null);
                 var scope = members.Select(ProgenitorWorld.PlotOf).ToList();
-                var deposit = new DepositContext(new ItemCatalog(), world, scope, plot)
+                var deposit = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, scope, plot)
                 {
                     Settings = state.MassDeposit,
                     Belts = state.Graph.BeltMembers(),
@@ -110,6 +114,7 @@ namespace Satisvampory.Server
                     LoopsAllowed = server.AllowLoops,
                 }).Run(Now);
                 budget -= report.Moves.Count;
+                _lastReports[key] = report;
             }
         }
 
@@ -221,7 +226,7 @@ namespace Satisvampory.Server
             var heartRef = _ctx.Inventory.Of(castle.Heart.ToEntity());
             var heartId = world.AddBag(heartRef);
             var plot = ProgenitorWorld.PlotOf(castle);
-            var deposit = new DepositContext(new ItemCatalog(), world, members.Select(ProgenitorWorld.PlotOf).ToList(), plot)
+            var deposit = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, members.Select(ProgenitorWorld.PlotOf).ToList(), plot)
             {
                 Settings = state.MassDeposit,
                 Belts = state.Graph.BeltMembers(),

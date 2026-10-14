@@ -19,6 +19,7 @@ namespace Satisvampory.Client
         public const string InventoryTip = "sv.tip.inventory";
         public const string MassDepositTip = "sv.tip.massdeposit";
         public const string BeltsTip = "sv.tip.belts";
+        public const string SharedIslandTip = "sv.tip.shared";
 
         static readonly (string Id, string Title, string Body)[] Tips =
         {
@@ -32,6 +33,8 @@ namespace Satisvampory.Client
                 "Stash sends each item to the chest whose deposit settings rate it highest. Overrides and rules here change that for the whole island; Try it shows what would happen without moving anything."),
             (BeltsTip, "Belts and categories",
                 "A belt is a named list of chests and stations you use together; put it in any Input or Output. A category is a named set of items for filters, reserves and caps."),
+            (SharedIslandTip, "A shared island",
+                "This castle shares with others, so stash, pull, Find, crafting and the lists reach every chest on the island. Castle share and Clan share are on the Satisvampory settings page."),
             (InventoryTip, "Inventory",
                 "Everything on your island. Click a header to sort, Shift-click to add a second key. Edit Reserve or Cap in place; clear a cell to go back to the default."),
         };
@@ -48,7 +51,7 @@ namespace Satisvampory.Client
         }
 
         /// <summary>Shows a tip card beside <paramref name="anchor"/> unless the player has dismissed it.</summary>
-        internal static void Tip(SatisContext ctx, string id, IUiPanel anchor)
+        internal static void Tip(SatisContext ctx, string id, IUiPanel? anchor)
         {
             var t = Tips.FirstOrDefault(x => x.Id == id);
             if (t.Id == null || ctx.Hud.IsTipSeen(id)) return;

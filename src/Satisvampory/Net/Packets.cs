@@ -65,6 +65,8 @@ namespace Satisvampory.Net
         Tidied = 4,
         /// <summary>Refused because of the player's state; A is a <see cref="StateRefusal"/>.</summary>
         NotNow = 5,
+        /// <summary>The player stepped onto a plot whose island joins more than one castle (shows a one-time tip).</summary>
+        SharedIsland = 6,
     }
 
     public enum StateRefusal

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using Progenitor.Inventory;
 using Progenitor.Networking;
+using Progenitor.Plugins;
 using Progenitor.Ui;
 using Satisvampory.Config;
 using Satisvampory.Net;
@@ -61,8 +62,15 @@ namespace Satisvampory.Client
         IUiLabel _invIsland = null!;
         IUiDataTable _invTable = null!;
         IUiChips _invCats = null!;
-        InventoryMsg? _invLast;
         bool _invCanEdit;
+        // Live inventory (spec 15): a snapshot, then deltas while the tab is open.
+        Subscription<InventoryMsg, InventoryDeltaMsg>? _invSub;
+        readonly string _invKey = "c" + Guid.NewGuid().ToString("N");
+        readonly Dictionary<int, InventoryRowMsg> _invRows = new();
+        readonly HashSet<int> _invFlash = new();
+        string _invIslandText = "";
+        string _invChipSet = "";
+        bool _invViewApplied, _invApplyingView;
         IUiInput _ruleTarget = null!;
         IUiDropdown _ruleKind = null!;
         IUiNumber _ruleValue = null!;
@@ -542,8 +550,9 @@ namespace Satisvampory.Client
         {
             _invSearch = In(InventoryTab, p.Input("Search", ""));
             _invShort = In(InventoryTab, p.Toggle("Only short", false));
-            Track(In(InventoryTab, p.Button("Refresh")).OnClick(LoadInventory));
-            Track(_invShort.OnChanged(_ => LoadInventory()));
+            Track(_invSearch.OnChanged(_ => DrawInventory()));
+            Track(_invShort.OnChanged(_ => DrawInventory()));
+            Track(In(InventoryTab, p.Button("Refresh")).OnClick(() => { StopLiveInventory(); LoadInventory(); }));
             _invIsland = In(InventoryTab, p.Label(""));
             _invCats = In(InventoryTab, p.Chips("inv.cats", Array.Empty<UiChip>(), new UiChipsOptions
             {
@@ -553,7 +562,7 @@ namespace Satisvampory.Client
                 EmptyText = "",
             }));
             Track(_invCats.Term("Category"));
-            Track(_invCats.OnClick(_ => { if (_invLast != null) DrawInventory(_invLast); }));
+            Track(_invCats.OnClick(_ => DrawInventory()));
             _invTable = In(InventoryTab, p.DataTable("inv", new[]
             {
                 new UiTableColumn("item", "Item") { Hideable = false },
@@ -574,41 +583,128 @@ namespace Satisvampory.Client
                 EmptyText = "Nothing stored on this island.",
             }));
             Track(_invTable.OnEdit(OnInventoryEdit));
+            Track(_invTable.OnSortChanged(_ => SaveInventoryView()));
+            Track(_invTable.OnColumnsChanged(_ => SaveInventoryView()));
             In(InventoryTab, p.Divider());
             _ruleTarget = In(InventoryTab, p.Input("Category reserve or cap: \"category <name>\" (items: edit the table)", ""));
             _ruleKind = In(InventoryTab, p.Dropdown("Set", new[] { "0", "1" }, "0", new[] { "Reserve", "Cap" }));
             _ruleValue = In(InventoryTab, p.Number("Value (−1 clears)", -1, -1, 1_000_000));
             Track(In(InventoryTab, p.Button("Apply")).OnClick(() =>
-                Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = ClientItems.Resolve(_ctx, _ruleTarget.Value), Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, DrawInventory)));
+                Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = ClientItems.Resolve(_ctx, _ruleTarget.Value), Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, ApplySnapshot)));
+            Track(new OnDispose(StopLiveInventory));
         }
 
+        /// <summary>Opens the live subscription; the server sends the whole island, then only what changed.</summary>
         void LoadInventory()
         {
             _ = Panel;
-            Send<GetInventoryReq, InventoryMsg>(new GetInventoryReq { Search = _invSearch.Value, OnlyShort = _invShort.Value }, DrawInventory);
+            if (_invSub is { State: SubscriptionState.Pending or SubscriptionState.Live }) return;
+            _invSub = _ctx.Subscriptions.Subscribe<InventoryMsg, InventoryDeltaMsg>("sv.inv.live", _invKey,
+                (m, _) => ApplySnapshot(m),
+                (d, _) => ApplyDelta(d),
+                (why, text) =>
+                {
+                    _invSub = null;
+                    if (!string.IsNullOrEmpty(text)) _invIsland.Text = "Not live: " + text;
+                });
+            Progenitor.Dev.MainThread.PostDelayed(3, WatchLiveInventory, _ctx.Owner);
         }
 
-        void DrawInventory(InventoryMsg m)
+        /// <summary>Ends the subscription once the hub closes or another tab is chosen.</summary>
+        void WatchLiveInventory()
+        {
+            if (_invSub == null) return;
+            if (_panel == null || !_panel.Visible || _tabs.Selected != InventoryTab) { StopLiveInventory(); return; }
+            Progenitor.Dev.MainThread.PostDelayed(3, WatchLiveInventory, _ctx.Owner);
+        }
+
+        void StopLiveInventory()
+        {
+            var sub = _invSub;
+            _invSub = null;
+            try { sub?.Dispose(); } catch { }
+        }
+
+        void ApplySnapshot(InventoryMsg m)
+        {
+            _invRows.Clear();
+            foreach (var r in m.Rows) _invRows[r.Item] = r;
+            _invFlash.Clear();
+            _invIslandText = m.Island;
+            _invCanEdit = m.CanEdit;
+            if (!_invViewApplied)
+            {
+                _invViewApplied = true;
+                ApplyInventoryView(m.Sort, m.Hidden);
+            }
+            DrawInventory();
+        }
+
+        void ApplyDelta(InventoryDeltaMsg d)
+        {
+            _invFlash.Clear();
+            foreach (var r in d.Changed) { _invRows[r.Item] = r; _invFlash.Add(r.Item); }
+            foreach (var item in d.Removed) _invRows.Remove(item);
+            DrawInventory();
+        }
+
+        /// <summary>The player's remembered sort ("col:a,col:d") and hidden columns, from the server.</summary>
+        void ApplyInventoryView(string sort, string hidden)
+        {
+            _invApplyingView = true;
+            try
+            {
+                var keys = (sort ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(k => k.Split(':'))
+                    .Where(k => k.Length == 2 && _invTable.Columns.Any(c => c.Key == k[0]))
+                    .Select(k => new UiTableSortKey(k[0], k[1] != "d"))
+                    .ToList();
+                if (keys.Count > 0) _invTable.Sort = keys;
+                var hide = new HashSet<string>((hidden ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries));
+                foreach (var c in _invTable.Columns.Where(c => c.Hideable))
+                    _invTable.SetColumnVisible(c.Key, !hide.Contains(c.Key));
+            }
+            finally { _invApplyingView = false; }
+        }
+
+        void SaveInventoryView()
+        {
+            if (_invApplyingView) return;
+            var sort = string.Join(",", _invTable.Sort.Select(k => k.Column + ":" + (k.Ascending ? "a" : "d")));
+            var hidden = string.Join(",", _invTable.HiddenColumns);
+            _ctx.Requests.Send<SetViewReq, ViewSaved>(new SetViewReq { View = "inv", Sort = sort, Hidden = hidden }, _ => { });
+        }
+
+        static IEnumerable<string> Cats(InventoryRowMsg r) => r.Categories.Split(',').Select(c => c.Trim()).Where(c => c.Length > 0);
+
+        void DrawInventory()
         {
             static string From(int f) => f == 1 ? "category" : "default";
-            static IEnumerable<string> Cats(InventoryRowMsg r) => r.Categories.Split(',').Select(c => c.Trim()).Where(c => c.Length > 0);
-            var fresh = !ReferenceEquals(m, _invLast);
-            _invLast = m;
-            _invCanEdit = m.CanEdit;
-            _invIsland.Text = m.Island + (m.Rows.Count >= 500 ? " · first 500 items; narrow with Search." : "");
+            var all = _invRows.Values.ToList();
+            _invIsland.Text = _invIslandText + (all.Count >= 2000 ? " · first 2,000 items." : "") + (_invSub is { State: SubscriptionState.Live } ? " · live" : "");
 
-            // Category chips (spec 15): the categories present, most items first; selected ones filter the table.
+            // Category chips: the categories present, most items first; selected ones filter the table.
             var picked = new HashSet<string>(_invCats.SelectedIds);
-            if (fresh)
-                _invCats.SetChips(m.Rows.SelectMany(Cats).GroupBy(c => c).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(24)
-                    .Select(g => new UiChip(g.Key, g.Key) { Note = g.Count().ToString(), Removable = false, Selected = picked.Contains(g.Key), Tooltip = "Show only " + g.Key }));
-            picked = new HashSet<string>(_invCats.SelectedIds);
-            var rows = picked.Count == 0 ? m.Rows : m.Rows.Where(r => Cats(r).Any(picked.Contains)).ToList();
+            var groups = all.SelectMany(Cats).GroupBy(c => c).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(24).ToList();
+            var chipSet = string.Join("|", groups.Select(g => g.Key + g.Count()));
+            if (chipSet != _invChipSet)
+            {
+                _invChipSet = chipSet;
+                _invCats.SetChips(groups.Select(g => new UiChip(g.Key, g.Key) { Note = g.Count().ToString(), Removable = false, Selected = picked.Contains(g.Key), Tooltip = "Show only " + g.Key }));
+                picked = new HashSet<string>(_invCats.SelectedIds);
+            }
+
+            var search = NameKey(_invSearch.Value);
+            IEnumerable<InventoryRowMsg> rows = all;
+            if (picked.Count > 0) rows = rows.Where(r => Cats(r).Any(picked.Contains));
+            if (_invShort.Value) rows = rows.Where(r => r.Status == "Short");
+            if (search.Length > 0) rows = rows.Where(r => NameKey(ClientItems.NameOf(_ctx, r.Item, r.Name)).Contains(search) || NameKey(r.Categories).Contains(search));
 
             _invTable.SetRows(rows.Select(r =>
             {
                 var row = new UiTableRow(r.Item.ToString()) { ItemPrefab = r.Item, Detail = r.Categories.Length > 0 ? "Categories: " + r.Categories : "" };
-                row.Text("item", ClientItems.NameOf(_ctx, r.Item, r.Name))
+                var tone = _invFlash.Contains(r.Item) ? LabelTone.Ok : LabelTone.Normal;
+                row.Text("item", ClientItems.NameOf(_ctx, r.Item, r.Name), tone)
                     .Number("total", r.Total)
                     .Number("here", r.Here)
                     .Number("chests", r.Chests)
@@ -618,10 +714,12 @@ namespace Satisvampory.Client
                     .Number("cap", r.Cap < 0 ? null : r.Cap, inherited: r.Cap >= 0 && r.CapFrom != 2, source: r.Cap >= 0 && r.CapFrom != 2 ? From(r.CapFrom) : "")
                     .Number("demand", r.Demand)
                     .Text("status", r.Status, r.Status is "Short" or "Below reserve" ? LabelTone.Warn : LabelTone.Normal);
-                row.Locked = !m.CanEdit;
+                row.Locked = !_invCanEdit;
                 return row;
             }));
         }
+
+        static string NameKey(string? s) => (s ?? "").Trim().ToLowerInvariant();
 
         /// <summary>An inline Reserve or Cap edit: the server decides; a cleared cell goes back to the default.</summary>
         void OnInventoryEdit(UiTableEdit e)
@@ -630,7 +728,7 @@ namespace Satisvampory.Client
             var value = e.Clear || e.NewValue is not { } v ? -1 : (int)Math.Max(0, Math.Round(v));
             _ctx.Requests.Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = e.RowId, Rule = e.Column == "cap" ? 1 : 0, Value = value }, r =>
             {
-                if (r.Ok && r.Reply != null) { e.Resolve(); DrawInventory(r.Reply); }
+                if (r.Ok && r.Reply != null) { e.Resolve(); ApplySnapshot(r.Reply); }
                 else e.Reject(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : "Not saved: " + r.Status);
             });
         }

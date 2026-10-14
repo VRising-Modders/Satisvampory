@@ -30,6 +30,15 @@ namespace Satisvampory.Server
         public static void SetPlayer(IModStore store, ulong platformId, PlayerSettings settings) =>
             store.Set(PlayerKey(platformId), settings);
 
+        /// <summary>"view/&lt;view&gt;/&lt;platform id&gt;": a player's remembered table sort and hidden columns.</summary>
+        public static string ViewKey(string view, ulong platformId) => "view/" + view + "/" + platformId;
+
+        public static TableView View(IModStore store, string view, ulong platformId) =>
+            store.Get<TableView>(ViewKey(view, platformId)) ?? new TableView();
+
+        public static void SetView(IModStore store, string view, ulong platformId, TableView value) =>
+            store.Set(ViewKey(view, platformId), value);
+
         public static string CastleKey(int territory) => "castle-settings/" + territory;
 
         /// <summary>Castle page settings (spec 10), kept on the castle's territory so they follow the heart, not the owner.</summary>
@@ -123,5 +132,11 @@ namespace Satisvampory.Server
             var clan = _ctx.Clans.Of(castle.Owner.User.ToEntity());
             return clan.IsNone ? null : clan.ClanGuid.ToString("N");
         }
+    }
+
+    internal sealed class TableView
+    {
+        public string Sort { get; set; } = "";
+        public string Hidden { get; set; } = "";
     }
 }

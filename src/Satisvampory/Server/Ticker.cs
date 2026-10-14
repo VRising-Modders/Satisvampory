@@ -11,6 +11,7 @@ using Satisvampory.Engine.Model;
 using Satisvampory.Engine.Persistence;
 using Satisvampory.Engine.Stations;
 using Satisvampory.Engine.World;
+using Satisvampory.Net;
 using Satisvampory.World;
 using Unity.Entities;
 
@@ -211,6 +212,25 @@ namespace Satisvampory.Server
         {
             if (e.Castle == null || !e.Castle.Enabled) return;
             Feed(e.User.ToEntity(), HeartTrigger.Visit, e.Castle);
+            TellIfShared(e.User.ToEntity());
+        }
+
+        /// <summary>Spec 16: a one-time tip the first time a player stands on a shared island. The client keeps the seen state.</summary>
+        void TellIfShared(Entity userEntity)
+        {
+            try
+            {
+                var user = _ctx.World!.EntityManager.GetComponentData<ProjectM.Network.User>(userEntity);
+                var island = ServerActions.Resolve(_ctx, _half, userEntity, user);
+                if (island == null || island.Scope.Count <= 1) return;
+                if (island.Relation is not (Progenitor.Castles.CastleRelation.Owner or Progenitor.Castles.CastleRelation.ClanMember)) return;
+                var n = new NoticePacket { Magic = EventIds.Magic, Code = (int)NoticeCode.SharedIsland, A = island.Scope.Count };
+                _ctx.Net.SendToUser(userEntity, EventIds.Notice, n);
+            }
+            catch (Exception ex)
+            {
+                _ctx.Log.LogError("Satisvampory: shared island notice failed: " + ex.Message);
+            }
         }
 
         void OnReady(PlayerReady e)

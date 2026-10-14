@@ -189,6 +189,33 @@ namespace Satisvampory.Net
         [Field(1)] public List<InventoryRowMsg> Rows = new();
         [Field(2)] public string Island = "";
         [Field(3)] public bool CanEdit;
+        /// <summary>The player's remembered table sort: "column:a" / "column:d", comma separated.</summary>
+        [Field(4)] public string Sort = "";
+        /// <summary>The player's hidden columns, comma separated.</summary>
+        [Field(5)] public string Hidden = "";
+    }
+
+    /// <summary>Live inventory (spec 15): the rows that changed or went away since the last snapshot or delta.</summary>
+    [ModMessage("sv.inv.delta")]
+    public sealed class InventoryDeltaMsg
+    {
+        [Field(1)] public List<InventoryRowMsg> Changed = new();
+        [Field(2)] public List<int> Removed = new();
+    }
+
+    /// <summary>Remember a table view for this player (sort keys and hidden columns).</summary>
+    [ModMessage("sv.view.set")]
+    public sealed class SetViewReq
+    {
+        [Field(1)] public string View = "";
+        [Field(2)] public string Sort = "";
+        [Field(3)] public string Hidden = "";
+    }
+
+    [ModMessage("sv.view.ok")]
+    public sealed class ViewSaved
+    {
+        [Field(1)] public bool Ok;
     }
 
     [ModMessage("sv.inv.get")]

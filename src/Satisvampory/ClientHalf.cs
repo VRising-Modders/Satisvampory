@@ -90,6 +90,11 @@ namespace Satisvampory
             if (length < sizeof(NoticePacket)) return;
             var n = *(NoticePacket*)payload;
             if (n.Magic != EventIds.Magic) return;
+            if ((NoticeCode)n.Code == NoticeCode.SharedIsland)
+            {
+                Client.Help.Tip(_ctx, Client.Help.SharedIslandTip, null);
+                return;
+            }
             var text = (NoticeCode)n.Code switch
             {
                 NoticeCode.NotAvailableYet => "Satisvampory: that needs Progenitor's inventory API, which this build does not have yet.",

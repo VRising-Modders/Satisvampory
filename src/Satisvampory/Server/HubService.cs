@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Progenitor.Castles;
+using Progenitor.Plugins;
+using Progenitor.Dev;
 using Progenitor.Networking;
 using ProjectM.Network;
 using Satisvampory.Engine.Deposit;
@@ -47,6 +49,8 @@ namespace Satisvampory.Server
             r.Handle<GetBeltsReq, BeltsMsg>((u, q, i) => With(u, s => Belts(s)));
             r.Handle<BeltEditReq, BeltsMsg>((u, q, i) => With(u, s => EditBelts(s, q)));
             r.Handle<GetInventoryReq, InventoryMsg>((u, q, i) => With(u, s => Inventory(s, q)));
+            r.Handle<SetViewReq, ViewSaved>((u, q, i) => SetView(u, q));
+            AttachLiveInventory();
             r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => SetRule(s, q)));
             r.Handle<FindReq, FindReply>((u, q, i) => With(u, s => Find(s, q)));
             r.Handle<PullReq, TextReply>((u, q, i) => With(u, s => Pull(s, q)));
@@ -416,7 +420,10 @@ namespace Satisvampory.Server
             var col = Enum.IsDefined(typeof(InventoryColumn), q.SortColumn) ? (InventoryColumn)q.SortColumn : InventoryColumn.Item;
             var sorted = InventoryReport.Sort(filtered, new[] { new SortKey(col, q.Descending) });
             var msg = new InventoryMsg { CanEdit = s.Role != ActorRole.Guest, Island = string.Join(" + ", s.Island.Castles.Select(c => Label(s.Island, ProgenitorWorld.PlotOf(c)))) };
-            foreach (var r in sorted.Take(500))
+            var view = Stores.View(_ctx.Save, "inv", s.User.PlatformId);
+            msg.Sort = view.Sort;
+            msg.Hidden = view.Hidden;
+            foreach (var r in sorted.Take(InventoryRowCap))
                 msg.Rows.Add(new InventoryRowMsg
                 {
                     Item = r.Item.Guid,
@@ -442,6 +449,86 @@ namespace Satisvampory.Server
                     },
                 });
             return msg;
+        }
+
+        const int InventoryRowCap = 2000;
+
+        ViewSaved SetView(Entity userEntity, SetViewReq q)
+        {
+            var view = (q.View ?? "").Trim();
+            if (view != "inv") throw new RequestRefusedException("Unknown view.");
+            if ((q.Sort?.Length ?? 0) > 400 || (q.Hidden?.Length ?? 0) > 400) throw new RequestRefusedException("Too long.");
+            var user = _ctx.World!.EntityManager.GetComponentData<User>(userEntity);
+            Stores.SetView(_ctx.Save, view, user.PlatformId, new TableView { Sort = q.Sort ?? "", Hidden = q.Hidden ?? "" });
+            return new ViewSaved { Ok = true };
+        }
+
+        // ---------------- live inventory (spec 15) ----------------
+
+        const double LiveSeconds = 2;
+        SubscriptionTopic<InventoryMsg, InventoryDeltaMsg>? _live;
+        /// <summary>Per subscription key: who opened it and the rows last sent, by item.</summary>
+        readonly Dictionary<string, (Entity User, string Island, Dictionary<int, string> Rows)> _liveState = new();
+
+        void AttachLiveInventory()
+        {
+            _live = _ctx.Subscriptions.Topic<InventoryMsg, InventoryDeltaMsg>("sv.inv.live", LiveSnapshot);
+            _ctx.Track(_live);
+            _live.Closed += (_, key) => _liveState.Remove(key);
+            _ctx.Track(new OnDispose(() => _liveStopped = true));
+            MainThread.PostDelayed(LiveSeconds, LiveTick, _ctx.Owner);
+        }
+
+        bool _liveStopped;
+
+        static string Fingerprint(InventoryRowMsg r) =>
+            $"{r.Total}|{r.Here}|{r.Chests}|{r.InStations}|{r.Reserve}|{r.ReserveFrom}|{r.Spare}|{r.Cap}|{r.CapFrom}|{r.Demand}|{r.Status}|{r.Categories}";
+
+        /// <summary>Snapshot for one key. A key belongs to the user who opened it; the island is re-resolved every time.</summary>
+        InventoryMsg LiveSnapshot(Entity userEntity, string key)
+        {
+            if (string.IsNullOrEmpty(key) || key.Length > 64) throw new RequestRefusedException("Bad key.");
+            if (_liveState.TryGetValue(key, out var st) && st.User != userEntity) throw new RequestRefusedException("That key is in use.");
+            var msg = With(userEntity, s => Inventory(s, new GetInventoryReq()));
+            _liveState[key] = (userEntity, msg.Island, msg.Rows.ToDictionary(r => r.Item, Fingerprint));
+            return msg;
+        }
+
+        void LiveTick()
+        {
+            try
+            {
+                if (_live == null || _liveStopped) return;
+                foreach (var key in _live.Keys)
+                {
+                    if (!_liveState.TryGetValue(key, out var st)) { _live.Resync(key); continue; }
+                    InventoryMsg now;
+                    try { now = With(st.User, s => Inventory(s, new GetInventoryReq())); }
+                    catch (RequestRefusedException) { _live.Resync(key); continue; } // the snapshot refuses and ends it
+                    if (now.Island != st.Island) { _live.Resync(key); continue; }
+
+                    var delta = new InventoryDeltaMsg();
+                    var rows = new Dictionary<int, string>();
+                    foreach (var r in now.Rows)
+                    {
+                        var f = Fingerprint(r);
+                        rows[r.Item] = f;
+                        if (!st.Rows.TryGetValue(r.Item, out var old) || old != f) delta.Changed.Add(r);
+                    }
+                    foreach (var item in st.Rows.Keys)
+                        if (!rows.ContainsKey(item)) delta.Removed.Add(item);
+                    _liveState[key] = (st.User, st.Island, rows);
+                    if (delta.Changed.Count > 0 || delta.Removed.Count > 0) _live.Publish(key, delta);
+                }
+            }
+            catch (Exception e)
+            {
+                _ctx.Log.LogError("Satisvampory: live inventory failed: " + e.Message);
+            }
+            finally
+            {
+                if (!_liveStopped) MainThread.PostDelayed(LiveSeconds, LiveTick, _ctx.Owner);
+            }
         }
 
         InventoryMsg SetRule(Session s, SetRuleReq q)

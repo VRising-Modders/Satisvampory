@@ -100,6 +100,9 @@ namespace Satisvampory.Engine.Persistence
         public RulesDto Rules { get; set; } = new();
         public Dictionary<string, ContainerDto> Containers { get; set; } = new();
         public Dictionary<string, string> LoopModes { get; set; } = new();
+        public Dictionary<string, List<int>> EditedCategories { get; set; } = new();
+        public Dictionary<string, List<int>> CustomCategories { get; set; } = new();
+        public Dictionary<string, int> Aliases { get; set; } = new();
     }
 
     /// <summary>The engine objects an <see cref="IslandSave"/> becomes.</summary>
@@ -111,6 +114,7 @@ namespace Satisvampory.Engine.Persistence
         /// <summary>Deposit options per container, applied onto ContainerInfo by the adapter.</summary>
         public Dictionary<ContainerId, DepositOptions> Deposit { get; init; } = new();
         public Dictionary<string, LoopMode> LoopModes { get; init; } = new();
+        public CategoryEdits Categories { get; init; } = new();
     }
 
     public static class SaveCodec
@@ -150,6 +154,9 @@ namespace Satisvampory.Engine.Persistence
                     LogisticsOn = s.Rules.LogisticsOn,
                 },
                 LoopModes = s.LoopModes.ToDictionary(k => k.Key, v => v.Value.ToString()),
+                EditedCategories = s.Categories.Edited.ToDictionary(k => k.Key, v => v.Value.Select(i => i.Guid).ToList()),
+                CustomCategories = s.Categories.Custom.ToDictionary(k => k.Key, v => v.Value.Select(i => i.Guid).ToList()),
+                Aliases = s.Categories.Aliases.ToDictionary(k => k.Key, v => v.Value.Guid),
             };
 
             foreach (var b in s.Graph.Belts.Values)
@@ -245,6 +252,10 @@ namespace Satisvampory.Engine.Persistence
                 d.Special = Enum.TryParse<SpecialKind>(dto.Special, out var sk) ? sk : SpecialKind.None;
                 state.Deposit[id] = d;
             }
+
+            foreach (var (name, items) in save.EditedCategories) state.Categories.Edited[name] = items.Select(i => new ItemId(i)).ToList();
+            foreach (var (name, items) in save.CustomCategories) state.Categories.Custom[name] = items.Select(i => new ItemId(i)).ToList();
+            foreach (var (alias, item) in save.Aliases) state.Categories.Aliases[alias] = new ItemId(item);
 
             foreach (var (key, mode) in save.LoopModes)
                 if (Enum.TryParse<LoopMode>(mode, out var m)) state.LoopModes[key] = m;

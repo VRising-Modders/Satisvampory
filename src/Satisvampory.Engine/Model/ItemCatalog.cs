@@ -66,6 +66,66 @@ namespace Satisvampory.Engine.Model
 
         public IEnumerable<string> CategoriesOf(ItemId item) =>
             _categories.Where(kv => kv.Value.Contains(item)).Select(kv => kv.Key);
+
+        public IEnumerable<string> CategoryNames => _categories.Keys;
+
+        public bool IsBuiltIn(string category) => _builtIn.Contains(NameFold.Fold(category));
+
+        readonly HashSet<string> _builtIn = new(StringComparer.Ordinal);
+
+        /// <summary>Marks every category defined so far as built-in (call once after the generated set is loaded).</summary>
+        public void SealBuiltIns()
+        {
+            foreach (var k in _categories.Keys) _builtIn.Add(k);
+        }
+
+        /// <summary>
+        /// A copy of this catalog with one island's edits applied (spec 14): edited built-ins replace
+        /// the generated members, custom categories are added, castle aliases are added. Server
+        /// catalog is never changed.
+        /// </summary>
+        public ItemCatalog WithEdits(CategoryEdits edits)
+        {
+            var c = new ItemCatalog();
+            foreach (var kv in _names) c._names[kv.Key] = kv.Value;
+            foreach (var kv in _byName) c._byName[kv.Key] = kv.Value;
+            foreach (var kv in _aliases) c._aliases[kv.Key] = kv.Value;
+            foreach (var kv in _maxStack) c._maxStack[kv.Key] = kv.Value;
+            foreach (var kv in _categoryAliases) c._categoryAliases[kv.Key] = kv.Value;
+            foreach (var kv in _categories) c._categories[kv.Key] = new HashSet<ItemId>(kv.Value);
+            c._builtIn.UnionWith(_builtIn);
+
+            foreach (var (name, members) in edits.Edited)
+            {
+                var key = NameFold.Fold(name);
+                if (c._categories.ContainsKey(key)) c._categories[key] = new HashSet<ItemId>(members);
+            }
+            foreach (var (name, members) in edits.Custom)
+            {
+                var key = NameFold.Fold(name);
+                if (c._builtIn.Contains(key)) continue; // a custom category never shadows a built-in
+                c._categories[key] = new HashSet<ItemId>(members);
+            }
+            foreach (var (alias, item) in edits.Aliases)
+            {
+                var key = NameFold.Fold(alias);
+                if (!c._categories.ContainsKey(key) && !c._categoryAliases.ContainsKey(key)) c._aliases[key] = item;
+            }
+            return c;
+        }
+    }
+
+    /// <summary>One island's category edits (spec 14).</summary>
+    public sealed class CategoryEdits
+    {
+        /// <summary>Castle copies of built-ins: name to members.</summary>
+        public Dictionary<string, List<ItemId>> Edited { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Custom categories: name to members.</summary>
+        public Dictionary<string, List<ItemId>> Custom { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Castle item aliases: alias to item.</summary>
+        public Dictionary<string, ItemId> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>Case, whitespace and spelling fold shared by every name comparison.</summary>

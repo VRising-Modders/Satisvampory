@@ -232,3 +232,27 @@ namespace Satisvampory.Engine.Tests
         }
     }
 }
+
+namespace Satisvampory.Engine.Tests
+{
+    public class StableTests
+    {
+        [Fact]
+        public void Stable_output_sends_generated_items_but_never_feed()
+        {
+            var cat = TestItems.Catalog();
+            var w = new FakeWorld();
+            var g = new LogisticsGraph();
+            var home = new PlotId(1);
+            var stable = w.Chest(home, "Stable", kind: NodeKind.Station);
+            stable.Role = StationRole.Stable;
+            w.StationRecipes[stable.Id] = new List<Recipe> { new(1, new[] { new ItemStack(TestItems.Plank, 1) }, new ItemStack[0], true) };
+            w.Put(stable, TestItems.Plank, 20, InvPart.Output).Put(stable, TestItems.Ruby, 3, InvPart.Output);
+            var bin = w.Chest(home, "bin");
+            g.For(stable.Id).Output.Add(ListEntry.Of(bin.Id));
+            new ConveyorTick(w, new DepositContext(cat, w, new[] { home }, home), g, new CastleRules(), new TickState()).Run(0);
+            Assert.Equal(3, w.Count(bin.Id, TestItems.Ruby));
+            Assert.Equal(0, w.Count(bin.Id, TestItems.Plank));
+        }
+    }
+}

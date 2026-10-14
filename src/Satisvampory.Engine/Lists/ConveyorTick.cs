@@ -259,6 +259,7 @@ namespace Satisvampory.Engine.Lists
 
                 foreach (var stack in _world.Contents(from.Id, PartOf(from.Id)))
                 {
+                    if (IsStableFeed(from.Id, stack.Item)) continue;
                     var wanting = targets.Where(e => e.Filter.Allows(stack.Item, Catalog)).ToList();
                     if (wanting.Count == 0) continue;
                     var left = stack.Amount;
@@ -306,7 +307,7 @@ namespace Satisvampory.Engine.Lists
                 if (entry == null || !_inScope.Contains(id)) continue;
                 foreach (var stack in _world.Contents(id, PartOf(id)))
                 {
-                    if (!entry.Filter.Allows(stack.Item, Catalog)) continue;
+                    if (!entry.Filter.Allows(stack.Item, Catalog) || IsStableFeed(id, stack.Item)) continue;
                     var left = stack.Amount;
                     foreach (var m in DepositPlanner.Plan(_ctx, stack.Item, left, id))
                     {
@@ -348,6 +349,13 @@ namespace Satisvampory.Engine.Lists
             f.Items.Concat(f.Categories.SelectMany(Catalog.Members)).Distinct().Where(i => f.Allows(i, Catalog));
 
         // ---------------- helpers ----------------
+
+        /// <summary>
+        /// A stable's Output gives up only what the mount generates, never feed (spec 01). The
+        /// adapter reports a stable's feed items as its recipe inputs.
+        /// </summary>
+        bool IsStableFeed(ContainerId id, ItemId item) =>
+            _world.Find(id)?.Role == StationRole.Stable && _world.Recipes(id).Any(r => r.Inputs.Any(i => i.Item == item));
 
         InvPart PartOf(ContainerId id) => _world.Find(id)?.Kind == NodeKind.Station ? InvPart.Output : InvPart.Main;
 

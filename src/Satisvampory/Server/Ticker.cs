@@ -90,7 +90,6 @@ namespace Satisvampory.Server
                 var save = Stores.Island(_ctx.Save, key);
                 if (save == null || save.Containers.Count == 0) continue;
                 var state = SaveCodec.Restore(save, out _);
-                if (state.Graph.Lists.Count == 0) continue;
 
                 var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
                 {
@@ -102,6 +101,8 @@ namespace Satisvampory.Server
                     Settings = state.MassDeposit,
                     Belts = state.Graph.BeltMembers(),
                 };
+                RunSpecials(world, members, server);
+                if (state.Graph.Lists.Count == 0) continue;
                 if (!_tickStates.TryGetValue(key, out var tickState)) _tickStates[key] = tickState = new TickState();
                 foreach (var (loopKey, mode) in state.LoopModes)
                 {
@@ -149,6 +150,30 @@ namespace Satisvampory.Server
                 if (mine.Count > 1) return ("owner/" + castle.Owner.PlatformId, mine);
             }
             return ("castle/" + castle.Territory.Index, new List<ICastleHandle> { castle });
+        }
+
+        /// <summary>Salvage, spawner and brazier chests work on their own plot (spec 09).</summary>
+        void RunSpecials(ProgenitorWorld world, List<ICastleHandle> members, ServerSettings server)
+        {
+            foreach (var castle in members)
+            {
+                var plot = ProgenitorWorld.PlotOf(castle);
+                var castleSettings = Stores.Castle(_ctx.Save, castle.Territory.Index);
+                var sw = new SpecialSwitches
+                {
+                    AllowSalvage = server.AllowSalvage,
+                    CastleFeedsSalvage = castleSettings.FeedSalvage,
+                    AllowSpawner = server.AllowSpawnerChests,
+                    AllowBrazier = server.AllowBrazierChests,
+                    // Lighting braziers needs a Progenitor brazier API; fuel still flows.
+                    AllowNightAndProximity = false,
+                    AllowTrash = server.AllowTrash,
+                };
+                var report = new JobReport();
+                SpecialJobs.Salvage(world, plot, sw, report);
+                SpecialJobs.Spawners(world, plot, sw, report);
+                SpecialJobs.Braziers(world, plot, sw, isNight: false, players: Array.Empty<(float, float)>(), report);
+            }
         }
 
         static SharingState Sharing(ServerSettings s) => new()
@@ -199,7 +224,8 @@ namespace Satisvampory.Server
                 {
                     var fuel = c.HeartFuel();
                     var rel = _ctx.Castles.RelationTo(userEntity, c);
-                    return new HeartInfo(ProgenitorWorld.PlotOf(c), fuel.UnlockedSlots, fuel.FuelQuantity, AutoFeedOn: true,
+                    return new HeartInfo(ProgenitorWorld.PlotOf(c), fuel.UnlockedSlots, fuel.FuelQuantity,
+                        AutoFeedOn: Stores.Castle(_ctx.Save, c.Territory.Index).HeartAutoFeed,
                         OwnedByPlayerOrClan: rel is CastleRelation.Owner or CastleRelation.ClanMember);
                 }
 

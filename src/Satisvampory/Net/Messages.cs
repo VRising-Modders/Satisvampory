@@ -117,6 +117,12 @@ namespace Satisvampory.Net
         [Field(2)] public List<int> On = new();
     }
 
+    [ModMessage("sv.trash.empty")]
+    public sealed class EmptyTrashReq
+    {
+        [Field(1)] public TargetMsg Target = new();
+    }
+
     [ModMessage("sv.loop.set")]
     public sealed class SetLoopReq
     {

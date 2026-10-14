@@ -11,6 +11,7 @@ using Satisvampory.Engine.Lists;
 using Satisvampory.Engine.Loops;
 using Satisvampory.Engine.Model;
 using Satisvampory.Engine.Persistence;
+using Satisvampory.Engine.Stations;
 using Satisvampory.Engine.Ui;
 using Satisvampory.Net;
 using Satisvampory.World;
@@ -44,6 +45,7 @@ namespace Satisvampory.Server
             _ctx.Requests.Handle<TryItReq, TryItReply>((u, r, i) => With(u, r.Target, s => TryIt(s, r)));
             _ctx.Requests.Handle<SetRecipesReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetRecipes(s, r)));
             _ctx.Requests.Handle<SetLoopReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetLoop(s, r)));
+            _ctx.Requests.Handle<EmptyTrashReq, PanelMsg>((u, r, i) => With(u, r.Target, s => EmptyTrash(s)));
         }
 
         // ---------------- session per request ----------------
@@ -228,6 +230,17 @@ namespace Satisvampory.Server
             }
             s.Island.State.TableRecipesOn[s.Container.Id] = table;
             Save(s);
+            return Panel(s);
+        }
+
+        PanelMsg EmptyTrash(Session s)
+        {
+            if (s.Role == ActorRole.Guest) throw new RequestRefusedException("Clan members can empty trash.");
+            if (s.Container.Deposit.Special != SpecialKind.Trash) throw new RequestRefusedException("Only trash chests can be emptied.");
+            var server = _half.Config.Snapshot();
+            if (!server.AllowTrash) throw new RequestRefusedException("Emptying trash is turned off on this server.");
+            var r = SpecialJobs.EmptyTrash(s.World, new[] { s.Container }, new SpecialSwitches { AllowTrash = true });
+            _ctx.Log.LogInfo($"Satisvampory: emptied trash ({r.Destroyed.Values.Sum()} items).");
             return Panel(s);
         }
 

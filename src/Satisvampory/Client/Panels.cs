@@ -324,6 +324,7 @@ namespace Satisvampory.Client
         IUiNumber _entryAdjust = null!;
         IUiDropdown _special = null!;
         IUiLabel _belts = null!;
+        IUiButton _empty = null!;
         IUiInput _tryItem = null!;
         IUiLabel _tryResult = null!;
         DepositMsg _draft = new();
@@ -365,6 +366,13 @@ namespace Satisvampory.Client
             _special = panel.Dropdown("Special kind", SpecialValues, "0", SpecialLabels);
             _belts = panel.Label("");
             ctx.Track(panel.Button("Save").OnClick(Save));
+            _empty = panel.Button("Empty trash");
+            ctx.Track(_empty.OnClick(() =>
+                Owner.Send<EmptyTrashReq, PanelMsg>(new EmptyTrashReq { Target = Owner.Target() }, reply =>
+                {
+                    Owner.Apply(reply);
+                    ctx.Hud.Notify("Trash emptied.", kind: UiNoticeKind.Success, seconds: 3);
+                })));
 
             panel.Divider();
             _tryItem = panel.Input("Try it: item", "");
@@ -392,6 +400,7 @@ namespace Satisvampory.Client
             _base.Value = d.BasePriority;
             _special.Value = d.Special.ToString();
             _belts.Text = d.Belts.Count == 0 ? "On no belts." : "On belts: " + string.Join(", ", d.Belts);
+            _empty.Visible = d.Special == 8 && s.CanEdit;
             DrawEntries();
         }
 

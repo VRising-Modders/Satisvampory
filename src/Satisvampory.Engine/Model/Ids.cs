@@ -41,6 +41,18 @@ namespace Satisvampory.Engine.Model
         Heart,
     }
 
+    /// <summary>Station types the special jobs care about. Filled by the adapter from the prefab.</summary>
+    public enum StationRole
+    {
+        None,
+        Refinement,
+        Workstation,
+        Devourer,
+        UnitSpawner,
+        Brazier,
+        Stable,
+    }
+
     /// <summary>Special kinds from spec 09. Set from Deposit options, or imported from 1.x names.</summary>
     public enum SpecialKind
     {

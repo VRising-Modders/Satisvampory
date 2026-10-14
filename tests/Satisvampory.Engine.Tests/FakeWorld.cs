@@ -63,6 +63,21 @@ namespace Satisvampory.Engine.Tests
 
         public Dictionary<ContainerId, List<Stations.Recipe>> StationRecipes { get; } = new();
 
+        public Dictionary<ContainerId, bool> Lit { get; } = new();
+
+        public int Destroy(ContainerId from, ItemId item, int amount)
+        {
+            var n = Math.Min(amount, Count(from, item));
+            if (n > 0) Inv(from, InvPart.Main)[item] -= n;
+            return n;
+        }
+
+        public bool SetLit(ContainerId brazier, bool lit)
+        {
+            Lit[brazier] = lit;
+            return true;
+        }
+
         public IReadOnlyList<Stations.Recipe> Recipes(ContainerId station) =>
             StationRecipes.TryGetValue(station, out var r) ? r : new List<Stations.Recipe>();
 

@@ -39,6 +39,9 @@ namespace Satisvampory.Engine.Model
 
         public DepositOptions Deposit { get; } = new DepositOptions();
 
+        /// <summary>What kind of station this is, for the special jobs (spec 09). None for chests and hearts.</summary>
+        public StationRole Role { get; set; } = StationRole.None;
+
         public string DisplayName => Name.Length > 0 ? Name : FurnitureName;
     }
 

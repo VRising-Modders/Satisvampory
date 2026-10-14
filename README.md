@@ -30,13 +30,7 @@ dotnet test tests/Satisvampory.Engine.Tests
 dotnet build src/Satisvampory
 ```
 
-The plugin compiles against `<game>\BepInEx\progenitor-core\Progenitor.dll`. Override paths with `VRISING_GAME_DIR`, `PROGENITOR_DLL`, or a git-ignored `Directory.Build.local.props`.
-
-Stash, tidy and the conveyor need Progenitor's inventory API, which is still in review. To build the world adapter against a Progenitor Core built from that branch:
-
-```
-dotnet build src/Satisvampory -p:ProgenitorPa=true -p:ProgenitorDll=<path to that Progenitor.dll>
-```
+The plugin compiles against `<game>\BepInEx\progenitor-core\Progenitor.dll`, which must be a Progenitor Core from its main branch at or after the inventory, stations and panel-site APIs (October 2026). Point `PROGENITOR_DLL` (or `Directory.Build.local.props`) at a newer Core when the installed one is older.
 
 ## Relationship to 1.x
 

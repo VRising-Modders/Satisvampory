@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-#if SATIS_PA
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,8 +17,7 @@ namespace Satisvampory.Server
 {
     /// <summary>
     /// Player actions on the live world: resolve the actor's island (spec 06), load its saved
-    /// state, build the engine's world over Progenitor, run the engine, report. Built only
-    /// against Progenitor's inventory API (PR #6).
+    /// state, build the engine's world over Progenitor, run the engine, report.
     /// </summary>
     internal static class ServerActions
     {
@@ -97,7 +95,7 @@ namespace Satisvampory.Server
             var island = Resolve(ctx, half, userEntity, user);
             if (island == null) return Notice(NoticeCode.Refused);
 
-            var world = new ProgenitorWorld(ctx.Inventory, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
+            var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
             var deposit = new DepositContext(new ItemCatalog(), world, island.Scope, ProgenitorWorld.PlotOf(island.Standing))
             {
                 Settings = island.State.MassDeposit,
@@ -147,4 +145,3 @@ namespace Satisvampory.Server
         }
     }
 }
-#endif

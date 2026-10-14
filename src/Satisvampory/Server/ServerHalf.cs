@@ -10,8 +10,8 @@ namespace Satisvampory.Server
 {
     /// <summary>
     /// The server part: per-player settings received from clients (kept in the world save),
-    /// action requests, and the admin commands. The engine is wired to the world through
-    /// Progenitor's inventory and castle APIs in <c>World/</c> once they land.
+    /// action requests and admin requests. The engine reaches the world through Progenitor's
+    /// inventory, castle and station APIs (<c>World/ProgenitorWorld</c>).
     /// </summary>
     internal sealed class ServerHalf
     {
@@ -72,7 +72,6 @@ namespace Satisvampory.Server
                 _ctx.Net.SendToUser(userEntity, EventIds.Text, TextPacket.Of(ActionKind.ImportCheck, text));
                 return;
             }
-#if SATIS_PA
             NoticePacket reply;
             try
             {
@@ -84,14 +83,6 @@ namespace Satisvampory.Server
                 reply = new NoticePacket { Magic = EventIds.Magic, Code = (int)NoticeCode.Refused };
             }
             _ctx.Net.SendToUser(userEntity, EventIds.Notice, reply);
-#else
-            // Stash and tidy need Progenitor's inventory API (PR #6); this build does not have it.
-            _ctx.Net.SendToUser(userEntity, EventIds.Notice, new NoticePacket
-            {
-                Magic = EventIds.Magic,
-                Code = (int)NoticeCode.NotAvailableYet,
-            });
-#endif
         }
     }
 }

@@ -11,9 +11,6 @@
     <ReferenceGame>true</ReferenceGame>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <!-- -p:ProgenitorPa=true -p:ProgenitorDll=<a Core built from Progenitor's inventory branch>
-         compiles the world adapter against ctx.Inventory / castle containers (Progenitor PR #6). -->
-    <DefineConstants Condition="'$(ProgenitorPa)' == 'true'">$(DefineConstants);SATIS_PA</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Satisvampory.Engine\**\*.cs" Exclude="..\Satisvampory.Engine\obj\**;..\Satisvampory.Engine\bin\**" Link="Engine\%(RecursiveDir)%(Filename)%(Extension)" />

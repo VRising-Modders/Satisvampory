@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-#if SATIS_PA
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,17 +25,20 @@ namespace Satisvampory.World
             public InventoryRef Main;
             public InventoryRef Output;
             public ICastleHandle Castle = null!;
+            public Unity.Entities.Entity Entity;
         }
 
         readonly PluginInventory _inv;
+        readonly Progenitor.Stations.PluginStations? _stations;
         readonly Dictionary<EngineId, Node> _nodes = new();
         readonly Dictionary<PlotId, List<ContainerInfo>> _byPlot = new();
         readonly Dictionary<PlotId, ICastleHandle> _castles = new();
         readonly Func<EngineId, DepositOptions?> _deposit;
 
-        public ProgenitorWorld(PluginInventory inventory, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit)
+        public ProgenitorWorld(PluginInventory inventory, Progenitor.Stations.PluginStations? stations, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit)
         {
             _inv = inventory;
+            _stations = stations;
             _deposit = deposit;
             foreach (var castle in castles)
             {
@@ -57,7 +59,7 @@ namespace Satisvampory.World
                         Role = RoleOf(row),
                     };
                     if (_deposit(id) is { } d) Copy(d, info.Deposit);
-                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = row.Output, Castle = castle };
+                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = row.Output, Castle = castle, Entity = row.Entity.ToEntity() };
                     list.Add(info);
                 }
             }
@@ -101,8 +103,26 @@ namespace Satisvampory.World
 
         public bool IsRaided(PlotId plot) => _castles.TryGetValue(plot, out var c) && c.Raided;
 
-        /// <summary>Recipes arrive with ctx.Stations (PR #2); until then stations want nothing.</summary>
-        public IReadOnlyList<Recipe> Recipes(EngineId station) => Array.Empty<Recipe>();
+        /// <summary>
+        /// A station's recipes from ctx.Stations. Refinement stations use the game's own per-recipe
+        /// switch. Crafting tables have none, so their recipes count as off until Satisvampory's
+        /// table switches exist (spec 04: default off).
+        /// </summary>
+        public IReadOnlyList<Recipe> Recipes(EngineId station)
+        {
+            if (_stations == null || !_nodes.TryGetValue(station, out var n) || n.Info.Kind != NodeKind.Station) return Array.Empty<Recipe>();
+            var list = new List<Recipe>();
+            foreach (var r in _stations.Recipes(n.Entity))
+            {
+                var on = r.CanToggle && r.Enabled;
+                list.Add(new Recipe(
+                    r.RecipeGuid,
+                    r.Inputs.Select(x => new ItemStack(new ItemId(x.ItemGuid), x.Amount)).ToList(),
+                    r.Outputs.Select(x => new ItemStack(new ItemId(x.ItemGuid), x.Amount)).ToList(),
+                    on));
+            }
+            return list;
+        }
 
         public int Transfer(EngineId from, InvPart fromPart, EngineId to, ItemId item, int amount)
         {
@@ -164,4 +184,3 @@ namespace Satisvampory.World
         }
     }
 }
-#endif

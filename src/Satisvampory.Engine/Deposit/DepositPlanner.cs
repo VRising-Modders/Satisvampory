@@ -77,14 +77,16 @@ namespace Satisvampory.Engine.Deposit
         /// </summary>
         public static List<ContainerId> ReverseOrder(DepositContext ctx, ItemId item)
         {
-            var ranked = DepositRanker.Rank(ctx, item).InOrder.Select(c => c.Chest.Id).ToList();
-            var rankedSet = new HashSet<ContainerId>(ranked);
-
             var holders = World.Scope.Chests(ctx.World, ctx.Scope)
                 .Where(c => c.Deposit.Special is SpecialKind.None or SpecialKind.Overflow or SpecialKind.Spoils)
                 .Where(c => ctx.World.Count(c.Id, item) > 0)
                 .Select(c => c.Id)
                 .ToList();
+            if (holders.Count == 0) return holders;
+
+            // Only the holders matter for a pull, and there are usually few: rank just those.
+            var ranked = DepositRanker.Rank(ctx, item, new HashSet<ContainerId>(holders)).InOrder.Select(c => c.Chest.Id).ToList();
+            var rankedSet = new HashSet<ContainerId>(ranked);
 
             var result = holders.Where(id => !rankedSet.Contains(id)).ToList();
             for (var i = ranked.Count - 1; i >= 0; i--)

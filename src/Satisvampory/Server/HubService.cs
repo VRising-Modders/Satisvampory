@@ -134,7 +134,7 @@ namespace Satisvampory.Server
                 .Take(10).Select(r => $"{r.Name} · stations want {r.Demand:N0} · spare {r.Spare:N0}").ToList();
             return new CastleMsg
             {
-                PlotLabel = string.IsNullOrWhiteSpace(settings.PlotLabel) ? Label(s.Island, s.Standing) : settings.PlotLabel,
+                PlotLabel = Labels.Name(_ctx.Save, c),
                 Level = c.Level,
                 Owner = c.Owner.Name,
                 Sharing = s.Island.Scope.Count <= 1 ? "no sharing" : s.Island.OwnerKey.StartsWith("clan/") ? "clan share" : "castle share",
@@ -649,7 +649,9 @@ namespace Satisvampory.Server
         {
             if (string.IsNullOrEmpty(key) || key.Length > 64) throw new RequestRefusedException("Bad key.");
             if (_liveState.TryGetValue(key, out var st) && st.User != userEntity) throw new RequestRefusedException("That key is in use.");
-            var msg = With(userEntity, s => Inventory(s, new GetInventoryReq()));
+            InventoryMsg msg;
+            try { msg = With(userEntity, s => Inventory(s, new GetInventoryReq())); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: live inventory snapshot refused/failed: " + e.Message); throw; }
             _liveState[key] = (userEntity, msg.Island, msg.Rows.ToDictionary(r => r.Item, Fingerprint));
             return msg;
         }

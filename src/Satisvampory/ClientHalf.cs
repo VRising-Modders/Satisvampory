@@ -95,7 +95,8 @@ namespace Satisvampory
         void SendAction(ActionKind kind)
         {
             if (kind is ActionKind.ImportCheck or ActionKind.ImportApply) _admin.LastResult = "Asking the server…";
-            _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)kind });
+            if (!_ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)kind }))
+                _ctx.Log.LogWarning($"Satisvampory: could not send {kind} to the server");
         }
 
         unsafe void OnText(int eventId, byte* payload, int length)

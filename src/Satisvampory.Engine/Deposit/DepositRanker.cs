@@ -95,7 +95,8 @@ namespace Satisvampory.Engine.Deposit
     /// </summary>
     public static class DepositRanker
     {
-        public static DepositRanking Rank(DepositContext ctx, ItemId item)
+        /// <param name="among">When given, only these chests are ranked (their order is the same as in a full ranking).</param>
+        public static DepositRanking Rank(DepositContext ctx, ItemId item, ISet<ContainerId>? among = null)
         {
             var catalog = ctx.Catalog;
 
@@ -135,6 +136,7 @@ namespace Satisvampory.Engine.Deposit
             var candidates = new List<DepositCandidate>();
             foreach (var chest in Scope.Chests(ctx.World, ctx.Scope))
             {
+                if (among != null && !among.Contains(chest.Id)) continue;
                 var kind = chest.Deposit.Special;
                 if (kind == SpecialKind.Skip) continue;
                 if (DepositScore.IsBanned(chest, item, catalog)) continue;

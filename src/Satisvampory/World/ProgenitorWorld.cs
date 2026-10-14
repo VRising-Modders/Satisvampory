@@ -183,7 +183,21 @@ namespace Satisvampory.World
             if (amount <= 0 || !TryRef(from, fromPart, out var a) || !TryRef(to, InvPart.Main, out var b)) return 0;
             var slots = fromPart == InvPart.Main && _nodes.TryGetValue(from, out var n) ? n.SourceSlots : InventorySlotFilter.All;
             var r = _inv.Transfer(a, b, item.Guid, amount, slots);
+            if (r.Done == 0) NoteFailure($"transfer {item.Guid} x{amount}: {r.Outcome} {r.Reason}");
             return r.Ok ? r.Done : 0;
+        }
+
+        /// <summary>A few failed moves per minute go to the log so a list that never moves can be explained.</summary>
+        public static System.Action<string>? FailureLog { get; set; }
+        static int _failures;
+        static System.DateTime _failureWindow;
+
+        static void NoteFailure(string text)
+        {
+            if (FailureLog == null) return;
+            var now = System.DateTime.UtcNow;
+            if (now - _failureWindow > System.TimeSpan.FromMinutes(1)) { _failureWindow = now; _failures = 0; }
+            if (++_failures <= 3) FailureLog("Satisvampory: " + text);
         }
 
         /// <summary>Creates items in a container (admin Give to storage). Returns how many went in.</summary>

@@ -50,6 +50,8 @@ namespace Satisvampory.Server
             _ctx.Net.OnReceiveFromClient(EventIds.PlayerPrefs, OnPrefs);
             _ctx.Net.OnReceiveFromClient(EventIds.Action, OnAction);
             Catalog.Aliases = () => Config.Snapshot().ItemAliases;
+            World.ProgenitorWorld.FailureLog = t => _ctx.Log.LogInfo(t);
+            _ctx.Track(new OnDispose(() => World.ProgenitorWorld.FailureLog = null));
             var like = new PluginContextLike(_ctx);
             Labels.OwnerKeyOf = c => Stores.SettingsKey(like, c);
             _ctx.Track(new OnDispose(() => Labels.OwnerKeyOf = null));
@@ -120,7 +122,8 @@ namespace Satisvampory.Server
                 _ctx.Log.LogError("Satisvampory: action failed: " + e);
                 reply = new NoticePacket { Magic = EventIds.Magic, Code = (int)NoticeCode.Refused };
             }
-            _ctx.Net.SendToUser(userEntity, EventIds.Notice, reply);
+            var sent = _ctx.Net.SendToUser(userEntity, EventIds.Notice, reply);
+            _ctx.Log.LogInfo($"Satisvampory: action {(ActionKind)a.Kind} from {user.CharacterName} -> {(NoticeCode)reply.Code} ({reply.A}, {reply.B}); reply sent={sent}");
         }
     }
 }

@@ -98,6 +98,11 @@ namespace Satisvampory.Server
 
         readonly HashSet<(string Island, string Loop)> _stalled = new();
         double _lastTickMs;
+        long _movedSinceLog;
+        int _listIslandTicks;
+        readonly Dictionary<string, int> _diagSinceLog = new();
+        int _moveRecordsSinceLog;
+        double _lastMoveLog;
         int _lastIslands, _lastMoves;
 
         internal string Diagnostics(ServerHalf half) =>
@@ -202,7 +207,8 @@ namespace Satisvampory.Server
         {
             {
                 var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members));
-                if (state.Graph.Lists.Count == 0 && state.Deposit.Values.All(d => d.Special == SpecialKind.None)) return 0;
+                if (state.Graph.Lists.Count == 0 && state.Deposit.Values.All(d => d.Special == SpecialKind.None))
+                    return 0;
 
                 var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null)
                 {
@@ -216,7 +222,8 @@ namespace Satisvampory.Server
                     Belts = state.Graph.BeltMembers(),
                 };
                 var used = RunSpecials(world, members, server);
-                if (state.Graph.Lists.Count == 0 || scope.Count == 0) return used;
+                if (state.Graph.Lists.Count == 0 || scope.Count == 0)
+                    return used;
                 if (!_tickStates.TryGetValue(key, out var tickState)) _tickStates[key] = tickState = new TickState();
                 foreach (var (loopKey, mode) in state.LoopModes)
                 {
@@ -232,6 +239,21 @@ namespace Satisvampory.Server
                     LoopsAllowed = server.AllowLoops,
                 }).Run(Now);
                 _lastReports[key] = report;
+                _listIslandTicks++;
+                foreach (var codes in report.Diagnostics.Values)
+                    foreach (var code in codes) _diagSinceLog[code] = (_diagSinceLog.TryGetValue(code, out var dn) ? dn : 0) + 1;
+                _movedSinceLog += report.Moves.Sum(m => m.Amount);
+                _moveRecordsSinceLog += report.Moves.Count;
+                if (Now - _lastMoveLog >= 60 && _listIslandTicks > 0)
+                {
+                    _ctx.Log.LogInfo($"Satisvampory: lists moved {_movedSinceLog:N0} items in {_moveRecordsSinceLog} moves in the last {Now - _lastMoveLog:0} s ({_listIslandTicks} island ticks with lists)"
+                        + (_diagSinceLog.Count == 0 ? "" : "; waiting: " + string.Join(", ", _diagSinceLog.Select(kv => $"{kv.Key} x{kv.Value}"))));
+                    _diagSinceLog.Clear();
+                    _listIslandTicks = 0;
+                    _movedSinceLog = 0;
+                    _moveRecordsSinceLog = 0;
+                    _lastMoveLog = Now;
+                }
                 foreach (var (loopKey, ls) in tickState.Loops)
                 {
                     var was = _stalled.Contains((key, loopKey));

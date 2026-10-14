@@ -23,18 +23,26 @@ namespace Satisvampory.Server
     /// </summary>
     internal sealed class MaterialService : IMaterialSourceProvider
     {
-        /// <summary>How long one resolved island serves repeated questions (one check asks once per item).</summary>
-        const long CacheMs = 1000;
+        /// <summary>
+        /// How long one resolved island and its per-item answers serve. Progenitor asks every online
+        /// player's totals every second, for each operation in view, and asks once per item; the answer
+        /// for a given player and plot does not depend on the operation, so one cached island serves
+        /// all of them. Payments re-check counts themselves, so a few seconds of staleness only affects
+        /// the order chests are drained in.
+        /// </summary>
+        const long CacheMs = 30000;
 
         readonly SatisContext _ctx;
         readonly ServerHalf _half;
-        readonly Dictionary<MaterialContext, (long Until, long Revision, Resolved? Island)> _cache = new();
+        readonly Dictionary<(CastleId User, int Territory), (long Until, long Revision, Resolved? Island)> _cache = new();
 
         sealed class Resolved
         {
             public DepositContext Deposit = null!;
             public CastleRules Rules = null!;
             public List<PgId> Candidates = new();
+            /// <summary>Per item: the spend order and reserve, computed once per cache life.</summary>
+            public Dictionary<int, MaterialAnswer?> Answers = new();
         }
 
         internal MaterialService(SatisContext ctx, ServerHalf half)
@@ -64,8 +72,13 @@ namespace Satisvampory.Server
             return unchecked(_half.MaterialPolicy.Revision * 1_000_003L + allowed * 7919L + Environment.TickCount64 / 30_000);
         }
 
-        public IReadOnlyList<PgId> Candidates(in MaterialContext context) =>
-            Resolve(context)?.Candidates ?? (IReadOnlyList<PgId>)Array.Empty<PgId>();
+        public IReadOnlyList<PgId> Candidates(in MaterialContext context)
+        {
+            var island = Resolve(context);
+            if (island == null) return Array.Empty<PgId>();
+            var station = context.Station;
+            return station.IsNone ? island.Candidates : island.Candidates.Where(id => !id.Equals(station)).ToList();
+        }
 
         public ItemSources? Sources(in MaterialContext context, int item)
         {
@@ -78,7 +91,8 @@ namespace Satisvampory.Server
                 MaterialOperation.Upgrade => MaterialUse.Upgrade,
                 _ => MaterialUse.Craft,
             };
-            var answer = _half.MaterialPolicy.Sources(use, serverAllows: true, playerAllows: true, island.Deposit, island.Rules, new ItemId(item));
+            if (!island.Answers.TryGetValue(item, out var answer))
+                island.Answers[item] = answer = _half.MaterialPolicy.Sources(use, serverAllows: true, playerAllows: true, island.Deposit, island.Rules, new ItemId(item));
             if (answer is not { } a) return null;
             var station = context.Station;
             var order = a.SpendOrder.Select(id => new PgId(id.Value)).Where(id => !id.Equals(station)).ToList();
@@ -103,19 +117,23 @@ namespace Satisvampory.Server
         {
             var now = Environment.TickCount64;
             var revision = _half.MaterialPolicy.Revision;
-            if (_cache.TryGetValue(context, out var hit) && hit.Until > now && hit.Revision == revision) return hit.Island;
+            var key = (context.User, context.StandingTerritory);
+            if (_cache.TryGetValue(key, out var hit) && hit.Until > now && hit.Revision == revision) return hit.Island;
             if (_cache.Count > 256) _cache.Clear();
 
             Resolved? result = null;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 result = Build(context);
+                if (watch.ElapsedMilliseconds > 250)
+                    _ctx.Log.LogWarning($"Satisvampory: material sources island took {watch.ElapsedMilliseconds} ms ({result?.Candidates.Count ?? 0} chests)");
             }
             catch (Exception e)
             {
                 _ctx.Log.LogError("Satisvampory: material sources failed: " + e.Message);
             }
-            _cache[context] = (now + CacheMs, revision, result);
+            _cache[key] = (now + CacheMs, revision, result);
             return result;
         }
 
@@ -127,18 +145,17 @@ namespace Satisvampory.Server
             if (island == null || island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return null;
             if (context.StandingTerritory >= 0 && island.Standing.Territory.Index != context.StandingTerritory) return null;
 
-            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null);
+            // One read per chest for the cache's life; every per-item ranking then runs from memory.
+            var world = new SnapshotView(new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null));
             var deposit = new DepositContext(_half.Catalog.Current.WithEdits(island.State.Categories), world, island.Scope, ProgenitorWorld.PlotOf(island.Standing))
             {
                 Settings = island.State.MassDeposit,
                 Belts = island.State.Graph.BeltMembers(),
             };
-            var station = context.Station;
             var candidates = Scope.Chests(world, island.Scope)
                 .Where(c => c.Deposit.Special is SpecialKind.None or SpecialKind.Overflow or SpecialKind.Spoils)
                 .Select(c => new PgId(c.Id.Value))
-                .Where(id => !id.Equals(station))
                 .ToList();
             return new Resolved { Deposit = deposit, Rules = island.State.Rules, Candidates = candidates };
         }

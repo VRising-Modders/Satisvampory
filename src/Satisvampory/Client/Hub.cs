@@ -148,7 +148,8 @@ namespace Satisvampory.Client
             if (e.Target != InventorySortTarget.Own) return;
             if (e.SincePreviousMs < 0 || e.SincePreviousMs > 1000) return;
             if (!_player.Rows.First(r => r.Entry.Definition.Key == "StashOnDoubleSort").Entry.Value) return;
-            _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash });
+            if (!_ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)ActionKind.Stash }))
+                _ctx.Log.LogWarning("Satisvampory: could not send Stash to the server");
         }
 
         void OnKey(string id)
@@ -186,9 +187,11 @@ namespace Satisvampory.Client
         void Open(int tab)
         {
             var panel = Panel;
+            UiApi.Show(panel);
+            // Select after showing: showing a panel restores its remembered tab.
             _tabs.Selected = tab;
             Refresh(tab);
-            UiApi.Show(panel);
+            Progenitor.Dev.MainThread.PostDelayed(0.05, () => { if (_tabs.Selected != tab) { _tabs.Selected = tab; Refresh(tab); } }, _ctx.Owner);
             Help.Tip(_ctx, Help.HubTip, panel);
             TabTip(tab);
         }
@@ -225,7 +228,11 @@ namespace Satisvampory.Client
             _ctx.Requests.Send<TReq, TReply>(req, r =>
             {
                 if (r.Ok && r.Reply != null) ok(r.Reply);
-                else _ctx.Hud.Notify(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : "Satisvampory: " + r.Status, kind: UiNoticeKind.Warning, seconds: 6);
+                else
+                {
+                    _ctx.Log.LogInfo($"Satisvampory: {typeof(TReq).Name} -> {r.Status} {r.Reason} {r.NotSent}");
+                    _ctx.Hud.Notify(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : "Satisvampory: " + r.Status, kind: UiNoticeKind.Warning, seconds: 6);
+                }
             });
 
         IUiPanel Panel
@@ -236,7 +243,7 @@ namespace Satisvampory.Client
                 var p = _panel = UiApi.Panel("Satisvampory", _ctx.Owner, _ctx.Guid);
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
-                _tabs = p.Tabs("tabs", new[] { "Castle", "Mass Deposit", "Belts and categories", "Inventory", "Find", "Hunt log" });
+                _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" });
                 _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
@@ -681,8 +688,15 @@ namespace Satisvampory.Client
 
         // ---------------- Inventory ----------------
 
+        /// <summary>Columns shown by default; the rest are one click away in the column chooser (the panel is 640 px).</summary>
+        static readonly HashSet<string> DefaultInventoryColumns = new() { "item", "total", "reserve", "cap", "status" };
+
         static UiTableColumn Num(string key, string caption, string term = "", bool editable = false) =>
-            new(key, caption, UiTableColumnKind.Number) { Term = term, Editable = editable, Format = "#,0", Hideable = key != "total" };
+            new(key, caption, UiTableColumnKind.Number)
+            {
+                Term = term, Editable = editable, Format = "#,0", Hideable = key != "total", Width = 72,
+                Hidden = !DefaultInventoryColumns.Contains(key),
+            };
 
         void BuildInventory(IUiPanel p)
         {
@@ -710,8 +724,8 @@ namespace Satisvampory.Client
             Track(_invCats.OnClick(_ => DrawInventory()));
             _invTable = In(InventoryTab, p.DataTable("inv", new[]
             {
-                new UiTableColumn("item", "Item") { Hideable = false },
-                new UiTableColumn("category", "Category") { Term = "Category" },
+                new UiTableColumn("item", "Item") { Hideable = false, Width = 210 },
+                new UiTableColumn("category", "Category") { Term = "Category", Hidden = true },
                 Num("total", "Total", "Island"),
                 Num("here", "Here"),
                 Num("chests", "Chests"),
@@ -720,7 +734,7 @@ namespace Satisvampory.Client
                 Num("spare", "Spare"),
                 Num("cap", "Cap", "Cap", editable: true),
                 Num("demand", "Demand"),
-                new UiTableColumn("status", "Status"),
+                new UiTableColumn("status", "Status") { Width = 100 },
             }, new UiDataTableOptions
             {
                 VisibleRows = 14,
@@ -779,6 +793,7 @@ namespace Satisvampory.Client
                 (d, _) => ApplyDelta(d),
                 (why, text) =>
                 {
+                    _ctx.Log.LogInfo($"Satisvampory: live inventory ended: {why} {text}");
                     _invSub = null;
                     // Off every plot: keep the last island, read-only, with its time (spec 15).
                     _invStale = _invRows.Count > 0;
@@ -841,9 +856,13 @@ namespace Satisvampory.Client
                     .Select(k => new UiTableSortKey(k[0], k[1] != "d"))
                     .ToList();
                 if (keys.Count > 0) _invTable.Sort = keys;
-                var hide = new HashSet<string>((hidden ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries));
-                foreach (var c in _invTable.Columns.Where(c => c.Hideable))
-                    _invTable.SetColumnVisible(c.Key, !hide.Contains(c.Key));
+                // Empty: the player never chose, keep the defaults. "-": they show every column.
+                if (!string.IsNullOrEmpty(hidden))
+                {
+                    var hide = new HashSet<string>(hidden.Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    foreach (var c in _invTable.Columns.Where(c => c.Hideable))
+                        _invTable.SetColumnVisible(c.Key, !hide.Contains(c.Key));
+                }
             }
             finally { _invApplyingView = false; }
         }
@@ -852,7 +871,7 @@ namespace Satisvampory.Client
         {
             if (_invApplyingView) return;
             var sort = string.Join(",", _invTable.Sort.Select(k => k.Column + ":" + (k.Ascending ? "a" : "d")));
-            var hidden = string.Join(",", _invTable.HiddenColumns);
+            var hidden = _invTable.HiddenColumns.Count == 0 ? "-" : string.Join(",", _invTable.HiddenColumns);
             _ctx.Requests.Send<SetViewReq, ViewSaved>(new SetViewReq { View = "inv", Sort = sort, Hidden = hidden }, _ => { });
         }
 

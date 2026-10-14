@@ -8,7 +8,7 @@ It is used in three ways:
 |---|---|
 | **The Mass Deposit action** | A player's quick stash (`07-stash-pull-find-tidy.md`), and things a player triggers that put items away: tidy, servant loot, station leftovers. |
 | **Push: Mass Deposit** (an Output row) | Each tick, a container with this row sends its items (after its filter) to their homes. |
-| **Pull: reverse Mass Deposit** (an Input row, or the "Reverse Mass Deposit" pull order) | Each tick, a container pulls the items its filter names from wherever they are stored worst: chests that are not homes for them first, then homes from worst to best. |
+| **Pull: reverse Mass Deposit** (an Input row on something that consumes) | Each tick, a station, castle heart, unit spawner or stable pulls what it **needs** (switched-on recipe inputs, fuel up to its target, feed) from wherever it is stored worst: chests that are not homes for it first, then homes from worst to best. Plain chests have no demand, so they never pull this way; to move items into a chest, Push from the chest holding them or list chests and belts in its Input. |
 
 The UI always says **Push: Mass Deposit** and **Pull: reverse Mass Deposit** so it is clear which way items move.
 

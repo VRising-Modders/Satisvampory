@@ -32,8 +32,10 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal("Skip chests are never used", _svc.AddEntry(ActorRole.ClanMember, a.Id, ListSide.Input, ListEntry.Of(skip.Id)).Reason);
             Assert.Equal("Hearts only give items through their own Output", _svc.AddEntry(ActorRole.ClanMember, a.Id, ListSide.Input, ListEntry.Of(heart.Id)).Reason);
             Assert.Equal("Outside your sharing island", _svc.AddEntry(ActorRole.ClanMember, a.Id, ListSide.Input, ListEntry.Of(far.Id)).Reason);
-            Assert.Contains("needs a filter", _svc.AddEntry(ActorRole.ClanMember, a.Id, ListSide.Input, ListEntry.MassDeposit()).Reason);
-            Assert.Equal(0, _svc.Revision);
+            Assert.StartsWith("A chest has no demand", _svc.AddEntry(ActorRole.ClanMember, a.Id, ListSide.Input, ListEntry.MassDeposit()).Reason);
+            var furnace = _w.Chest(Home, "Furnace", kind: NodeKind.Station);
+            Assert.True(_svc.AddEntry(ActorRole.ClanMember, furnace.Id, ListSide.Input, ListEntry.MassDeposit()).Ok);
+            Assert.Equal(1, _svc.Revision);
         }
 
         [Fact]

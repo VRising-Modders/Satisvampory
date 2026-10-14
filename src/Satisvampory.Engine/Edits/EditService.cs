@@ -100,9 +100,9 @@ namespace Satisvampory.Engine.Edits
                 if (!Graph.Belts.TryGetValue(entry.Belt, out var belt)) return EditResult.No("That belt no longer exists");
                 if (belt.Members.Contains(owner)) return EditResult.No("This container is on that belt");
             }
-            else if (entry.Kind == EntryKind.MassDeposit && side == ListSide.Input && self.Kind == NodeKind.Chest && entry.Filter.IsAnything)
+            else if (entry.Kind == EntryKind.MassDeposit && side == ListSide.Input && !HasDemand(self))
             {
-                return EditResult.No("Pulling everything from Mass Deposit needs a filter: choose items or categories");
+                return EditResult.No("A chest has no demand to pull for. List the chests or belts to pull from, or add Push: Mass Deposit to the chest holding the items");
             }
 
             var list = side == ListSide.Input ? Graph.For(owner).Input : Graph.For(owner).Output;
@@ -304,6 +304,12 @@ namespace Satisvampory.Engine.Edits
                 ScriptNeedsReview = $"Line {e.Line}: {e.Text}";
             }
         }
+
+        /// <summary>
+        /// Containers that consume and so know what to pull: stations (recipe inputs), hearts (fuel),
+        /// unit spawners and stables (feed). Plain chests have no demand (spec 03).
+        /// </summary>
+        public static bool HasDemand(ContainerInfo c) => c.Kind is NodeKind.Station or NodeKind.Heart;
 
         static bool Same(ListEntry a, ListEntry b) =>
             a.Kind == b.Kind && a.Kind switch

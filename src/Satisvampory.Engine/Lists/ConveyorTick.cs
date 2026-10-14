@@ -54,8 +54,9 @@ namespace Satisvampory.Engine.Lists
 
     /// <summary>
     /// One conveyor drain over an island (spec 02, 04, 05). Order: stations (fed a craft per
-    /// round so sinks share fairly), station leftovers, chest edges and loops, Mass Deposit
-    /// outputs, Mass Deposit inputs. Reserve applies only when items leave storage into a station;
+    /// round so sinks share fairly, including from Pull: reverse Mass Deposit), station leftovers,
+    /// chest edges and loops, Push: Mass Deposit outputs. Chests never pull from reverse Mass
+    /// Deposit: they have no demand. Reserve applies only when items leave storage into a station;
     /// chest-to-chest moves keep items on the island and ignore it.
     /// </summary>
     public sealed class ConveyorTick
@@ -130,7 +131,6 @@ namespace Satisvampory.Engine.Lists
             RunChestEdges(live);
             foreach (var loop in balance) Balance(loop);
             MassDepositOutputs();
-            MassDepositInputs();
             return _report;
         }
 
@@ -317,36 +317,6 @@ namespace Satisvampory.Engine.Lists
                 }
             }
         }
-
-        /// <summary>
-        /// A chest's "Mass Deposit (reverse)" input pulls matching items only from chests that are
-        /// worse homes for them than itself, so a pull never undoes a good sort.
-        /// </summary>
-        void MassDepositInputs()
-        {
-            foreach (var (id, lists) in _graph.Lists)
-            {
-                var self = _world.Find(id);
-                if (self == null || self.Kind != NodeKind.Chest || !_inScope.Contains(id)) continue;
-                var entry = lists.Input.FirstOrDefault(e => e.Kind == EntryKind.MassDeposit);
-                if (entry == null || entry.Filter.IsAnything) continue;
-
-                foreach (var item in FilterItems(entry.Filter))
-                {
-                    var order = DepositPlanner.ReverseOrder(_ctx, item);
-                    var selfAt = order.IndexOf(id);
-                    var worse = selfAt < 0 ? order : order.Take(selfAt).ToList();
-                    foreach (var src in worse)
-                    {
-                        if (src == id || !Budget(src)) continue;
-                        Move(src, InvPart.Main, id, item, _world.Count(src, item), "mass deposit pull");
-                    }
-                }
-            }
-        }
-
-        IEnumerable<ItemId> FilterItems(ItemFilter f) =>
-            f.Items.Concat(f.Categories.SelectMany(Catalog.Members)).Distinct().Where(i => f.Allows(i, Catalog));
 
         // ---------------- helpers ----------------
 

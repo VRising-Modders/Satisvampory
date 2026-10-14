@@ -141,7 +141,8 @@ namespace Satisvampory.Engine.Ui
                 });
             }
 
-            if (Matches("Mass Deposit", "push pull reverse", string.Empty))
+            var demand = self != null && Edits.EditService.HasDemand(self);
+            if (Matches("Mass Deposit", "push pull reverse", string.Empty) && (q.Side == PickerSide.Output || demand))
                 rows.Add(new PickerRow
                 {
                     Kind = PickerRowKind.MassDeposit,

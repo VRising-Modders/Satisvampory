@@ -43,7 +43,7 @@ Guests see the buttons and can open the panels read-only, with the tooltip "Clan
 | A container | Pull from it | Send to it |
 | A station | Pull its finished products | Send it recipe inputs |
 | A belt | Pull from its members | Send to its members |
-| **Pull: reverse Mass Deposit** / **Push: Mass Deposit** | **Pull: reverse Mass Deposit** — pull the filtered items from wherever they are stored worst (not-homes first, then homes worst to best) | **Push: Mass Deposit** — send each item to the chest whose deposit settings rate it highest (1.x "RR"), on every tick |
+| **Pull: reverse Mass Deposit** / **Push: Mass Deposit** | **Pull: reverse Mass Deposit** — only on something that consumes (station, heart, spawner, stable): pull what it needs from wherever it is stored worst. Not offered on plain chests, which have no demand. | **Push: Mass Deposit** — send each item to the chest whose deposit settings rate it highest (1.x "RR"), on every tick |
 | A special chest (by its name, for example "Trash", "Salvage") | Pull from it where its kind allows | Send to it |
 
 Special chests appear in pickers under their own names and kinds (`09-special-chests.md`), so "send leftovers to Trash · here" is one pick.
@@ -67,7 +67,7 @@ Special chests appear in pickers under their own names and kinds (`09-special-ch
 ## What moves
 
 - An output edge moves what the destination accepts and the row filter allows. A chest destination accepts anything unless filtered; a station accepts only inputs of recipes switched on (`04-stations.md`).
-- An input edge pulls what this container needs: for a station, its recipe inputs; for a chest, anything the row filter allows. A chest with an unfiltered input row of "Mass Deposit (reverse)" would pull everything, so the editor asks for a filter on that combination.
+- An input edge pulls what this container needs: for a station, heart, spawner or stable, what it consumes; for a chest, anything its listed sources hold that the row filter allows.
 - Reserve: a castle **reserve** (default 10 per item, by item or category) is the island stock that feeding stations, heart fuel, and crafting from storage leave behind. Chest-to-chest moves keep items on the island, so reserve does not limit them. Pulls by the player (`07-stash-pull-find-tidy.md`) ignore it.
 - **Production cap** per item or category: stop feeding a station whose product is already at the cap on the island.
 - Several stations wanting the same item share it: each round feeds every station one more whole craft, up to the feed target.

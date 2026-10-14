@@ -65,7 +65,11 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal("wants Iron Ore", Row("Furnace").Hint);
             Assert.Equal("Outside your sharing island", Row("Their chest").Refused);
             Assert.Equal(PickerSection.Belts, Row("Ore belt").Section);
-            Assert.Equal(PickerSection.MassDeposit, rows.Last().Section);
+            Assert.DoesNotContain(rows, r => r.Kind == PickerRowKind.MassDeposit); // a chest has no demand to pull for
+            var outRows = Picker.Rows(_w, _cat, _g, new[] { Home, Away }, Label, new PickerQuery { Self = self.Id, Side = PickerSide.Output, Standing = Home });
+            Assert.Equal("Push: Mass Deposit", outRows.Last().Name);
+            var furnaceRows = Picker.Rows(_w, _cat, _g, new[] { Home, Away }, Label, new PickerQuery { Self = furnace.Id, Side = PickerSide.Input, Standing = Home });
+            Assert.Equal("Pull: reverse Mass Deposit", furnaceRows.Last().Name);
 
             var searched = Picker.Rows(_w, _cat, _g, new[] { Home, Away }, Label, new PickerQuery { Self = self.Id, Side = PickerSide.Input, Standing = Home, Search = "plank" });
             Assert.Equal(new[] { "Far" }, searched.Select(r => r.Name));

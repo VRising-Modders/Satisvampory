@@ -1,0 +1,96 @@
+# 10 — Settings
+
+Built on Progenitor's settings pages (`ctx.Settings.Page`) and keybinds (`ctx.Keybinds`), reached from Progenitor's Mods menu and from Satisvampory's own panels. Every value is server-owned: the client shows what the server last sent and sends a change request. Rows the player may not change are shown locked with who can change them.
+
+## Me
+
+| Row | Default |
+|---|---|
+| Quick stash on double-tap sort | ON |
+| Share between my castles (my plots act as one) | ON (locked when the admin forbids opting out) |
+| Take part in clan share (my castles join the clan island) | ON (locked when the admin forbids opting out) |
+| Stash from anywhere | OFF |
+| Silent stash | OFF |
+| Craft from storage (missing ingredients) | ON |
+| Never pull the last stack | ON |
+| Silent pull | OFF |
+| Servant loot auto-stash (my castles) | ON |
+| Tidy needs a second press to confirm | ON |
+| Top up hearts when I visit | ON |
+| Top up my island's hearts when I log in | OFF |
+| Also top up hearts outside my island | OFF |
+| Keybinds: Mass Deposit, Find, Tidy, Stash, Hunt log | all unbound; the player picks keys, checked against vanilla bindings |
+| Hunt log | button |
+
+## Castle
+
+Header: plot label, level, owner, which sharing applies here (none, castle share, clan share). Off every plot: "Stand on a castle to see its settings".
+
+| Row | Default |
+|---|---|
+| Logistics (lists run) | ON |
+| Plot label | castle name, else "Plot n" |
+| Default reserve | 10 (0 disables) |
+| Reserves by item or item group | empty |
+| Production caps by item or item group | empty |
+| Chest groups | list editor |
+| Item groups | built-ins, castle copy on first edit, restore |
+| Item aliases (castle) | empty |
+| Mass Deposit | opens `03-mass-deposit.md` screen |
+| Feed salvage to the devourer | OFF |
+| Heart fuel auto-feed | ON |
+| Repeat hunts on this castle | ON when allowed |
+| Exclude this castle from sharing | OFF, owner only |
+| Tidy now | button |
+| Need: top ten station inputs short on the island | read-only |
+
+## Clan
+
+| Row | Default |
+|---|---|
+| Castles: label, level, owner, excluded, repeat hunts, occupied | table |
+| Repeat hunts: all on | button |
+
+## Server (admin)
+
+Same switches as 1.x's server toggles, rewritten. Every allow defaults ON except where noted.
+
+| Row | Default |
+|---|---|
+| Castle share | ON |
+| Players may turn castle share off | ON |
+| Clan share | ON |
+| Players may turn clan share off | ON |
+| Allow quick stash | ON |
+| Allow stash from anywhere | ON |
+| Allow pull | ON |
+| Allow craft from storage | ON |
+| Allow servant loot auto-stash | ON |
+| Allow logistics (input and output lists) | ON |
+| Allow loops | ON |
+| Loop move budget per tick | 12 |
+| Allow salvage | ON |
+| Allow spawner chests | ON |
+| Allow brazier chests | ON |
+| Allow night and proximity braziers | ON |
+| Allow trash | ON |
+| Allow heart blood feed | ON |
+| Allow repeat hunts | **OFF** |
+| Repeat hunts only while a clan member is online | OFF |
+| Repeat hunt success cap (display) | 99 |
+| Move budget: moves per plot per tick / per tick total | 12 / 120 |
+| Item aliases (server) | built-ins `be gbe pbe abe gss sgs dsi ot`, locked; admin extras |
+| Empty all trash on this plot | button |
+| Give to storage (item, amount → Mass Deposit on this plot) | 1.x `.adminstash` |
+| Diagnostics: work-queue depth, last tick cost, item catalog dump | read-only plus buttons |
+| Allow unmodded clients | OFF |
+
+## Who honors reserve
+
+| Feature | Honors reserve |
+|---|---|
+| Input and output lists, loops | yes |
+| Craft from storage, building costs | yes |
+| Heart fuel | yes |
+| Pull | no |
+| Tidy | no |

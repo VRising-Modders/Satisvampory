@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Game-free routing engine. No game, BepInEx or Progenitor reference: the plugin adapts
+       Progenitor's inventory, castle and station APIs onto World/IWorld.cs. -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>Satisvampory.Engine</RootNamespace>
+    <AssemblyName>Satisvampory.Engine</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Satisvampory.Engine.Tests" />
+  </ItemGroup>
+</Project>

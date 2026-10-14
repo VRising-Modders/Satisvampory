@@ -63,7 +63,7 @@ Agreed split with Progenitor (P3, 2026-10-13):
 
 - **Satisvampory decides, per item:** which containers (the actor's island), the spend order (that item's reverse Mass Deposit order, so iron and wood in one recipe can drain different chests), and the reserve, kept once across the pool, not once per chest.
 - **Progenitor does the rest:** native counts, payment, the whole-request atomic transaction (no partial payment, no double charge), per-player totals (never rewriting a heart's shared aggregate), and lifecycle.
-- **Governed operations:** build and craft. Repair and heart upgrade join when Progenitor wires them. Research and anything else stay vanilla.
+- **Governed operations:** build, craft, repair and castle heart level-ups. Claiming, raiding, research and anything else stay vanilla. An item no chest on the island holds is left to the game's own rules rather than counted as zero. Item tooltips still show the game's own repair count.
 - **Who:** the castle's owner and clan members. Allies and visitors keep vanilla behavior.
 - **Opt-in seams:** Progenitor's material seams are off until the server and every client set `[Materials] NativeSeams = true` and restart. Until then Craft from storage has no effect and the game's own storage rules apply.
 - **Check and payment:** the game's check is the only refusal point. If stock vanishes between check and payment, Progenitor takes what is left and the craft still starts, as in vanilla.

@@ -16,7 +16,7 @@ using PgId = Progenitor.Inventory.ContainerId;
 namespace Satisvampory.Server
 {
     /// <summary>
-    /// Craft and build from storage (spec 06, 11 P3) over Progenitor's ctx.MaterialSource.
+    /// Craft, build, repair and heart upgrades from storage (spec 06, 11 P3) over Progenitor's ctx.MaterialSource.
     /// Progenitor counts, pays and keeps check and payment together; this only answers which
     /// chests, in what order and with what reserve, from <see cref="MaterialPolicy"/>. An empty
     /// answer means "not governed here" and the game's own rules apply.
@@ -54,7 +54,7 @@ namespace Satisvampory.Server
         }
 
         public IReadOnlyCollection<MaterialOperation> Operations { get; } =
-            new[] { MaterialOperation.Build, MaterialOperation.Craft };
+            new[] { MaterialOperation.Build, MaterialOperation.Craft, MaterialOperation.Repair, MaterialOperation.Upgrade };
 
         public long Revision(in MaterialContext context)
         {
@@ -71,11 +71,20 @@ namespace Satisvampory.Server
         {
             var island = Resolve(context);
             if (island == null) return null;
-            var use = context.Operation == MaterialOperation.Build ? MaterialUse.Build : MaterialUse.Craft;
+            var use = context.Operation switch
+            {
+                MaterialOperation.Build => MaterialUse.Build,
+                MaterialOperation.Repair => MaterialUse.Repair,
+                MaterialOperation.Upgrade => MaterialUse.Upgrade,
+                _ => MaterialUse.Craft,
+            };
             var answer = _half.MaterialPolicy.Sources(use, serverAllows: true, playerAllows: true, island.Deposit, island.Rules, new ItemId(item));
             if (answer is not { } a) return null;
             var station = context.Station;
             var order = a.SpendOrder.Select(id => new PgId(id.Value)).Where(id => !id.Equals(station)).ToList();
+            // A governed item with no sources counts as zero in the game's check and would refuse the
+            // whole operation; when the island holds none, leave that item to the game's own rules.
+            if (order.Count == 0) return null;
             return new ItemSources(order, a.PoolReserve);
         }
 

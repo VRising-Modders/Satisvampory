@@ -174,10 +174,14 @@ namespace Satisvampory.Client
             }
         }
 
+        /// <summary>The one-time tip card this panel shows the first time it opens, if any.</summary>
+        protected virtual string? TipId => null;
+
         public void Show()
         {
             Redraw();
             UiApi.Show(Panel);
+            if (TipId != null) Help.Tip(Owner.Ctx, TipId, Panel);
         }
 
         public void Hide()
@@ -189,6 +193,8 @@ namespace Satisvampory.Client
     /// <summary>An Input (side 0) or Output (side 1) list.</summary>
     internal sealed class ListView : View
     {
+        protected override string? TipId => Help.ListsTip;
+
         readonly int _side;
         IUiLabel _header = null!;
         IUiDropdown _order = null!;
@@ -237,6 +243,7 @@ namespace Satisvampory.Client
                     ? "Add the chests or belts this pulls from."
                     : "Add where this sends items. Push: Mass Deposit sends each item to the chest that rates it highest.",
             });
+            ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));
             ctx.Track(_list.OnReorder(m => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = m.From, To = m.To })));
             ctx.Track(_list.OnRemove(item => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = int.Parse(item.Id) })));
 
@@ -341,6 +348,8 @@ namespace Satisvampory.Client
     /// <summary>A chest's deposit settings (spec 01).</summary>
     internal sealed class DepositView : View
     {
+        protected override string? TipId => Help.DepositTip;
+
         IUiLabel _header = null!;
         IUiDropdown _takes = null!;
         IUiNumber _base = null!;
@@ -372,6 +381,7 @@ namespace Satisvampory.Client
             var ctx = Owner.Ctx;
             _header = panel.Label("");
             _takes = panel.Dropdown("Takes", TakesValues, "0", TakesLabels);
+            ctx.Track(_takes.Term("Deposit settings"));
             _base = panel.Number("Base priority", 0, -10, 10);
             _entries = panel.OrderedList("entries", Array.Empty<UiListItem>(), new UiOrderedListOptions
             {

@@ -58,9 +58,10 @@ namespace Satisvampory.Client
 
         // Inventory
         IUiInput _invSearch = null!;
-        IUiDropdown _invSort = null!;
         IUiToggle _invShort = null!;
-        IUiLabel _invTable = null!;
+        IUiLabel _invIsland = null!;
+        IUiDataTable _invTable = null!;
+        bool _invCanEdit;
         IUiInput _ruleTarget = null!;
         IUiDropdown _ruleKind = null!;
         IUiNumber _ruleValue = null!;
@@ -169,6 +170,20 @@ namespace Satisvampory.Client
             _tabs.Selected = tab;
             Refresh(tab);
             UiApi.Show(panel);
+            Help.Tip(_ctx, Help.HubTip, panel);
+            TabTip(tab);
+        }
+
+        void TabTip(int tab)
+        {
+            var id = tab switch
+            {
+                MassDepositTab => Help.MassDepositTip,
+                BeltsTab => Help.BeltsTip,
+                InventoryTab => Help.InventoryTip,
+                _ => null,
+            };
+            if (id != null && _panel != null) Help.Tip(_ctx, id, _panel);
         }
 
         void Refresh(int tab)
@@ -203,7 +218,7 @@ namespace Satisvampory.Client
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
                 _tabs = p.Tabs("tabs", new[] { "Castle", "Mass Deposit", "Belts and categories", "Inventory", "Find", "Hunt log" });
-                _ctx.Track(_tabs.OnChanged(Refresh));
+                _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
                 BuildBelts(p);
@@ -226,6 +241,7 @@ namespace Satisvampory.Client
             _plotLabel = In(CastleTab, p.Input("Plot label", ""));
             _logistics = In(CastleTab, p.Toggle("Logistics (lists run)", true));
             _defaultReserve = In(CastleTab, p.Number("Default reserve", 10, 0, 10000));
+            Track(_defaultReserve.Term("Reserve"));
             _salvage = In(CastleTab, p.Toggle("Feed salvage chests to the devourer", false));
             _heartFeed = In(CastleTab, p.Toggle("Heart fuel auto-feed", true));
             _repeat = In(CastleTab, p.Toggle("Repeat hunts on this castle", true));
@@ -270,7 +286,7 @@ namespace Satisvampory.Client
 
         void BuildMassDeposit(IUiPanel p)
         {
-            In(MassDepositTab, p.Label("Each chest's deposit settings decide where items go. Overrides and rules below change that island-wide."));
+            Track(In(MassDepositTab, p.Label("Each chest's deposit settings decide where items go. Overrides and rules below change that island-wide.")).Term("Mass Deposit"));
             _overview = In(MassDepositTab, p.Label(""));
             In(MassDepositTab, p.Divider());
             _overrides = In(MassDepositTab, p.OrderedList("md.overrides", Array.Empty<UiListItem>(), new UiOrderedListOptions { EmptyText = "No overrides. Chests' own settings decide." }));
@@ -370,6 +386,7 @@ namespace Satisvampory.Client
         {
             In(BeltsTab, p.Label("A belt is a named list of chests and stations you use together. A category is a named set of items."));
             _belts = In(BeltsTab, p.OrderedList("belts", Array.Empty<UiListItem>(), new UiOrderedListOptions { Reorder = false, EmptyText = "No belts yet. Make one, then add it to any Input or Output." }));
+            Track(_belts.Term("Belt"));
             Track(_belts.OnExpand((item, open) => { if (open) ShowBelt(item.Id); }));
             Track(_belts.OnRemove(item => EditBelt(new BeltEditReq { Op = 2, BeltId = item.Id })));
             _beltDetail = In(BeltsTab, p.Label(""));
@@ -380,6 +397,7 @@ namespace Satisvampory.Client
             Track(In(BeltsTab, p.Button("+ Add by name")).OnClick(() => WithSelectedBelt(id => EditBelt(new BeltEditReq { Op = 3, BeltId = id, Text = _beltText.Value }))));
             In(BeltsTab, p.Divider());
             _categories = In(BeltsTab, p.OrderedList("categories", Array.Empty<UiListItem>(), new UiOrderedListOptions { Reorder = false, Remove = false }));
+            Track(_categories.Term("Category"));
             _catName = In(BeltsTab, p.Input("Category", ""));
             _catItem = In(BeltsTab, p.Input("Item", ""));
             Track(In(BeltsTab, p.Button("+ New category")).OnClick(() => EditBelt(new BeltEditReq { Op = 10, Name = _catName.Value })));
@@ -430,41 +448,83 @@ namespace Satisvampory.Client
 
         // ---------------- Inventory ----------------
 
-        static readonly string[] SortValues = { "0", "2", "3", "4", "6", "7", "8", "9", "10" };
-        static readonly string[] SortLabels = { "Item", "Total", "Here", "Chests", "Reserve", "Spare", "Cap", "Demand", "Status" };
+        static UiTableColumn Num(string key, string caption, string term = "", bool editable = false) =>
+            new(key, caption, UiTableColumnKind.Number) { Term = term, Editable = editable, Format = "#,0", Hideable = key != "total" };
 
         void BuildInventory(IUiPanel p)
         {
             _invSearch = In(InventoryTab, p.Input("Search", ""));
-            _invSort = In(InventoryTab, p.Dropdown("Sort by", SortValues, "0", SortLabels));
             _invShort = In(InventoryTab, p.Toggle("Only short", false));
             Track(In(InventoryTab, p.Button("Refresh")).OnClick(LoadInventory));
-            Track(_invSort.OnChanged(_ => LoadInventory()));
             Track(_invShort.OnChanged(_ => LoadInventory()));
-            _invTable = In(InventoryTab, p.Label(""));
+            _invIsland = In(InventoryTab, p.Label(""));
+            _invTable = In(InventoryTab, p.DataTable("inv", new[]
+            {
+                new UiTableColumn("item", "Item") { Hideable = false },
+                Num("total", "Total", "Island"),
+                Num("here", "Here"),
+                Num("chests", "Chests"),
+                Num("stations", "In stations"),
+                Num("reserve", "Reserve", "Reserve", editable: true),
+                Num("spare", "Spare"),
+                Num("cap", "Cap", "Cap", editable: true),
+                Num("demand", "Demand"),
+                new UiTableColumn("status", "Status"),
+            }, new UiDataTableOptions
+            {
+                VisibleRows = 14,
+                TotalRow = false,
+                Sort = new[] { new UiTableSortKey("item") },
+                EmptyText = "Nothing stored on this island.",
+            }));
+            Track(_invTable.OnEdit(OnInventoryEdit));
             In(InventoryTab, p.Divider());
-            _ruleTarget = In(InventoryTab, p.Input("Item, or \"category <name>\"", ""));
+            _ruleTarget = In(InventoryTab, p.Input("Category reserve or cap: \"category <name>\" (items: edit the table)", ""));
             _ruleKind = In(InventoryTab, p.Dropdown("Set", new[] { "0", "1" }, "0", new[] { "Reserve", "Cap" }));
             _ruleValue = In(InventoryTab, p.Number("Value (−1 clears)", -1, -1, 1_000_000));
             Track(In(InventoryTab, p.Button("Apply")).OnClick(() =>
-                Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = ClientItems.Resolve(_ctx, _ruleTarget.Value), Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, _ => LoadInventory())));
+                Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = ClientItems.Resolve(_ctx, _ruleTarget.Value), Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, DrawInventory)));
         }
 
         void LoadInventory()
         {
             _ = Panel;
-            var col = int.TryParse(_invSort.Value, out var c) ? c : 0;
-            Send<GetInventoryReq, InventoryMsg>(new GetInventoryReq { SortColumn = col, Descending = col != 0, Search = _invSearch.Value, OnlyShort = _invShort.Value }, DrawInventory);
+            Send<GetInventoryReq, InventoryMsg>(new GetInventoryReq { Search = _invSearch.Value, OnlyShort = _invShort.Value }, DrawInventory);
         }
 
         void DrawInventory(InventoryMsg m)
         {
-            static string From(int f) => f switch { 2 => "", 1 => " (category)", _ => " (default)" };
-            var lines = new List<string> { m.Island, "Item · total · here · chests · in stations · reserve · spare · cap · demand · status" };
-            lines.AddRange(m.Rows.Take(60).Select(r =>
-                $"{ClientItems.NameOf(_ctx, r.Item, r.Name)} · {r.Total:N0} · {r.Here:N0} · {r.Chests} · {r.InStations:N0} · {r.Reserve:N0}{From(r.ReserveFrom)} · {r.Spare:N0} · {(r.Cap < 0 ? "—" : r.Cap.ToString("N0") + From(r.CapFrom))} · {r.Demand:N0} · {r.Status}"));
-            if (m.Rows.Count > 60) lines.Add($"… {m.Rows.Count - 60} more; narrow with Search.");
-            _invTable.Text = string.Join("\n", lines);
+            static string From(int f) => f == 1 ? "category" : "default";
+            _invCanEdit = m.CanEdit;
+            _invIsland.Text = m.Island + (m.Rows.Count >= 500 ? " · first 500 items; narrow with Search." : "");
+            _invTable.SetRows(m.Rows.Select(r =>
+            {
+                var row = new UiTableRow(r.Item.ToString()) { ItemPrefab = r.Item, Detail = r.Categories.Length > 0 ? "Categories: " + r.Categories : "" };
+                row.Text("item", ClientItems.NameOf(_ctx, r.Item, r.Name))
+                    .Number("total", r.Total)
+                    .Number("here", r.Here)
+                    .Number("chests", r.Chests)
+                    .Number("stations", r.InStations)
+                    .Number("reserve", r.Reserve, inherited: r.ReserveFrom != 2, source: r.ReserveFrom != 2 ? From(r.ReserveFrom) : "")
+                    .Number("spare", r.Spare)
+                    .Number("cap", r.Cap < 0 ? null : r.Cap, inherited: r.Cap >= 0 && r.CapFrom != 2, source: r.Cap >= 0 && r.CapFrom != 2 ? From(r.CapFrom) : "")
+                    .Number("demand", r.Demand)
+                    .Text("status", r.Status, r.Status is "Short" or "Below reserve" ? LabelTone.Warn : LabelTone.Normal);
+                row.Locked = !m.CanEdit;
+                return row;
+            }));
+        }
+
+        /// <summary>An inline Reserve or Cap edit: the server decides; a cleared cell goes back to the default.</summary>
+        void OnInventoryEdit(UiTableEdit e)
+        {
+            if (!_invCanEdit) { e.Reject("Only clan members can change reserves and caps."); return; }
+            var value = e.Clear || e.NewValue is not { } v ? -1 : (int)Math.Max(0, Math.Round(v));
+            _ctx.Requests.Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = e.RowId, Rule = e.Column == "cap" ? 1 : 0, Value = value }, r =>
+            {
+                if (r.Ok && r.Reply != null) { e.Resolve(); DrawInventory(r.Reply); }
+                else e.Reject(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : "Not saved: " + r.Status);
+            });
         }
 
         // ---------------- Find ----------------

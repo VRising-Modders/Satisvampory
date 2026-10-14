@@ -34,6 +34,7 @@ namespace Satisvampory
             _ctx.Net.OnReceive(EventIds.Text, OnText);
             _admin.Request = SendAction;
             _ctx.Track(new OnDispose(() => _admin.Request = null));
+            Client.Help.Attach(_ctx, _player);
             new Client.Panels(_ctx).Attach();
             new Client.Hub(_ctx, _player).Attach(_keys);
             _ctx.Track(new OnDispose(() => _stopped = true));

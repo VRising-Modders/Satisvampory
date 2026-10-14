@@ -51,5 +51,5 @@ Built and tested outside the game; nothing has run in-game yet.
 | Servants (loot stash, repeat hunts, notices, hunt log, throne targeting) | done (Progenitor servants API) |
 | Braziers fed from their Input list | done |
 | Pick in world, Locate | done (Progenitor network-id resolver) |
-| Data-table inventory, term tooltips, tip cards | wait on Progenitor P7b; text versions in place |
+| Data-table inventory, term tooltips, tip cards | done against Progenitor PR 14 (open): sortable, hideable table with inline Reserve / Cap edits; ⓘ terms; tips for the hub, Mass Deposit, Belts, Inventory, Input/Output and Deposit settings. Not yet: category chips, remembered sort per player, live deltas, the shared-island tip |
 | Stash skipping the hotbar exactly; stash/pull/tidy refused while downed, dead, in PvP combat | done (Progenitor slot filters and player state) |

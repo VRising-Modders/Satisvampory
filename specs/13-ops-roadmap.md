@@ -12,9 +12,9 @@ Test on a **copy** of a real, well-used save (several castles, full chests) runn
 
 Satisvampory 1.x must not be loaded on the test server alongside 2.0.
 
-## Headless admin commands
+## No chat commands
 
-For testing without a client only, admin-gated, one group: `.sv version`, `.sv dump <container>` (lists, belts, last moves), `.sv tick`, `.sv import`. Players never need chat.
+Satisvampory 2.0 has **no** `.` commands, not even for admins. Every admin action is a row, button or info line in the Server section of the settings page (`10-settings.md`); the server checks admin rights on each request. Headless testing uses Progenitor's dev bridge (snippet exec, keybind presses), never chat.
 
 ## Milestones
 
@@ -22,7 +22,7 @@ For testing without a client only, admin-gated, one group: `.sv version`, `.sv d
 |---|---|---|
 | **P-a** | Progenitor P1 inventory, P4 castles and clans, P5 ids, with samples and tests | `.items`-style sample moves 50 Iron Ore between two chests on the test save, atomically; counts match the vanilla panel |
 | **P-b** | Progenitor P3 material availability spike | Crafting at a tailoring bench on plot A shows and spends cloth sitting in a bare-floor chest on plot B |
-| **S1** | Engine: lists, belts, categories, Mass Deposit Simple, stations whole-craft and leftovers, reserve, cap, fair share, diagnostics, persistence, headless commands, 1.x import | Imported 1.x lines from the test save run; a furnace pulls only full crafts and returns leftovers when a recipe is switched off |
+| **S1** | Engine: lists, belts, categories, Mass Deposit Simple, stations whole-craft and leftovers, reserve, cap, fair share, diagnostics, persistence, 1.x import | Imported 1.x lines from the test save run; a furnace pulls only full crafts and returns leftovers when a recipe is switched off |
 | **P-c** | Progenitor P6 panel sites, P7 widgets, P8 messages | Buttons appear on a chest and a furnace; list reorders round-trip |
 | **S2** | Input and output panels, pickers, pick in world, plot labels, Belts and categories screen | Link a chest on plot 2 into a furnace on plot 1 from the panel without typing a name; rename a belt used by three lists and all three follow |
 | **S3** | Mass Deposit screen, Simple and Advanced, preview; Inventory page | An Advanced rule moves gems to a named vault; preview names the rule |

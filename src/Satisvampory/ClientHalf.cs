@@ -13,12 +13,14 @@ namespace Satisvampory
         readonly SatisContext _ctx;
         readonly PlayerConfig _player;
         readonly Keys _keys;
+        readonly AdminPanel _admin;
 
-        internal ClientHalf(SatisContext ctx, PlayerConfig player, Keys keys)
+        internal ClientHalf(SatisContext ctx, PlayerConfig player, Keys keys, AdminPanel admin)
         {
             _ctx = ctx;
             _player = player;
             _keys = keys;
+            _admin = admin;
         }
 
         internal unsafe void Attach()
@@ -28,6 +30,9 @@ namespace Satisvampory
             _keys.Pressed += OnKey;
             _ctx.Track(new OnDispose(() => _keys.Pressed -= OnKey));
             _ctx.Net.OnReceive(EventIds.Notice, OnNotice);
+            _ctx.Net.OnReceive(EventIds.Text, OnText);
+            _admin.Request = SendAction;
+            _ctx.Track(new OnDispose(() => _admin.Request = null));
             SendPrefs();
         }
 
@@ -47,7 +52,21 @@ namespace Satisvampory
                 _ctx.Log.LogInfo($"Satisvampory: the {id} screen arrives with Progenitor's panel sites.");
                 return;
             }
+            SendAction(kind);
+        }
+
+        void SendAction(ActionKind kind)
+        {
+            if (kind == ActionKind.ImportCheck) _admin.LastResult = "Asking the server…";
             _ctx.Net.SendToServer(EventIds.Action, new ActionPacket { Magic = EventIds.Magic, Kind = (int)kind });
+        }
+
+        unsafe void OnText(int eventId, byte* payload, int length)
+        {
+            if (length < sizeof(TextPacket)) return;
+            var t = *(TextPacket*)payload;
+            if (t.Magic != EventIds.Magic) return;
+            if ((ActionKind)t.Kind == ActionKind.ImportCheck) _admin.LastResult = t.Text();
         }
 
         unsafe void OnNotice(int eventId, byte* payload, int length)

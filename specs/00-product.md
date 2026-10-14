@@ -37,7 +37,7 @@ Rewritten 2026-10-13. It replaces an earlier, unpublished Flow Map design.
 
 - **Autoloot / scoop.** It is a separate Progenitor mod, a port of GroundScoop with its settings and scoop key in the Progenitor UI. If both mods are loaded, the autoloot mod may ask Satisvampory for storage counts (bag caps counted against storage) through a small optional interface. Neither mod requires the other.
 - **Supply lend** (starter kit, build cover, heart upgrade staging). Sharing makes staging unnecessary: building and crafting read shared storage directly. Heart blood feed stays, now triggered by visiting a plot or logging in (`09-special-chests.md`).
-- **Chat commands.** None for players. A minimal admin set exists for headless testing only (`13-ops-roadmap.md`).
+- **Chat commands.** None, for players or admins. Admin actions are Server settings rows and buttons (`10-settings.md`).
 - **`s#` / `r#` routing by name.** Read once by the 1.x importer (`12-protocol-persistence.md`), then ignored.
 - The Flow Map, helper NPC, and blueprints from the September spec. They are deferred, not cancelled, and may come back on top of the input and output lists.
 - Loading beside 1.x, KindredLogistics, or any other logistics plugin.

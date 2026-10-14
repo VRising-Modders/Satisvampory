@@ -39,7 +39,6 @@ namespace Satisvampory.Server
             _ctx.Track(new OnDispose(() => { if (ReferenceEquals(_active, this)) _active = null; }));
             _ctx.Net.OnReceiveFromClient(EventIds.PlayerPrefs, OnPrefs);
             _ctx.Net.OnReceiveFromClient(EventIds.Action, OnAction);
-            _ctx.Commands.Register(typeof(SvCommands));
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }
 
@@ -67,6 +66,12 @@ namespace Satisvampory.Server
             if (length < sizeof(ActionPacket)) return;
             var a = *(ActionPacket*)payload;
             if (a.Magic != EventIds.Magic) return;
+            if ((ActionKind)a.Kind == ActionKind.ImportCheck)
+            {
+                var text = user.IsAdmin ? AdminActions.ImportCheck() : "Only server admins can run this.";
+                _ctx.Net.SendToUser(userEntity, EventIds.Text, TextPacket.Of(ActionKind.ImportCheck, text));
+                return;
+            }
 #if SATIS_PA
             NoticePacket reply;
             try

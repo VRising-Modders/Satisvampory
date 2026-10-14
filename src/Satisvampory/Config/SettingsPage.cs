@@ -11,7 +11,7 @@ namespace Satisvampory.Config
     /// </summary>
     public static class SettingsPage
     {
-        public static void Build(PluginContext ctx, ServerConfig server, PlayerConfig player, Keys keys)
+        public static void Build(PluginContext ctx, ServerConfig server, PlayerConfig player, Keys keys, AdminPanel admin)
         {
             ctx.Settings.Page(page =>
             {
@@ -35,11 +35,29 @@ namespace Satisvampory.Config
                         page.Number(entry, label: label, help: help, scope: SettingScope.Server);
                 }
 
+                page.Info("Version", () => $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · island save v{Engine.Persistence.IslandSave.CurrentVersion}", refreshSeconds: 0);
+                page.Button("Check", () => admin.Request?.Invoke(Net.ActionKind.ImportCheck),
+                    help: "Reads the server's Satisvampory 1.x settings file and reports what would carry over. Changes nothing. Admins only.",
+                    needsServerPart: true, label: "Import from Satisvampory 1.x");
+                page.Info("Import result", () => admin.LastResult, refreshSeconds: 0.5);
+
                 page.Section("Help");
                 foreach (var (term, text) in Glossary.Terms)
                     page.Info(term, () => text, refreshSeconds: 0);
             });
         }
+    }
+
+    /// <summary>
+    /// Admin rows on the settings page. Buttons call <see cref="Request"/> (set by the client
+    /// half to send the request); the server checks admin rights and replies into
+    /// <see cref="LastResult"/>.
+    /// </summary>
+    public sealed class AdminPanel
+    {
+        public System.Action<Net.ActionKind>? Request { get; set; }
+
+        public string LastResult { get; set; } = "Not run yet.";
     }
 
     /// <summary>The glossary from spec 16, one place for every surface.</summary>

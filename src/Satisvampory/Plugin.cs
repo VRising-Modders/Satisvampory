@@ -21,10 +21,11 @@ namespace Satisvampory
             var server = ServerConfig.Bind(ctx);
             var player = PlayerConfig.Bind(ctx);
             var keys = Keys.Register(ctx);
-            SettingsPage.Build(ctx, server, player, keys);
+            var admin = new AdminPanel();
+            SettingsPage.Build(ctx, server, player, keys, admin);
 
             if (ctx.IsServer) new ServerHalf(ctx, server).Attach();
-            else new ClientHalf(ctx, player, keys).Attach();
+            else new ClientHalf(ctx, player, keys, admin).Attach();
         }
     }
 

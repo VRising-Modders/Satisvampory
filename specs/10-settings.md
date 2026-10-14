@@ -85,8 +85,10 @@ Same switches as 1.x's server toggles, rewritten. Every allow defaults ON except
 | Item aliases (server) | built-ins `be gbe pbe abe gss sgs dsi ot`, locked; admin extras |
 | Empty all trash on this plot | button |
 | Give to storage (item, amount → Mass Deposit on this plot) | 1.x `.adminstash` |
-| Diagnostics: work-queue depth, last tick cost, item catalog dump | read-only plus buttons |
+| Diagnostics: work-queue depth, last tick cost, item catalog summary | info rows, refreshed while the page is open |
 | Allow unmodded clients | OFF |
+| Satisvampory version and save version | info |
+| Import from Satisvampory 1.x: **Check** (dry run: what would carry over, what would not) and **Import** | buttons; result shown in an info row |
 
 ## Who honors reserve
 

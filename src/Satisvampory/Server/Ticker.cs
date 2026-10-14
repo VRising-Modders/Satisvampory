@@ -126,13 +126,15 @@ namespace Satisvampory.Server
         (string Key, List<ICastleHandle> Members) IslandOf(ICastleHandle castle, List<ICastleHandle> all, SharingState sharing)
         {
             var owner = _half.PlayerFor(castle.Owner.PlatformId);
+            bool Excluded(ICastleHandle c) => Stores.Castle(_ctx.Save, c.Territory.Index).ExcludeFromSharing;
+            if (Excluded(castle)) return ("castle/" + castle.Territory.Index, new List<ICastleHandle> { castle });
             if (castle.Owner.HasClan && sharing.ClanShare(owner.TakePartInClanShare))
             {
                 var clan = _ctx.Clans.Of(castle.Owner.User.ToEntity());
                 if (!clan.IsNone)
                 {
                     var members = _ctx.Clans.Castles(clan)
-                        .Where(c => c.Enabled && !c.Raided && sharing.ClanShare(_half.PlayerFor(c.Owner.PlatformId).TakePartInClanShare))
+                        .Where(c => c.Enabled && !c.Raided && !Excluded(c) && sharing.ClanShare(_half.PlayerFor(c.Owner.PlatformId).TakePartInClanShare))
                         .ToList();
                     if (!members.Any(c => ProgenitorWorld.PlotOf(c) == ProgenitorWorld.PlotOf(castle))) members.Add(castle);
                     return ("clan/" + clan.ClanGuid.ToString("N"), members);
@@ -140,7 +142,7 @@ namespace Satisvampory.Server
             }
             if (sharing.CastleShare(owner.ShareBetweenMyCastles))
             {
-                var mine = all.Where(c => c.Owner.PlatformId == castle.Owner.PlatformId && !c.Raided).ToList();
+                var mine = all.Where(c => c.Owner.PlatformId == castle.Owner.PlatformId && !c.Raided && !Excluded(c)).ToList();
                 if (mine.Count > 1) return ("owner/" + castle.Owner.PlatformId, mine);
             }
             return ("castle/" + castle.Territory.Index, new List<ICastleHandle> { castle });

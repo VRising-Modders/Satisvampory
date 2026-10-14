@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+using System.Linq;
 using Satisvampory.Config;
 using Satisvampory.Net;
 
@@ -34,6 +35,7 @@ namespace Satisvampory
             _admin.Request = SendAction;
             _ctx.Track(new OnDispose(() => _admin.Request = null));
             new Client.Panels(_ctx).Attach();
+            new Client.Hub(_ctx, _player).Attach(_keys);
             SendPrefs();
         }
 
@@ -45,14 +47,9 @@ namespace Satisvampory
             var kind = id switch
             {
                 Keys.Stash => ActionKind.Stash,
-                Keys.Tidy => ActionKind.Tidy,
                 _ => ActionKind.None,
             };
-            if (kind == ActionKind.None)
-            {
-                _ctx.Log.LogInfo($"Satisvampory: the {id} screen arrives with Progenitor's panel sites.");
-                return;
-            }
+            if (kind == ActionKind.None) return; // the hub handles the other keys
             SendAction(kind);
         }
 
@@ -78,12 +75,15 @@ namespace Satisvampory
             var text = (NoticeCode)n.Code switch
             {
                 NoticeCode.NotAvailableYet => "Satisvampory: that needs Progenitor's inventory API, which this build does not have yet.",
-                NoticeCode.Refused => "Satisvampory: refused.",
+                NoticeCode.Refused => "Satisvampory: not here. Stand on one of your or your clan's castles.",
                 NoticeCode.Stashed => $"Stashed {n.A} stacks into {n.B} chests.",
                 NoticeCode.Tidied => $"Tidied {n.A} items across {n.B} chests.",
                 _ => null,
             };
-            if (text != null) _ctx.Log.LogInfo(text);
+            if (text == null) return;
+            var kind = (NoticeCode)n.Code is NoticeCode.Stashed or NoticeCode.Tidied ? Progenitor.Ui.UiNoticeKind.Success : Progenitor.Ui.UiNoticeKind.Warning;
+            if ((NoticeCode)n.Code == NoticeCode.Stashed && _player.Rows.First(r => r.Entry.Definition.Key == "SilentStash").Entry.Value) return;
+            _ctx.Hud.Notify(text, kind: kind, seconds: 5);
         }
     }
 

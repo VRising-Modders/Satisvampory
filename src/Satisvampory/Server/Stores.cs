@@ -21,6 +21,15 @@ namespace Satisvampory.Server
         public static void SetPlayer(IModStore store, ulong platformId, PlayerSettings settings) =>
             store.Set(PlayerKey(platformId), settings);
 
+        public static string CastleKey(int territory) => "castle-settings/" + territory;
+
+        /// <summary>Castle page settings (spec 10), kept on the castle's territory so they follow the heart, not the owner.</summary>
+        public static CastleSettings Castle(IModStore store, int territory) =>
+            store.Get<CastleSettings>(CastleKey(territory)) ?? new CastleSettings();
+
+        public static void SetCastle(IModStore store, int territory, CastleSettings settings) =>
+            store.Set(CastleKey(territory), settings);
+
         public static IslandSave? Island(IModStore store, string owner) =>
             store.Get<IslandSave>(IslandKey(owner));
 

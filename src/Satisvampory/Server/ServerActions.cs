@@ -60,7 +60,7 @@ namespace Satisvampory.Server
             PlotInfo Info(ICastleHandle c)
             {
                 var prefs = half.PlayerFor(c.Owner.PlatformId);
-                return new PlotInfo(ProgenitorWorld.PlotOf(c), c.Owner.PlatformId, Excluded: false,
+                return new PlotInfo(ProgenitorWorld.PlotOf(c), c.Owner.PlatformId, Excluded: Stores.Castle(ctx.Save, c.Territory.Index).ExcludeFromSharing,
                     OwnerSharesCastles: prefs.ShareBetweenMyCastles, OwnerInClanShare: prefs.TakePartInClanShare);
             }
 

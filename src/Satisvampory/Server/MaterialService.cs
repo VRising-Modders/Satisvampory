@@ -73,7 +73,7 @@ namespace Satisvampory.Server
         }
 
         public IReadOnlyCollection<MaterialOperation> Operations { get; } =
-            new[] { MaterialOperation.Build, MaterialOperation.Craft, MaterialOperation.Repair, MaterialOperation.Upgrade };
+            new[] { MaterialOperation.Build, MaterialOperation.Craft, MaterialOperation.Repair, MaterialOperation.Upgrade, MaterialOperation.CharacterCraft };
 
         public long Revision(in MaterialContext context)
         {
@@ -135,6 +135,8 @@ namespace Satisvampory.Server
                 MaterialOperation.Build => MaterialUse.Build,
                 MaterialOperation.Repair => MaterialUse.Repair,
                 MaterialOperation.Upgrade => MaterialUse.Upgrade,
+                // The Character window's Crafting tab spends like a station (same reserves and order).
+                MaterialOperation.CharacterCraft => MaterialUse.Craft,
                 _ => MaterialUse.Craft,
             };
             var now = Environment.TickCount64;

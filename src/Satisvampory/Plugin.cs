@@ -14,6 +14,14 @@ namespace Satisvampory
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
     [BepInDependency("progenitor")]
     [ProgenitorSide(Side.Both)]
+    // Either side may run without the other; the halves talk over raw ctx.Net packets, so peers
+    // must share a minor version.
+    [NetworkCompatibility(NetworkCompatibilityLevel.NoNeedForSync, NetworkVersionRule.Minor)]
+    [Counterpart(CounterpartNeed.Limited, Features = new[]
+    {
+        "Hub (inventory, find, belts, Mass Deposit)", "Chest and station Input and Output panels",
+        "Quick stash and tidy", "Admin tools and import",
+    })]
     public sealed class Plugin : ProgenitorPlugin<SatisContext>
     {
         protected override void OnLoad(SatisContext ctx)

@@ -50,6 +50,10 @@ namespace Satisvampory.Server
             _ctx.Net.OnReceiveFromClient(EventIds.PlayerPrefs, OnPrefs);
             _ctx.Net.OnReceiveFromClient(EventIds.Action, OnAction);
             Catalog.Aliases = () => Config.Snapshot().ItemAliases;
+            // Allows, shares and pull rules change every player's craft-from-storage answers.
+            System.Action serverChanged = MaterialPolicy.Invalidate;
+            _server.Changed += serverChanged;
+            _ctx.Track(new OnDispose(() => _server.Changed -= serverChanged));
             World.ProgenitorWorld.FailureLog = t => _ctx.Log.LogInfo(t);
             _ctx.Track(new OnDispose(() => World.ProgenitorWorld.FailureLog = null));
             var like = new PluginContextLike(_ctx);
@@ -88,6 +92,8 @@ namespace Satisvampory.Server
             var settings = PlayerConfig.FromBits(p.Bits);
             _players[user.PlatformId] = settings;
             Stores.SetPlayer(_ctx.Save, user.PlatformId, settings);
+            // Craft from storage, shares and never-pull-last change this player's answers.
+            MaterialPolicy.Invalidate();
         }
 
         unsafe void OnAction(int eventId, Entity userEntity, User user, byte* payload, int length)

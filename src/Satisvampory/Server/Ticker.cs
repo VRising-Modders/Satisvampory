@@ -39,6 +39,34 @@ namespace Satisvampory.Server
         int _rotate;
 
         /// <summary>The last conveyor report for an island, for the panels' row status lines.</summary>
+        // ---------------- material facts ----------------
+
+        const double MaterialFactsSeconds = 5;
+        double _lastMaterialFacts;
+        long _materialFacts;
+
+        /// <summary>
+        /// Craft-from-storage answers depend on which plots are castles, which are raided, and which
+        /// containers stand on them. Progenitor reuses a player's view until the provider's revision
+        /// moves, so move it when one of these changes, and only then.
+        /// </summary>
+        void WatchMaterialFacts(List<ICastleHandle> castles)
+        {
+            if (Now - _lastMaterialFacts < MaterialFactsSeconds) return;
+            _lastMaterialFacts = Now;
+            long sig = castles.Count;
+            foreach (var c in castles.OrderBy(c => c.Territory.Index))
+            {
+                sig = unchecked(sig * 31 + c.Territory.Index * 2 + (c.Raided ? 1 : 0));
+                foreach (var id in ProgenitorWorld.ContainerIds(new[] { c }))
+                    sig = unchecked(sig + id.Value.GetHashCode() * 17);
+            }
+            if (sig == _materialFacts) return;
+            var first = _materialFacts == 0;
+            _materialFacts = sig;
+            if (!first) _half.MaterialPolicy.Invalidate();
+        }
+
         // ---------------- destroyed containers (spec 12) ----------------
 
         const double SweepSeconds = 60, MissingGraceSeconds = 120;
@@ -174,6 +202,7 @@ namespace Satisvampory.Server
             var sharing = Sharing(server);
             var castles = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             SweepDestroyed(castles);
+            WatchMaterialFacts(castles);
             var done = new HashSet<PlotId>();
             var budget = server.MovesPerTick;
             if (castles.Count == 0) return;

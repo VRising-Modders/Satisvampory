@@ -40,8 +40,14 @@ namespace Satisvampory.Server
         readonly ServerHalf _half;
         readonly Dictionary<(CastleId User, int Territory), (long Until, long Revision, Resolved? Island)> _cache = new();
 
+        /// <summary>How old the chest counts behind the answers may get before a re-read.</summary>
+        const long StockMs = 1000;
+
         sealed class Resolved
         {
+            /// <summary>Fresh counts over the island's chests (one read per chest, then memory).</summary>
+            public Func<DepositContext> ReadStock = null!;
+            public long StockAt;
             public DepositContext Deposit = null!;
             public CastleRules Rules = null!;
             public List<PgId> Candidates = new();
@@ -77,10 +83,11 @@ namespace Satisvampory.Server
 
         long RevisionCore(in MaterialContext context)
         {
-            // Settings and list edits bump the policy; raid state and chest contents are picked up
-            // by a slow time bucket. Payments re-resolve regardless.
+            // Settings, list edits, raids and built or destroyed containers bump the policy (the
+            // ticker watches the world facts). Chest contents are not in the revision: Progenitor
+            // re-asks when stock it read changes, and the answers re-read stock (StockMs).
             var allowed = Allowed(context, out _) ? 1L : 0L;
-            return unchecked(_half.MaterialPolicy.Revision * 1_000_003L + allowed * 7919L + Environment.TickCount64 / 30_000);
+            return unchecked(_half.MaterialPolicy.Revision * 1_000_003L + allowed * 7919L);
         }
 
         public IReadOnlyList<PgId> Candidates(in MaterialContext context)
@@ -129,6 +136,13 @@ namespace Satisvampory.Server
                 MaterialOperation.Upgrade => MaterialUse.Upgrade,
                 _ => MaterialUse.Craft,
             };
+            var now = Environment.TickCount64;
+            if (now - island.StockAt > StockMs)
+            {
+                island.Deposit = island.ReadStock();
+                island.Answers.Clear();
+                island.StockAt = now;
+            }
             if (!island.Answers.TryGetValue(item, out var answer))
                 island.Answers[item] = answer = _half.MaterialPolicy.Sources(use, serverAllows: true, playerAllows: true, island.Deposit, island.Rules, new ItemId(item));
             if (answer is not { } a) return null;
@@ -183,19 +197,23 @@ namespace Satisvampory.Server
             if (island == null || island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return null;
             if (context.StandingTerritory >= 0 && island.Standing.Territory.Index != context.StandingTerritory) return null;
 
-            // One read per chest for the cache's life; every per-item ranking then runs from memory.
-            var world = new SnapshotView(new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null));
-            var deposit = new DepositContext(_half.Catalog.Current.WithEdits(island.State.Categories), world, island.Scope, ProgenitorWorld.PlotOf(island.Standing))
-            {
-                Settings = island.State.MassDeposit,
-                Belts = island.State.Graph.BeltMembers(),
-            };
-            var candidates = Scope.Chests(world, island.Scope)
+            // The island's shape is cached; the counts are re-read at most once a second (StockMs),
+            // one read per chest, and every per-item ranking then runs from memory.
+            var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);
+            var belts = island.State.Graph.BeltMembers();
+            DepositContext ReadStock() =>
+                new(catalog, new SnapshotView(new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
+                    id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)), island.Scope, ProgenitorWorld.PlotOf(island.Standing))
+                {
+                    Settings = island.State.MassDeposit,
+                    Belts = belts,
+                };
+            var deposit = ReadStock();
+            var candidates = Scope.Chests(deposit.World, island.Scope)
                 .Where(c => c.Deposit.Special is SpecialKind.None or SpecialKind.Overflow or SpecialKind.Spoils)
                 .Select(c => new PgId(c.Id.Value))
                 .ToList();
-            return new Resolved { Deposit = deposit, Rules = island.State.Rules, Candidates = candidates };
+            return new Resolved { ReadStock = ReadStock, StockAt = Environment.TickCount64, Deposit = deposit, Rules = island.State.Rules, Candidates = candidates };
         }
     }
 }

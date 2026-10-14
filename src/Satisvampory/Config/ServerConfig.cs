@@ -20,6 +20,9 @@ namespace Satisvampory.Config
 
         public List<(ConfigEntryBase Entry, string Label, string Help)> Rows { get; } = new();
 
+        /// <summary>Raised when any synced server setting changes.</summary>
+        public event Action? Changed;
+
         /// <summary>Synced: admin's extra item aliases.</summary>
         public ConfigEntry<string> Aliases { get; private set; } = null!;
         /// <summary>Local only: what Give to storage gives.</summary>
@@ -82,6 +85,7 @@ namespace Satisvampory.Config
         void Flag(PluginContext ctx, string key, bool value, string label, string help, Action<ServerSettings, bool> set)
         {
             var e = ctx.Bind(Section, key, value, help, synced: true);
+            e.SettingChanged += (_, _) => Changed?.Invoke();
             Rows.Add((e, label, help));
             _apply.Add(s => set(s, e.Value));
             var getter = typeof(ServerSettings).GetProperty(key);
@@ -91,6 +95,7 @@ namespace Satisvampory.Config
         void Int(PluginContext ctx, string key, int value, int min, int max, string label, string help, Action<ServerSettings, int> set)
         {
             var e = ctx.Bind(Section, key, value, help, synced: true, acceptableValues: new AcceptableValueRange<int>(min, max));
+            e.SettingChanged += (_, _) => Changed?.Invoke();
             Rows.Add((e, label, help));
             _apply.Add(s => set(s, e.Value));
             var getter = typeof(ServerSettings).GetProperty(key);

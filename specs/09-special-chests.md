@@ -32,7 +32,7 @@ Not a chest kind. Blood Essence is moved into castle hearts' fuel so a player ne
 | **Top up my island's hearts when I log in** | OFF | At login, top up every heart on my island: just the plot I am on when both sharing kinds are off, my own castles under castle share, every participating clan castle under clan share. |
 | **Also top up hearts outside my island** | OFF | Visiting a plot owned by me or my clan that is **not** on my island (excluded castle, an owner who opted out of clan share, sharing off) tops up its heart too, from that plot's own island. |
 
-A visit top-up runs once per plot entry, with a 60 s cooldown per heart. A login top-up runs once, after the player has loaded in.
+A visit top-up runs once per plot entry, within about two seconds of crossing in, with a 60 s cooldown per heart. Logging in while standing on a plot counts as a visit. A login top-up runs once, after the player is fully loaded in; the cooldown stops the two from feeding the same heart twice.
 
 **Castle switch**: **Heart fuel auto-feed** (Castle page, default ON). Off: nothing feeds that heart for anyone, and emptying the pads sticks so the heart can be dismantled. Turning it on clears that.
 

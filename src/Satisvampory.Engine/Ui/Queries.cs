@@ -91,6 +91,7 @@ namespace Satisvampory.Engine.Ui
 
                 string? refused = null;
                 if (c.Id == q.Self) refused = "This is the container you are editing";
+                else if (world.IsRaided(c.Plot)) refused = "Castle is under attack";
                 else if (!inIsland) refused = "Outside your sharing island";
                 else if (c.Deposit.Special == SpecialKind.Skip) refused = "Skip chests are never used";
                 else if (c.Kind == NodeKind.Heart && q.Side == PickerSide.Input) refused = "Hearts only give items through their own Output";

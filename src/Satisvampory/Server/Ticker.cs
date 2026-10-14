@@ -96,6 +96,7 @@ namespace Satisvampory.Server
             }
         }
 
+        readonly HashSet<(string Island, string Loop)> _stalled = new();
         double _lastTickMs;
         int _lastIslands, _lastMoves;
 
@@ -231,6 +232,16 @@ namespace Satisvampory.Server
                     LoopsAllowed = server.AllowLoops,
                 }).Run(Now);
                 _lastReports[key] = report;
+                foreach (var (loopKey, ls) in tickState.Loops)
+                {
+                    var was = _stalled.Contains((key, loopKey));
+                    if (ls.Stalled && !was)
+                    {
+                        _stalled.Add((key, loopKey));
+                        _ctx.Log.LogInfo($"Satisvampory: a loop on {key} kept moving for 60 s with no outside change and was stopped ({loopKey}).");
+                    }
+                    else if (!ls.Stalled && was) _stalled.Remove((key, loopKey));
+                }
                 if (!_recent.TryGetValue(key, out var recent)) _recent[key] = recent = new List<(double, MoveRecord)>();
                 recent.RemoveAll(x => x.At < Now - 60);
                 if (recent.Count < 5000) recent.AddRange(report.Moves.Select(m => (Now, m)));

@@ -190,12 +190,25 @@ namespace Satisvampory.Server
 
         PickerReply PickerRows(Session s, PickerReq r)
         {
-            var rows = Picker.Rows(s.World, s.Catalog, s.Island.State.Graph, s.Island.Scope, p => PlotLabel(s.Island, p), new PickerQuery
+            // Clan plots outside the island show greyed with the reason (spec 02, 06); distance comes from the player's position.
+            var owner = s.Island.Standing.Owner.User.ToEntity();
+            var clan = _ctx.Clans.Of(owner);
+            var clanCastles = (clan.IsNone ? _ctx.Castles.AllForUser(owner) : _ctx.Clans.Castles(clan)).Where(c => c.Enabled).ToList();
+            var inScope = new HashSet<PlotId>(s.Island.Scope);
+            var outside = clanCastles.Where(c => !inScope.Contains(ProgenitorWorld.PlotOf(c))).ToList();
+            var view = outside.Count == 0 ? s.World : new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, s.Island.Castles.Concat(outside),
+                id => s.Island.State.Deposit.TryGetValue(id, out var d) ? d : null);
+            var me = _ctx.Players.OnlinePositions().Where(x => x.Player.PlatformId == s.User.PlatformId).Select(x => ((float X, float Z)?)(x.X, x.Z)).FirstOrDefault();
+            var labels = s.Island.Castles.Concat(outside).ToList();
+            var rows = Picker.Rows(view, s.Catalog, s.Island.State.Graph, s.Island.Scope,
+                p => Labels.Plot(_ctx.Save, labels, ProgenitorWorld.PlotOf(s.Island.Standing), p), new PickerQuery
             {
                 Self = s.Container.Id,
                 Side = r.Side == 0 ? PickerSide.Input : PickerSide.Output,
                 Standing = ProgenitorWorld.PlotOf(s.Island.Standing),
                 Search = r.Search ?? string.Empty,
+                Player = me,
+                OutsideIsland = outside.Select(ProgenitorWorld.PlotOf).ToList(),
             });
             var reply = new PickerReply();
             foreach (var row in rows)

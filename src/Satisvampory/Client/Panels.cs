@@ -92,6 +92,7 @@ namespace Satisvampory.Client
         void Open(View view)
         {
             if (!_hasTarget) return;
+            HideAll();
             Load(() => view.Show());
         }
 
@@ -347,7 +348,10 @@ namespace Satisvampory.Client
                 }, reply =>
                 {
                     Owner.Apply(reply);
-                    ctx.Hud.Notify($"Added to {(_side == 0 ? "Input" : "Output")} of {reply.Name}.", kind: UiNoticeKind.Success, seconds: 4);
+                    var rows = _side == 0 ? reply.Input : reply.Output;
+                    var added = rows.LastOrDefault();
+                    var what = added == null ? "it" : $"{added.Name} · {added.Where}";
+                    ctx.Hud.Notify($"Added {what} to {(_side == 0 ? "Input" : "Output")} of {reply.Name} · {reply.Where}.", kind: UiNoticeKind.Success, seconds: 4);
                     Show();
                 });
             }, () => Show(), new UiWorldPickOptions { Prompt = _side == 0 ? "Interact with a container or station to pull from. Esc to cancel." : "Interact with a container or station to send to. Esc to cancel." });
@@ -386,6 +390,8 @@ namespace Satisvampory.Client
         IUiDropdown _special = null!;
         IUiLabel _belts = null!;
         IUiButton _empty = null!;
+        float _emptyArmedAt = -10;
+        IUiInput _tryAmountDeposit = null!;
         IUiInput _tryItem = null!;
         IUiLabel _tryResult = null!;
         DepositMsg _draft = new();
@@ -433,15 +439,26 @@ namespace Satisvampory.Client
             ctx.Track(panel.Button("Save").OnClick(Save));
             _empty = panel.Button("Empty trash");
             ctx.Track(_empty.OnClick(() =>
+            {
+                var now = UnityEngine.Time.realtimeSinceStartup;
+                if (now - _emptyArmedAt > 3)
+                {
+                    _emptyArmedAt = now;
+                    ctx.Hud.Notify("Destroy everything in this trash chest? Press Empty trash again to confirm.", kind: UiNoticeKind.Warning, seconds: 3);
+                    return;
+                }
+                _emptyArmedAt = -10;
                 Owner.Send<EmptyTrashReq, PanelMsg>(new EmptyTrashReq { Target = Owner.Target() }, reply =>
                 {
                     Owner.Apply(reply);
                     ctx.Hud.Notify("Trash emptied.", kind: UiNoticeKind.Success, seconds: 3);
-                })));
+                });
+            }));
 
             panel.Divider();
             _tryItem = panel.Input("Try it: item", "");
-            ctx.Track(panel.Button("Where would 1 stack go?").OnClick(TryIt));
+            _tryAmountDeposit = panel.Input("Try it: amount", "100");
+            ctx.Track(panel.Button("Where would it go?").OnClick(TryIt));
             _tryResult = panel.Label("");
         }
 
@@ -516,16 +533,23 @@ namespace Satisvampory.Client
             });
         }
 
-        void TryIt() =>
-            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = 2, Item = ClientItems.Resolve(Owner.Ctx, _tryItem.Value), Amount = 1 }, r =>
+        void TryIt()
+        {
+            if (!int.TryParse(_tryAmountDeposit.Value, out var n) || n <= 0) n = 100;
+            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = 2, Item = ClientItems.Resolve(Owner.Ctx, _tryItem.Value), Amount = n }, r =>
             {
                 var here = Owner.State?.Name ?? "";
-                var first = r.Steps.FirstOrDefault();
+                var rank = r.Steps.FindIndex(x => x.Name == here);
                 var mine = r.NotUsed.FirstOrDefault(x => x.Name == here);
+                var first = r.Steps.FirstOrDefault();
+                string Ordinal(int i) => (i + 1) switch { 1 => "1st", 2 => "2nd", 3 => "3rd", var k => k + "th" };
                 _tryResult.Text = first == null
-                    ? $"{r.Item}: no chest on the island takes it."
-                    : $"{r.Item} → {first.Name} · {first.Where} ({first.Why})" + (mine != null ? $"\nThis chest: not used — {mine.Why}" : "");
+                    ? $"{n:N0} {r.Item}: no chest on the island takes it."
+                    : rank >= 0
+                        ? $"{n:N0} {r.Item} → would land here {Ordinal(rank)} ({r.Steps[rank].Amount:N0})" + (rank > 0 ? $"; first {first.Name} · {first.Where}" : "")
+                        : $"{n:N0} {r.Item} → {first.Name} · {first.Where} ({first.Why})" + (mine != null ? $"\nThis chest: not used — {mine.Why}" : "\nThis chest: not reached.");
             });
+        }
     }
 
     /// <summary>The Add… picker for an Input or Output list.</summary>

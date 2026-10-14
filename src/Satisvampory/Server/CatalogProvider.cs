@@ -29,14 +29,15 @@ namespace Satisvampory.Server
         /// <summary>Main thread only. Cheap when nothing changed.</summary>
         public void Refresh(PluginContext ctx)
         {
+            // Catalog() builds on first use and then returns the cached list; CatalogInfo() never
+            // builds, so asking it first would wait forever after a Core swap.
+            var entries = ctx.Items.Catalog();
             var info = ctx.Items.CatalogInfo();
             var aliases = Aliases?.Invoke() ?? "";
-            var fresh = info.Built && (info.Builds != _builds || info.Epoch != _epoch);
+            var fresh = entries.Count > 0 && info.Built && (info.Builds != _builds || info.Epoch != _epoch);
             if (!fresh && (aliases == _aliasText || _items == null)) return;
             if (fresh)
             {
-                var entries = ctx.Items.Catalog();
-                if (entries.Count == 0) return;
                 _items = entries.Select(e => new GameItem(e.PrefabGuid, e.PrefabName, e.DisplayName, e.MaxAmount, e.ItemCategory, e.ItemType)).ToList();
                 _builds = info.Builds;
                 _epoch = info.Epoch;

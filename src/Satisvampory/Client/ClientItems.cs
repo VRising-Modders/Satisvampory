@@ -45,11 +45,13 @@ namespace Satisvampory.Client
         {
             try
             {
+                // Catalog() builds on first use; CatalogInfo() alone never does.
+                var entries = ctx.Items.Catalog();
                 var info = ctx.Items.CatalogInfo();
-                if (!info.Built) return _byName;
+                if (entries.Count == 0 || !info.Built) return _byName;
                 if (_byName != null && info.Builds == _builds) return _byName;
                 var map = new Dictionary<string, int>(StringComparer.Ordinal);
-                foreach (var e in ctx.Items.Catalog())
+                foreach (var e in entries)
                 {
                     if (string.IsNullOrWhiteSpace(e.DisplayName)) continue;
                     map.TryAdd(NameFold.Fold(e.DisplayName!), e.PrefabGuid);

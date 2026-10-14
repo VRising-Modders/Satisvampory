@@ -522,6 +522,13 @@ namespace Satisvampory.Client
 
         void ShowSelected()
         {
+            if (_pendingCategory is { } want && _beltsState != null)
+            {
+                _pendingCategory = null;
+                if (_beltsMd.Tabs != null) _beltsMd.Tabs.Selected = CategoriesPage;
+                var match = _beltsState.Categories.FirstOrDefault(c => string.Equals(c.Name, want, StringComparison.OrdinalIgnoreCase));
+                if (match != null) _beltsMd.Select(match.Name);
+            }
             var m = _beltsState;
             if (m == null || _beltsMd.SelectedId is not { } id) return;
             var edit = m.CanEdit;
@@ -574,8 +581,15 @@ namespace Satisvampory.Client
         {
             _invSearch = In(InventoryTab, p.Input("Search", ""));
             _invShort = In(InventoryTab, p.Toggle("Only short", false));
+            _invAtCap = In(InventoryTab, p.Toggle("Only at cap", false));
+            _invMine = In(InventoryTab, p.Toggle("Only with my overrides", false));
+            _invHere = In(InventoryTab, p.Toggle("Only here", false));
+            _invPlot = In(InventoryTab, p.Input("Plot (blank: all plots)", ""));
+            _invGroup = In(InventoryTab, p.Toggle("Group by category", false));
             Track(_invSearch.OnChanged(_ => DrawInventory()));
-            Track(_invShort.OnChanged(_ => DrawInventory()));
+            foreach (var t in new[] { _invShort, _invAtCap, _invMine, _invHere }) Track(t.OnChanged(_ => DrawInventory()));
+            Track(_invPlot.OnChanged(_ => DrawInventory()));
+            Track(_invGroup.OnChanged(on => { _invTable.Grouped = on; DrawInventory(); }));
             Track(In(InventoryTab, p.Button("Refresh")).OnClick(() => { StopLiveInventory(); LoadInventory(); }));
             _invIsland = In(InventoryTab, p.Label(""));
             _invCats = In(InventoryTab, p.Chips("inv.cats", Array.Empty<UiChip>(), new UiChipsOptions
@@ -590,6 +604,7 @@ namespace Satisvampory.Client
             _invTable = In(InventoryTab, p.DataTable("inv", new[]
             {
                 new UiTableColumn("item", "Item") { Hideable = false },
+                new UiTableColumn("category", "Category") { Term = "Category" },
                 Num("total", "Total", "Island"),
                 Num("here", "Here"),
                 Num("chests", "Chests"),
@@ -603,10 +618,39 @@ namespace Satisvampory.Client
             {
                 VisibleRows = 14,
                 TotalRow = false,
+                MultiSelect = true,
                 Sort = new[] { new UiTableSortKey("item") },
                 EmptyText = "Nothing stored on this island.",
             }));
             Track(_invTable.OnEdit(OnInventoryEdit));
+            foreach (var key in new[] { "total", "here", "chests", "stations", "demand" })
+                if (_invTable.Columns.FirstOrDefault(c => c.Key == key) is { } col) col.Subtotal = UiTableSubtotal.Sum;
+
+            // Row actions on the selected (or expanded) rows (spec 15).
+            Track(_invTable.OnExpand((id, open) => { if (open) _invTable.SetSelected(new[] { id }); }));
+            _invTakeAmount = In(InventoryTab, p.Input("Take amount (blank: one stack)", ""));
+            Track(In(InventoryTab, p.Button("Take into bags")).OnClick(() => ForSelected(1, item =>
+            {
+                int.TryParse(_invTakeAmount.Value, out var n);
+                Send<PullReq, TextReply>(new PullReq { Text = item.ToString(), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
+            })));
+            Track(In(InventoryTab, p.Button("Locate")).OnClick(() => ForSelected(1, item =>
+                Send<FindReq, FindReply>(new FindReq { Text = item.ToString() }, r => { _lastFind = r; Locate(); }))));
+            Track(In(InventoryTab, p.Button("Where does it go?")).OnClick(() => ForSelected(1, item =>
+            {
+                _mdItem.Value = _invRows.TryGetValue(item, out var row) ? ClientItems.NameOf(_ctx, item, row.Name) : item.ToString();
+                OpenTab(MassDepositTab);
+            })));
+            Track(In(InventoryTab, p.Button("Category…")).OnClick(() => ForSelected(1, item =>
+            {
+                var cat = _invRows.TryGetValue(item, out var row) ? Cats(row).FirstOrDefault() : null;
+                if (cat == null) { _ctx.Hud.Notify("That item is in no category.", kind: UiNoticeKind.Info, seconds: 3); return; }
+                _pendingCategory = cat;
+                OpenTab(BeltsTab);
+            })));
+            _invBulkValue = In(InventoryTab, p.Number("Bulk value (−1 clears the overrides)", -1, -1, 1_000_000));
+            Track(In(InventoryTab, p.Button("Set reserve on selected")).OnClick(() => Bulk(0)));
+            Track(In(InventoryTab, p.Button("Set cap on selected")).OnClick(() => Bulk(1)));
             Track(_invTable.OnSortChanged(_ => SaveInventoryView()));
             Track(_invTable.OnColumnsChanged(_ => SaveInventoryView()));
             In(InventoryTab, p.Divider());
@@ -629,7 +673,11 @@ namespace Satisvampory.Client
                 (why, text) =>
                 {
                     _invSub = null;
-                    if (!string.IsNullOrEmpty(text)) _invIsland.Text = "Not live: " + text;
+                    // Off every plot: keep the last island, read-only, with its time (spec 15).
+                    _invStale = _invRows.Count > 0;
+                    _invCanEdit = false;
+                    if (_invStale) DrawInventory();
+                    else if (!string.IsNullOrEmpty(text)) _invIsland.Text = "Not live: " + text;
                 });
             Progenitor.Dev.MainThread.PostDelayed(3, WatchLiveInventory, _ctx.Owner);
         }
@@ -656,6 +704,8 @@ namespace Satisvampory.Client
             _invFlash.Clear();
             _invIslandText = m.Island;
             _invCanEdit = m.CanEdit;
+            _invSnapshotUtc = DateTime.UtcNow;
+            _invStale = false;
             if (!_invViewApplied)
             {
                 _invViewApplied = true;
@@ -699,13 +749,46 @@ namespace Satisvampory.Client
             _ctx.Requests.Send<SetViewReq, ViewSaved>(new SetViewReq { View = "inv", Sort = sort, Hidden = hidden }, _ => { });
         }
 
+        IUiToggle _invAtCap = null!, _invMine = null!, _invHere = null!, _invGroup = null!;
+        IUiInput _invPlot = null!, _invTakeAmount = null!;
+        IUiNumber _invBulkValue = null!;
+        string? _pendingCategory;
+        DateTime _invSnapshotUtc;
+        bool _invStale;
+
+        /// <summary>Runs an action for the selected rows (at most <paramref name="max"/>); tells the player when none is.</summary>
+        void ForSelected(int max, Action<int> act)
+        {
+            var ids = _invTable.Selected.Select(x => int.TryParse(x, out var g) ? g : 0).Where(g => g != 0).Take(max).ToList();
+            if (ids.Count == 0) { _ctx.Hud.Notify("Select a row first.", kind: UiNoticeKind.Info, seconds: 3); return; }
+            foreach (var id in ids) act(id);
+        }
+
+        /// <summary>Bulk Set reserve / Set cap on the selected rows: one request per row, the last reply redraws.</summary>
+        void Bulk(int rule)
+        {
+            if (!_invCanEdit) { _ctx.Hud.Notify("Only clan members can change reserves and caps.", kind: UiNoticeKind.Warning, seconds: 4); return; }
+            var value = (int)Math.Round(_invBulkValue.Value);
+            var ids = _invTable.Selected.ToList();
+            if (ids.Count == 0) { _ctx.Hud.Notify("Select rows first (Ctrl- or Shift-click).", kind: UiNoticeKind.Info, seconds: 3); return; }
+            var left = ids.Count;
+            foreach (var id in ids)
+                _ctx.Requests.Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = id, Rule = rule, Value = value }, r =>
+                {
+                    if (--left == 0 && r.Ok && r.Reply != null) ApplySnapshot(r.Reply);
+                    if (!r.Ok) _ctx.Hud.Notify(r.Reason.Length > 0 ? r.Reason : "Not saved: " + r.Status, kind: UiNoticeKind.Warning, seconds: 4);
+                });
+            _ctx.Hud.Notify($"{(rule == 0 ? "Reserve" : "Cap")} {(value < 0 ? "cleared" : "set to " + value)} on {ids.Count} item{(ids.Count == 1 ? "" : "s")}.", kind: UiNoticeKind.Success, seconds: 3);
+        }
+
         static IEnumerable<string> Cats(InventoryRowMsg r) => r.Categories.Split(',').Select(c => c.Trim()).Where(c => c.Length > 0);
 
         void DrawInventory()
         {
             static string From(int f) => f == 1 ? "category" : "default";
             var all = _invRows.Values.ToList();
-            _invIsland.Text = _invIslandText + (all.Count >= 2000 ? " · first 2,000 items." : "") + (_invSub is { State: SubscriptionState.Live } ? " · live" : "");
+            _invIsland.Text = _invIslandText + (all.Count >= 2000 ? " · first 2,000 items." : "")
+                + (_invStale ? $" · read-only snapshot from {_invSnapshotUtc.ToLocalTime():HH:mm}" : _invSub is { State: SubscriptionState.Live } ? " · live" : "");
 
             // Category chips: the categories present, most items first; selected ones filter the table.
             var picked = new HashSet<string>(_invCats.SelectedIds);
@@ -722,11 +805,23 @@ namespace Satisvampory.Client
             IEnumerable<InventoryRowMsg> rows = all;
             if (picked.Count > 0) rows = rows.Where(r => Cats(r).Any(picked.Contains));
             if (_invShort.Value) rows = rows.Where(r => r.Status == "Short");
+            if (_invAtCap.Value) rows = rows.Where(r => r.Status == "At cap");
+            if (_invMine.Value) rows = rows.Where(r => r.ReserveFrom == 2 || r.CapFrom == 2);
+            if (_invHere.Value) rows = rows.Where(r => r.Here > 0);
+            var plotFilter = NameKey(_invPlot.Value);
+            if (plotFilter.Length > 0) rows = rows.Where(r => r.PlotLabels.Any(l => NameKey(l).Contains(plotFilter)));
             if (search.Length > 0) rows = rows.Where(r => NameKey(ClientItems.NameOf(_ctx, r.Item, r.Name)).Contains(search) || NameKey(r.Categories).Contains(search));
 
             _invTable.SetRows(rows.Select(r =>
             {
-                var row = new UiTableRow(r.Item.ToString()) { ItemPrefab = r.Item, Detail = r.Categories.Length > 0 ? "Categories: " + r.Categories : "" };
+                var cats = Cats(r).ToList();
+                var row = new UiTableRow(r.Item.ToString())
+                {
+                    ItemPrefab = r.Item,
+                    Groups = cats,
+                    Detail = string.Join("\n", r.Plots.Take(4).DefaultIfEmpty("Not in any chest on the island.")),
+                };
+                row.Text("category", string.Join(", ", cats));
                 var tone = _invFlash.Contains(r.Item) ? LabelTone.Ok : LabelTone.Normal;
                 row.Text("item", ClientItems.NameOf(_ctx, r.Item, r.Name), tone)
                     .Number("total", r.Total)
@@ -738,7 +833,7 @@ namespace Satisvampory.Client
                     .Number("cap", r.Cap < 0 ? null : r.Cap, inherited: r.Cap >= 0 && r.CapFrom != 2, source: r.Cap >= 0 && r.CapFrom != 2 ? From(r.CapFrom) : "")
                     .Number("demand", r.Demand)
                     .Text("status", r.Status, r.Status is "Short" or "Below reserve" ? LabelTone.Warn : LabelTone.Normal);
-                row.Locked = !_invCanEdit;
+                row.Locked = !_invCanEdit || _invStale;
                 return row;
             }));
         }

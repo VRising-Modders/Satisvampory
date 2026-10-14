@@ -477,8 +477,19 @@ namespace Satisvampory.Server
             var view = Stores.View(_ctx.Save, "inv", s.User.PlatformId);
             msg.Sort = view.Sort;
             msg.Hidden = view.Hidden;
+            // Per item and plot: count, chests, and the chest holding the most (spec 15, row expand).
+            var byPlot = new Dictionary<ItemId, Dictionary<PlotId, (long Count, int Chests, string Top, long TopCount)>>();
+            foreach (var plot in s.Island.Scope)
+                foreach (var c in s.World.ContainersOn(plot).Where(c => c.Kind == NodeKind.Chest))
+                    foreach (var st in s.World.Contents(c.Id))
+                    {
+                        if (!byPlot.TryGetValue(st.Item, out var pp)) byPlot[st.Item] = pp = new();
+                        pp.TryGetValue(plot, out var v);
+                        pp[plot] = (v.Count + st.Amount, v.Chests + 1, st.Amount > v.TopCount ? c.DisplayName : v.Top, Math.Max(v.TopCount, st.Amount));
+                    }
             foreach (var r in sorted.Take(InventoryRowCap))
-                msg.Rows.Add(new InventoryRowMsg
+            {
+                var row = new InventoryRowMsg
                 {
                     Item = r.Item.Guid,
                     Name = r.Name,
@@ -501,7 +512,16 @@ namespace Satisvampory.Server
                         InventoryStatus.NoStock => "No stock",
                         _ => "",
                     },
-                });
+                };
+                if (byPlot.TryGetValue(r.Item, out var plots))
+                    foreach (var (plot, v) in plots.OrderByDescending(x => x.Value.Count))
+                    {
+                        var label = Label(s.Island, plot);
+                        row.PlotLabels.Add(label);
+                        row.Plots.Add($"{label} · {v.Count:N0} in {v.Chests} chest{(v.Chests == 1 ? "" : "s")} · most in {v.Top} ({v.TopCount:N0})");
+                    }
+                msg.Rows.Add(row);
+            }
             return msg;
         }
 

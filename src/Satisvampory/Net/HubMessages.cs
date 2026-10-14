@@ -187,6 +187,10 @@ namespace Satisvampory.Net
         [Field(12)] public int CapFrom;
         [Field(13)] public long Demand;
         [Field(14)] public string Status = "";
+        /// <summary>Per-plot breakdown lines: "Hollow Keep · 320 in 3 chests · most in Ore box (200)".</summary>
+        [Field(15)] public List<string> Plots = new();
+        /// <summary>Plot labels holding any, for the plot filter.</summary>
+        [Field(16)] public List<string> PlotLabels = new();
     }
 
     [ModMessage("sv.inv")]

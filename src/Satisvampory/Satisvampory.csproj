@@ -15,4 +15,8 @@
   <ItemGroup>
     <Compile Include="..\Satisvampory.Engine\**\*.cs" Exclude="..\Satisvampory.Engine\obj\**;..\Satisvampory.Engine\bin\**" Link="Engine\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Progenitor's Mods page shows this as the mod's About text. -->
+    <EmbeddedResource Include="README.md" LogicalName="Satisvampory.README.md" />
+  </ItemGroup>
 </Project>

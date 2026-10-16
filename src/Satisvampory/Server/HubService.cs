@@ -220,7 +220,6 @@ namespace Satisvampory.Server
             aliases.Clear();
             foreach (var kv in wanted) aliases[kv.Key] = kv.Value;
             settings.FeedSalvage = m.FeedSalvage;
-            settings.HeartAutoFeed = m.HeartAutoFeed;
             settings.RepeatHunts = m.RepeatHunts;
             settings.LogisticsOn = m.LogisticsOn;
             if (m.Exclude != settings.ExcludeFromSharing)

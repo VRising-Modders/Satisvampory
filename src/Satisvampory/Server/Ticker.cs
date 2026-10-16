@@ -400,13 +400,11 @@ namespace Satisvampory.Server
             {
                 var server = _half.Config.Snapshot();
                 if (!server.AllowHeartBloodFeed) return;
-                var user = _ctx.World!.EntityManager.GetComponentData<ProjectM.Network.User>(userEntity);
-                var prefs = _half.PlayerFor(user.PlatformId);
                 var feed = new HeartFeedPrefs
                 {
-                    OnVisit = prefs.HeartTopUpOnVisit,
-                    OnLoginIsland = prefs.HeartTopUpIslandOnLogin,
-                    OutsideIsland = prefs.HeartTopUpOutsideIsland,
+                    OnVisit = server.HeartTopUpOnVisit,
+                    OnLoginIsland = server.HeartTopUpIslandOnLogin,
+                    OutsideIsland = server.HeartTopUpOutsideIsland,
                 };
 
                 var all = _ctx.Castles.All().Where(c => c.Enabled).ToList();
@@ -420,7 +418,7 @@ namespace Satisvampory.Server
                     var fuel = c.HeartFuel();
                     var rel = _ctx.Castles.RelationTo(userEntity, c);
                     return new HeartInfo(ProgenitorWorld.PlotOf(c), fuel.UnlockedSlots, fuel.FuelQuantity,
-                        AutoFeedOn: Stores.Castle(_ctx.Save, c.Territory.Index).HeartAutoFeed,
+                        AutoFeedOn: true, // heart feed is the server's call (admin settings), not a castle switch
                         OwnedByPlayerOrClan: rel is CastleRelation.Owner or CastleRelation.ClanMember);
                 }
 

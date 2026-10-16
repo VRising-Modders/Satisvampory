@@ -30,6 +30,7 @@ namespace Satisvampory.Net
         [Field(7)] public bool LogisticsOn = true;
         [Field(8)] public int DefaultReserve = 10;
         [Field(9)] public bool FeedSalvage;
+        /// <summary>Unused since heart feed became a server setting; kept so the wire layout holds.</summary>
         [Field(10)] public bool HeartAutoFeed = true;
         [Field(11)] public bool RepeatHunts = true;
         [Field(12)] public bool Exclude;

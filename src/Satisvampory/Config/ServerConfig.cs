@@ -55,7 +55,10 @@ namespace Satisvampory.Config
             c.Flag(ctx, "AllowSalvage", d.AllowSalvage, "Allow salvage chests", "Salvage chests feed the devourer.", (s, v) => s.AllowSalvage = v);
             c.Flag(ctx, "AllowSpawnerChests", d.AllowSpawnerChests, "Allow spawner chests", "Spawner chests feed unit spawners.", (s, v) => s.AllowSpawnerChests = v);
             c.Flag(ctx, "AllowTrash", d.AllowTrash, "Allow trash chests", "Trash chests can be emptied.", (s, v) => s.AllowTrash = v);
-            c.Flag(ctx, "AllowHeartBloodFeed", d.AllowHeartBloodFeed, "Allow heart blood feed", "Hearts are topped up on visit or login.", (s, v) => s.AllowHeartBloodFeed = v);
+            c.Flag(ctx, "AllowHeartBloodFeed", d.AllowHeartBloodFeed, "Heart blood feed", "Castle hearts are topped up with blood essence from storage.", (s, v) => s.AllowHeartBloodFeed = v);
+            c.Flag(ctx, "HeartTopUpOnVisit", d.HeartTopUpOnVisit, "Top up a heart when its castle is visited", "When an owner or clan member enters the plot.", (s, v) => s.HeartTopUpOnVisit = v);
+            c.Flag(ctx, "HeartTopUpIslandOnLogin", d.HeartTopUpIslandOnLogin, "Top up a player's island hearts at login", "Every heart on the player's island, once per login.", (s, v) => s.HeartTopUpIslandOnLogin = v);
+            c.Flag(ctx, "HeartTopUpOutsideIsland", d.HeartTopUpOutsideIsland, "Also top up hearts outside the island", "A visited plot of the player or clan that is not on their island.", (s, v) => s.HeartTopUpOutsideIsland = v);
             c.Flag(ctx, "AllowRepeatHunts", d.AllowRepeatHunts, "Allow repeat hunts", "Servants go back out on the same hunt.", (s, v) => s.AllowRepeatHunts = v);
             c.Flag(ctx, "RepeatHuntsOnlyWhileClanOnline", d.RepeatHuntsOnlyWhileClanOnline, "Repeat hunts only while a clan member is online", "", (s, v) => s.RepeatHuntsOnlyWhileClanOnline = v);
             c.Int(ctx, "RepeatHuntSuccessCap", d.RepeatHuntSuccessCap, 1, 100, "Repeat hunt success cap (shown)", "Shown in notices; the roll stays vanilla.", (s, v) => s.RepeatHuntSuccessCap = v);

@@ -41,9 +41,8 @@ namespace Satisvampory.Config
             c.Flag(ctx, 7, "SilentPull", d.SilentPull, "Silent pull", "No pull summary notice.");
             c.Flag(ctx, 8, "ServantLootStash", d.ServantLootStash, "Servant loot auto-stash", "Loot from my servants goes home.");
             c.Flag(ctx, 9, "TidyConfirm", d.TidyConfirm, "Tidy needs a second press", "Press the tidy key twice within three seconds.");
-            c.Flag(ctx, 10, "HeartTopUpOnVisit", d.HeartTopUpOnVisit, "Top up hearts when I visit", "Entering one of my or my clan's plots tops up its heart.");
-            c.Flag(ctx, 11, "HeartTopUpIslandOnLogin", d.HeartTopUpIslandOnLogin, "Top up my island's hearts at login", "Every heart on my island, once per login.");
-            c.Flag(ctx, 12, "HeartTopUpOutsideIsland", d.HeartTopUpOutsideIsland, "Also top up hearts outside my island", "Plots of mine or my clan that are not on my island.");
+            // Bits 10-12 were the heart top-up switches, now server settings (admin only).
+            c.Flag(ctx, 14, "RepeatMyHunts", d.RepeatMyHunts, "Repeat my servants' hunts", "When a hunt from one of my castles comes back, send the servants out on it again (if the server allows repeat hunts).");
             c.Flag(ctx, 13, "ShowTermHints", d.ShowTermHints, "Show term hints (ⓘ)", "Small markers that explain Belt, Category and the rest.");
             var redistribution = ctx.Bind(Section, "ShowRedistribution", false, "Show the game redistribution tab beside Production, Input and Output.");
             redistribution.SettingChanged += (_, _) => c.Changed?.Invoke();
@@ -81,9 +80,7 @@ namespace Satisvampory.Config
                 SilentPull = On(7),
                 ServantLootStash = On(8),
                 TidyConfirm = On(9),
-                HeartTopUpOnVisit = On(10),
-                HeartTopUpIslandOnLogin = On(11),
-                HeartTopUpOutsideIsland = On(12),
+                RepeatMyHunts = On(14),
                 ShowTermHints = On(13),
             };
         }

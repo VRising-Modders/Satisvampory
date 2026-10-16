@@ -14,9 +14,8 @@ namespace Satisvampory.Engine.Persistence
         public bool TidyConfirm { get; set; } = true;
         public bool ShareBetweenMyCastles { get; set; } = true;
         public bool TakePartInClanShare { get; set; } = true;
-        public bool HeartTopUpOnVisit { get; set; } = true;
-        public bool HeartTopUpIslandOnLogin { get; set; }
-        public bool HeartTopUpOutsideIsland { get; set; }
+        /// <summary>My servants go back out on the same hunt (when the server allows repeat hunts).</summary>
+        public bool RepeatMyHunts { get; set; } = true;
         public bool ShowTermHints { get; set; } = true;
     }
 
@@ -50,6 +49,10 @@ namespace Satisvampory.Engine.Persistence
         public bool AllowSpawnerChests { get; set; } = true;
         public bool AllowTrash { get; set; } = true;
         public bool AllowHeartBloodFeed { get; set; } = true;
+        /// <summary>How hearts are topped up (admin only): on visiting a plot, at login, and beyond the island.</summary>
+        public bool HeartTopUpOnVisit { get; set; } = true;
+        public bool HeartTopUpIslandOnLogin { get; set; }
+        public bool HeartTopUpOutsideIsland { get; set; }
         public bool AllowRepeatHunts { get; set; }
         public bool RepeatHuntsOnlyWhileClanOnline { get; set; }
         public int RepeatHuntSuccessCap { get; set; } = 99;

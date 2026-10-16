@@ -86,10 +86,11 @@ namespace Satisvampory.Engine.Tests
         public void Settings_defaults_match_the_spec()
         {
             var me = new PlayerSettings();
-            Assert.True(me.ShareBetweenMyCastles && me.TakePartInClanShare && me.HeartTopUpOnVisit && me.CraftFromStorage);
-            Assert.False(me.HeartTopUpIslandOnLogin || me.StashFromAnywhere);
+            Assert.True(me.ShareBetweenMyCastles && me.TakePartInClanShare && me.RepeatMyHunts && me.CraftFromStorage);
+            Assert.False(me.StashFromAnywhere);
             var server = new ServerSettings();
-            Assert.True(server.CastleShare && server.ClanShare && server.AllowLoops && server.AllowHeartBloodFeed);
+            Assert.True(server.CastleShare && server.ClanShare && server.AllowLoops && server.AllowHeartBloodFeed && server.HeartTopUpOnVisit);
+            Assert.False(server.HeartTopUpIslandOnLogin || server.HeartTopUpOutsideIsland);
             Assert.False(server.AllowRepeatHunts || server.AllowUnmoddedClients || server.CleanNamesAfterImport);
             Assert.Equal(99, server.RepeatHuntSuccessCap);
         }

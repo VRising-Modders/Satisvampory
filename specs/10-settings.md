@@ -21,9 +21,7 @@ Built on Progenitor's settings pages (`ctx.Settings.Page`) and keybinds (`ctx.Ke
 | Silent pull | OFF |
 | Servant loot auto-stash (my castles) | ON |
 | Tidy needs a second press to confirm | ON |
-| Top up hearts when I visit | ON |
-| Top up my island's hearts when I log in | OFF |
-| Also top up hearts outside my island | OFF |
+| Repeat my servants' hunts (my castles; when the server allows repeat hunts) | ON |
 | Keybinds: Mass Deposit, Belts and categories, Inventory, Find, Tidy, Stash, Hunt log | all unbound; the player picks keys, checked against vanilla bindings |
 | Show vanilla redistribution tab | OFF; transfer ownership is separate (`04-stations.md`) |
 | Auto-pin Find selections | ON; pins the selected chest or station, replacing the previous Find pin |
@@ -48,7 +46,6 @@ Header: plot label, level, owner, which sharing applies here (none, castle share
 | Item aliases (castle) | empty |
 | Mass Deposit | opens `03-mass-deposit.md` screen |
 | Feed salvage to the devourer | OFF |
-| Heart fuel auto-feed | ON |
 | Repeat hunts on this castle | ON when allowed |
 | Exclude this castle from sharing | OFF, owner only |
 | Tidy now | button |
@@ -82,7 +79,10 @@ Same switches as 1.x's server toggles, rewritten. Every allow defaults ON except
 | Allow salvage | ON |
 | Allow spawner chests | ON |
 | Allow trash | ON |
-| Allow heart blood feed | ON |
+| Heart blood feed | ON |
+| Top up a heart when its castle is visited | ON |
+| Top up a player's island hearts at login | OFF |
+| Also top up hearts outside the island | OFF |
 | Allow repeat hunts | **OFF** |
 | Repeat hunts only while a clan member is online | OFF |
 | Repeat hunt success cap (display) | 99 |

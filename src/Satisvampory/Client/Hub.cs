@@ -33,7 +33,7 @@ namespace Satisvampory.Client
         // Castle
         IUiLabel _castleHeader = null!;
         IUiInput _plotLabel = null!;
-        IUiToggle _logistics = null!, _salvage = null!, _heartFeed = null!, _repeat = null!, _exclude = null!;
+        IUiToggle _logistics = null!, _salvage = null!, _repeat = null!, _exclude = null!;
         IUiNumber _defaultReserve = null!;
         IUiLabel _need = null!, _tidyResult = null!;
 
@@ -305,7 +305,6 @@ namespace Satisvampory.Client
             _defaultReserve = _tabs.Add(CastleTab, p.Number("Default reserve", 10, 0, 10000));
             Track(_defaultReserve.Term("Reserve"));
             _salvage = _tabs.Add(CastleTab, p.Toggle("Feed salvage chests to the devourer", false));
-            _heartFeed = _tabs.Add(CastleTab, p.Toggle("Heart fuel auto-feed", true));
             _repeat = _tabs.Add(CastleTab, p.Toggle("Repeat hunts on this castle", true));
             _exclude = _tabs.Add(CastleTab, p.Toggle("Exclude this castle from sharing (owner only)", false));
             _aliases = _tabs.Add(CastleTab, p.Input("Item aliases (this island): rb = Ruby; ior = Iron Ore", ""));
@@ -318,7 +317,6 @@ namespace Satisvampory.Client
                         LogisticsOn = _logistics.Value,
                         DefaultReserve = (int)Math.Round(_defaultReserve.Value),
                         FeedSalvage = _salvage.Value,
-                        HeartAutoFeed = _heartFeed.Value,
                         RepeatHunts = _repeat.Value,
                         Exclude = _exclude.Value,
                         Aliases = _aliases.Value,
@@ -349,7 +347,6 @@ namespace Satisvampory.Client
             _logistics.Value = c.LogisticsOn;
             _defaultReserve.Value = c.DefaultReserve;
             _salvage.Value = c.FeedSalvage;
-            _heartFeed.Value = c.HeartAutoFeed;
             _repeat.Value = c.RepeatHunts;
             _exclude.Value = c.Exclude;
             _tidyResult.Text = c.TidyResult;

@@ -136,12 +136,13 @@ namespace Satisvampory.Engine.Stations
             return moves;
         }
 
-        public sealed record RepeatRules(bool ServerAllows, bool OnlyWhileClanOnline, bool CastleOn, bool HeartRaided, bool ClanMemberOnline);
+        /// <param name="OwnerOn">The castle owner's own "repeat my servants' hunts" switch.</param>
+        public sealed record RepeatRules(bool ServerAllows, bool OnlyWhileClanOnline, bool CastleOn, bool HeartRaided, bool ClanMemberOnline, bool OwnerOn = true);
 
         /// <summary>Which returning servants go out again (spec 08): alive and uninjured, when every switch allows it.</summary>
         public static List<ServantState> Resend(IEnumerable<ServantState> returning, RepeatRules r)
         {
-            if (!r.ServerAllows || !r.CastleOn || r.HeartRaided) return new List<ServantState>();
+            if (!r.ServerAllows || !r.CastleOn || !r.OwnerOn || r.HeartRaided) return new List<ServantState>();
             if (r.OnlyWhileClanOnline && !r.ClanMemberOnline) return new List<ServantState>();
             return returning.Where(s => s.Alive && !s.Injured).ToList();
         }

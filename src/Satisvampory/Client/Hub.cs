@@ -277,6 +277,7 @@ namespace Satisvampory.Client
                 p.GameWindow(1440);
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
+                p.Footer = $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · {UiApi.FrameworkFooter}";
                 _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" });
                 _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
                 BuildCastle(p);
@@ -1087,7 +1088,7 @@ namespace Satisvampory.Client
             Track(_findText.OnChanged(_ => QueueFind()));
             Track(_findText.OnSubmitted(_ => RunFind()));
             p.BeginInline();
-            var scope = FindControl(p.Dropdown("Plots", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
+            var scope = FindControl(p.Dropdown("Scope", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
             Track(scope.OnChanged(value => { _findClan = value == "clan"; RunFind(); }));
             var matching = FindControl(p.Dropdown("Match", new[] { "partial", "exact" }, "partial", new[] { "Partial name", "Full name" }));
             Track(matching.OnChanged(value => { _findPartial = value == "partial"; RunFind(); }));
@@ -1101,7 +1102,7 @@ namespace Satisvampory.Client
                 new UiTableColumn("name", "Matches — best first") { Hideable = false },
                 new UiTableColumn("kind", "Type") { Width = 210 },
                 new UiTableColumn("amount", "Stored", UiTableColumnKind.Number) { Width = 130 },
-            }, new UiDataTableOptions { VisibleRows = 4, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
+            }, new UiDataTableOptions { VisibleRows = 10, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
             Track(_findMatches.OnSelectionChanged(ids => SelectFindMatch(ids.FirstOrDefault())));
             Track(FindControl(p.Button("Back to matches"), true).OnClick(() => { _findMatches.SetSelected(Array.Empty<string>()); ShowFindStage(false); }));
             _findTable = FindControl(p.DataTable("find", new[]
@@ -1110,7 +1111,7 @@ namespace Satisvampory.Client
                 new UiTableColumn("plot", "Plot") { Width = 320 },
                 new UiTableColumn("count", "Stored", UiTableColumnKind.Number) { Format = "#,0", Width = 130 },
                 new UiTableColumn("holds", "Details") { Width = 380 },
-            }, new UiDataTableOptions { VisibleRows = 4, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
+            }, new UiDataTableOptions { VisibleRows = 10, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
             Track(_findTable.OnSelectionChanged(_ =>
             {
                 if (_player.AutoPinFind && SelectedFindLocation()?.HasPosition == true) Locate();
@@ -1250,7 +1251,7 @@ namespace Satisvampory.Client
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
                     _ctx.Track(_previewPanel);
                     _previewPanel.Label("Right-drag to rotate. Escape returns. Ends after 5 seconds.");
-                    Track(_previewPanel.Button("Return").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
+                    Track(_previewPanel.Button("Return (Esc)").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                 }
                 UiApi.Hide(Panel);
                 UiApi.Show(_previewPanel);

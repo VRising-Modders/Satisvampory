@@ -119,8 +119,13 @@ namespace Satisvampory.Server
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
                 {
-                    var moved = StashLoot(castle, alive, server);
+                    // The servants' live inventories, read now: the event's own references can be stale
+                    // by the time a handler runs, and then nothing would move.
+                    var home = _ctx.Servants.List(castle.Heart.ToEntity()).ToDictionary(x => x.Servant);
+                    var bags = alive.Select(s => (home.TryGetValue(s.Servant, out var info) ? info.Inventory : s.Inventory, s.Outcome == ServantOutcome.Injured)).ToList();
+                    var moved = StashLoot(castle, bags, server);
                     if (moved > 0) lines.Add($"  loot stashed ({moved:N0} items)");
+                    else _ctx.Log.LogInfo($"Satisvampory: returning servants' loot on {plot} found no home ({bags.Count} servant(s))");
                 }
 
                 Forget(HuntKey(e.Territory, e.MissionGuid));

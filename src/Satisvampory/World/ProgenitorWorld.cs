@@ -332,10 +332,28 @@ namespace Satisvampory.World
             if (prefab == "TM_ResearchStation_T01") return "Research Desk";
             if (prefab == "TM_ResearchStation_T02") return "Study";
             if (prefab == "TM_ResearchStation_T03") return "Athenaeum";
-            var p = prefab!;
-            var cut = p.IndexOf('_');
-            if (cut > 0 && cut <= 4) p = p.Substring(cut + 1);
-            return p.Replace('_', ' ');
+            // "TM_SpecialStation_PrisonCell" -> "Prison Cell", "TM_UnitStation_NetherGate" -> "Nether Gate".
+            var parts = prefab!.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => !NoiseWords.Contains(w) && !(w.Length <= 3 && (w[0] == 'T' || w[0] == 't') && w.Skip(1).All(char.IsDigit)))
+                .Select(SplitCamel).ToList();
+            return parts.Count == 0 ? prefab!.Replace('_', ' ') : string.Join(" ", parts);
+        }
+
+        static readonly HashSet<string> NoiseWords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "TM", "BP", "Castle", "SpecialStation", "CraftingStation", "RefinementStation", "UnitStation",
+            "SalvageStation", "ResearchStation", "Workstation", "Stash", "Container",
+        };
+
+        static string SplitCamel(string word)
+        {
+            var sb = new System.Text.StringBuilder(word.Length + 4);
+            for (var i = 0; i < word.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(word[i]) && char.IsLower(word[i - 1])) sb.Append(' ');
+                sb.Append(word[i]);
+            }
+            return sb.ToString();
         }
 
         static void Copy(DepositOptions from, DepositOptions to)

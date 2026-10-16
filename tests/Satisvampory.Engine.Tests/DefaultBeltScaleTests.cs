@@ -20,6 +20,25 @@ namespace Satisvampory.Engine.Tests
         public DefaultBeltScaleTests(ITestOutputHelper output) => _out = output;
 
         [Fact]
+        public void Edges_and_loops_are_reused_while_the_layout_holds()
+        {
+            var world = new FakeWorld();
+            var plot = new PlotId(1);
+            var state = new IslandState();
+            var a = world.Chest(plot, "A");
+            var s = world.Chest(plot, "Furnace", kind: NodeKind.Station);
+            s.Role = StationRole.Refinement;
+            DefaultBelt.Initialize(state.Graph, world.ContainersOn(plot));
+            var ctx = new DepositContext(Catalog(), world, new[] { plot }, plot);
+            var tick = new TickState();
+            var options = new TickOptions { LayoutSignature = 42 };
+            var first = new ConveyorTick(world, ctx, state.Graph, new CastleRules(), tick, options).Run(0);
+            var second = new ConveyorTick(world, ctx, state.Graph, new CastleRules(), tick, options).Run(5);
+            Assert.Equal("edges+loops", first.Timings[0].Phase);
+            Assert.Equal("edges(cached)+loops", second.Timings[0].Phase);
+        }
+
+        [Fact]
         public void A_full_default_belt_tick_stays_cheap()
         {
             // The shape of a real imported island: ~220 chests on the Default Belt, 40 stations drawing from it.

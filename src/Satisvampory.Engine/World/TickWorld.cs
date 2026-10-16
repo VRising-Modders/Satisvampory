@@ -15,7 +15,12 @@ namespace Satisvampory.Engine.World
         readonly Dictionary<ContainerId, IReadOnlyList<Recipe>> _recipes = new();
         readonly Dictionary<ContainerId, StationInputState> _inputs = new();
         readonly Dictionary<PlotId, bool> _raided = new();
-        public TickWorld(IWorld live) => _live = live;
+        public TickWorld(IWorld live, IReadOnlyDictionary<(ContainerId, InvPart), ItemStack[]>? prefetched = null)
+        {
+            _live = live;
+            if (prefetched != null)
+                foreach (var (k, v) in prefetched) _contents[k] = v;
+        }
         public void Clear() { _contents.Clear(); _space.Clear(); _recipes.Clear(); _inputs.Clear(); _raided.Clear(); }
         public IReadOnlyList<ContainerInfo> ContainersOn(PlotId plot) => _live.ContainersOn(plot);
         public ContainerInfo? Find(ContainerId id) => _live.Find(id);

@@ -23,10 +23,22 @@ namespace Satisvampory.Engine.Lists
 
         /// <summary>Where a station's inputs last came from, so leftovers can go back.</summary>
         public Dictionary<(ContainerId Station, ItemId Item), ContainerId> FedFrom { get; } = new();
+
+        /// <summary>
+        /// Edges and loops depend only on the lists and the scope. They are kept between ticks
+        /// under the caller's <see cref="TickOptions.LayoutSignature"/>, so an island whose lists
+        /// did not change does not rebuild every supplier-to-receiver pair of its belts.
+        /// </summary>
+        internal long CachedLayout;
+        internal List<Edge>? CachedEdges;
+        internal List<ContainerId>? CachedOutOfScope;
+        internal List<Loop>? CachedLoops;
     }
 
     public sealed class TickReport
     {
+        /// <summary>Milliseconds into the run at the end of each phase (edges, loops, stations, chests, mass deposit).</summary>
+        public List<(string Phase, double Ms)> Timings { get; } = new();
         public List<MoveRecord> Moves { get; } = new();
 
         /// <summary>Diagnostic codes per container (spec 02, "Diagnostics").</summary>
@@ -50,6 +62,12 @@ namespace Satisvampory.Engine.Lists
         public bool LoopsAllowed { get; init; } = true;
         public double LeftoverGraceSeconds { get; init; } = 30;
         public int FeedCrafts { get; init; } = StationPlanner.DefaultFeedCrafts;
+
+        /// <summary>A hash of everything edges and loops depend on (lists, belts, scope); 0 disables the cache.</summary>
+        public long LayoutSignature { get; init; }
+
+        /// <summary>Inventories the caller already read this moment, so the tick does not read them again.</summary>
+        public IReadOnlyDictionary<(ContainerId, InvPart), ItemStack[]>? Prefetched { get; init; }
     }
 
     /// <summary>
@@ -69,6 +87,39 @@ namespace Satisvampory.Engine.Lists
         // which only changes which chest is tried first: Transfer moves what is really there.
         readonly Dictionary<ItemId, (List<ContainerId> Order, Dictionary<ContainerId, int> Rank)> _reverse = new();
         readonly Dictionary<(ContainerId Station, ItemId Item), List<ContainerId>> _sourcesFor = new();
+        readonly Dictionary<(ContainerId Station, ItemId Item), List<ContainerId>> _pullFrom = new();
+        Dictionary<ItemId, HashSet<ContainerId>>? _holders;
+
+        /// <summary>
+        /// Which in-scope containers hold an item, read once per tick. Pulls only need these, so a
+        /// station's per-item checks run over a handful of chests, not every chest on its belts.
+        /// Items moved into a chest later in the tick are found on the next tick.
+        /// </summary>
+        HashSet<ContainerId> Holders(ItemId item)
+        {
+            if (_holders == null)
+            {
+                _holders = new Dictionary<ItemId, HashSet<ContainerId>>();
+                foreach (var id in _inScope)
+                {
+                    var c = _world.Find(id);
+                    if (c == null || c.Kind == NodeKind.Heart) continue;
+                    foreach (var part in c.Kind == NodeKind.Station ? new[] { InvPart.Main, InvPart.Output } : new[] { PartOf(id) })
+                        foreach (var stack in _world.Contents(id, part))
+                        {
+                            if (!_holders.TryGetValue(stack.Item, out var set)) _holders[stack.Item] = set = new HashSet<ContainerId>();
+                            set.Add(id);
+                        }
+                }
+            }
+            return _holders.TryGetValue(item, out var found) ? found : Empty;
+        }
+
+        static readonly HashSet<ContainerId> Empty = new();
+        bool _ran;
+
+        // Where station feeding spends its time, reported in TickReport.Timings.
+        readonly System.Diagnostics.Stopwatch _tPlan = new(), _tPull = new(), _tLeftover = new(), _tSources = new();
 
         (List<ContainerId> Order, Dictionary<ContainerId, int> Rank) Reverse(ItemId item)
         {
@@ -91,7 +142,7 @@ namespace Satisvampory.Engine.Lists
 
         public ConveyorTick(IWorld world, DepositContext ctx, LogisticsGraph graph, CastleRules rules, TickState state, TickOptions? options = null)
         {
-            _world = new TickWorld(world);
+            _world = new TickWorld(world, options?.Prefetched);
             _ctx = new DepositContext(ctx.Catalog, _world, ctx.Scope, ctx.Standing)
             {
                 Settings = ctx.Settings, Script = ctx.Script, Belts = ctx.Belts,
@@ -108,23 +159,44 @@ namespace Satisvampory.Engine.Lists
 
         public TickReport Run(double now)
         {
-            _world.Clear();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            // A fresh tick keeps the caller's prefetched reads; a reused one starts clean.
+            if (_ran) _world.Clear();
+            _ran = true;
             if (!_rules.LogisticsOn)
             {
                 foreach (var id in _graph.Lists.Keys) _report.Diag(id, "disabled");
                 return _report;
             }
 
-            var edges = new List<Edge>();
-            foreach (var e in _graph.Edges())
+            List<Edge> edges;
+            List<Loop> loops;
+            var cachedLayout = _opt.LayoutSignature != 0 && _state.CachedLayout == _opt.LayoutSignature && _state.CachedEdges != null;
+            if (cachedLayout)
             {
-                // Hearts give items up only through an output entry set on the heart itself.
-                if (_world.Find(e.From)?.Kind == NodeKind.Heart && !(e.DefinedAsOutput && e.DefinedOn == e.From)) continue;
-                if (_inScope.Contains(e.From) && _inScope.Contains(e.To)) edges.Add(e);
-                else _report.Diag(e.DefinedOn, "out-of-scope");
+                edges = _state.CachedEdges;
+                loops = _state.CachedLoops!;
             }
+            else
+            {
+                edges = new List<Edge>();
+                var outOfScope = new List<ContainerId>();
+                foreach (var e in _graph.Edges())
+                {
+                    // Hearts give items up only through an output entry set on the heart itself.
+                    if (_world.Find(e.From)?.Kind == NodeKind.Heart && !(e.DefinedAsOutput && e.DefinedOn == e.From)) continue;
+                    if (_inScope.Contains(e.From) && _inScope.Contains(e.To)) edges.Add(e);
+                    else outOfScope.Add(e.DefinedOn);
+                }
+                loops = LoopFinder.Find(edges);
+                _state.CachedLayout = _opt.LayoutSignature;
+                _state.CachedEdges = edges;
+                _state.CachedOutOfScope = outOfScope;
+                _state.CachedLoops = loops;
+            }
+            foreach (var id in _state.CachedOutOfScope!) _report.Diag(id, "out-of-scope");
 
-            var loops = LoopFinder.Find(edges);
+            _report.Timings.Add((cachedLayout ? "edges(cached)+loops" : "edges+loops", watch.Elapsed.TotalMilliseconds));
             _report.Loops.AddRange(loops);
             var skip = new HashSet<Edge>();
             var balance = new List<Loop>();
@@ -149,9 +221,16 @@ namespace Satisvampory.Engine.Lists
 
             var live = edges.Where(e => !skip.Contains(e)).ToList();
             FeedStations(live, now);
+            _report.Timings.Add(("stations", watch.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  plan", _tPlan.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  pull", _tPull.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  leftovers", _tLeftover.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  all-sources", _tSources.Elapsed.TotalMilliseconds));
             RunChestEdges(live);
+            _report.Timings.Add(("chests", watch.Elapsed.TotalMilliseconds));
             foreach (var loop in balance) Balance(loop);
             MassDepositOutputs();
+            _report.Timings.Add(("massDeposit", watch.Elapsed.TotalMilliseconds));
             return _report;
         }
 
@@ -217,13 +296,27 @@ namespace Satisvampory.Engine.Lists
                 .ToList();
 
             var held = _world.Contents(station.Id);
+            // Every allowed source (homes for leftovers) and the ones that hold the item (pulls).
             List<ContainerId> SourcesFor(ItemId item)
             {
                 if (_sourcesFor.TryGetValue((station.Id, item), out var cached)) return cached;
-                return _sourcesFor[(station.Id, item)] = ComputeSourcesFor(item);
+                var was = _tSources.IsRunning; _tSources.Start();
+                try { return _sourcesFor[(station.Id, item)] = ComputeSourcesFor(item, null); }
+                finally { if (!was) _tSources.Stop(); }
             }
 
-            List<ContainerId> ComputeSourcesFor(ItemId item)
+            List<ContainerId> PullFrom(ItemId item)
+            {
+                if (_pullFrom.TryGetValue((station.Id, item), out var cached)) return cached;
+                if (_sourcesFor.TryGetValue((station.Id, item), out var all))
+                {
+                    var holders = Holders(item);
+                    return _pullFrom[(station.Id, item)] = all.Where(holders.Contains).ToList();
+                }
+                return _pullFrom[(station.Id, item)] = ComputeSourcesFor(item, Holders(item));
+            }
+
+            List<ContainerId> ComputeSourcesFor(ItemId item, HashSet<ContainerId>? only)
             {
                 var list = new List<ContainerId>(sources);
                 var seen = new HashSet<ContainerId>(list);
@@ -237,7 +330,7 @@ namespace Satisvampory.Engine.Lists
                     var rank = Reverse(item).Rank;
                     list = list.OrderBy(id => rank.TryGetValue(id, out var i) ? i : int.MaxValue).ToList();
                 }
-                return list.Where(id => _inScope.Contains(id) && id != station.Id)
+                return list.Where(id => (only == null || only.Contains(id)) && _inScope.Contains(id) && id != station.Id)
                     .Where(id => _world.Find(id) is { } c && c.Kind is NodeKind.Chest or NodeKind.Station
                         && !c.AutomationSuspended && c.Deposit.Special != SpecialKind.Skip && !_world.IsRaided(c.Plot))
                     .Where(id => massSources.Contains(id)
@@ -263,17 +356,20 @@ namespace Satisvampory.Engine.Lists
             int Available(ItemId item)
             {
                 if (available.TryGetValue(item, out var known)) return known;
-                var inSources = SourcesFor(item).Sum(id => SourceCount(id, item));
+                var inSources = PullFrom(item).Sum(id => SourceCount(id, item));
                 var aboveReserve = IslandTotal(item) - _rules.Reserve(item, Catalog);
                 return available[item] = (int)Math.Max(0, Math.Min(inSources, aboveReserve));
             }
 
+            _tPlan.Start();
             var plan = StationPlanner.Plan(recipes, held, Available, crafts);
+            _tPlan.Stop();
+            _tPull.Start();
 
             foreach (var (item, amount) in plan.Pull)
             {
                 var left = amount;
-                foreach (var src in SourcesFor(item))
+                foreach (var src in PullFrom(item))
                 {
                     if (left <= 0 || !Budget(src)) break;
                     var moved = Move(src, PartOf(src), station.Id, item, left, "station feed");
@@ -286,6 +382,7 @@ namespace Satisvampory.Engine.Lists
                 }
             }
 
+            _tPull.Stop();
             if (!final) return;
 
             if (capped.Count > 0) _report.Diag(station.Id, "cap");
@@ -293,11 +390,13 @@ namespace Satisvampory.Engine.Lists
             {
                 if (!plan.Missing.TryGetValue(r.Id, out var short1)) { _report.Diag(station.Id, "no-source"); continue; }
                 // Stock is there but the reserve holds it back (spec 02 "reserve").
-                var inSources = SourcesFor(short1).Sum(id => SourceCount(id, short1));
+                var inSources = PullFrom(short1).Sum(id => SourceCount(id, short1));
                 _report.Diag(station.Id, inSources > Available(short1) ? "reserve" : "not-enough");
             }
 
+            _tLeftover.Start();
             ReturnLeftovers(station, plan.Leftovers, item => SourcesFor(item).ToHashSet(), now);
+            _tLeftover.Stop();
         }
 
         void ReturnLeftovers(ContainerInfo station, IReadOnlyDictionary<ItemId, int> leftovers,

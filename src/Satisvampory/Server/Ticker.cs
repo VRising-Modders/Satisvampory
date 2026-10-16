@@ -193,6 +193,7 @@ namespace Satisvampory.Server
             finally
             {
                 _lastTickMs = watch.Elapsed.TotalMilliseconds;
+                _maxTickMsSinceLog = Math.Max(_maxTickMsSinceLog, _lastTickMs);
             }
         }
 
@@ -230,16 +231,129 @@ namespace Satisvampory.Server
             }
         }
 
+        // ---------------- idle skip ----------------
+
+        /// <summary>The longest an island goes without a full tick, for time-based work (leftover grace, loop timers).</summary>
+        const double IdleMaxSeconds = 60;
+
+        sealed class IdleState
+        {
+            public long Layout;
+            public long Inventory;
+            public double LastFull;
+            public bool Settled;
+        }
+
+        readonly Dictionary<string, IdleState> _idle = new();
+        int _skippedSinceLog;
+        double _maxTickMsSinceLog;
+        double _skippedMsSinceLog;
+
+        static string IslandId(string key, List<ICastleHandle> members) =>
+            key + "|" + string.Join(",", members.Select(m => m.Territory.Index).OrderBy(i => i));
+
+        /// <summary>Everything a tick's work depends on besides inventories: settings writes, built or destroyed containers, scope and budgets.</summary>
+        long LayoutSignature(string key, List<ICastleHandle> members, ServerSettings server)
+        {
+            var h = new HashCode();
+            h.Add(key);
+            h.Add(Stores.Revision);
+            h.Add(_half.Catalog.ItemCount);
+            h.Add(server.MovesPerTick); h.Add(server.MovesPerPlot); h.Add(server.LoopMovesPerTick); h.Add(server.AllowLoops);
+            h.Add(server.AllowSalvage); h.Add(server.AllowSpawnerChests); h.Add(server.AllowTrash);
+            foreach (var m in members.OrderBy(m => m.Territory.Index))
+            {
+                h.Add(m.Territory.Index);
+                h.Add(m.StructureRevision);
+                h.Add(m.Raided);
+            }
+            return h.ToHashCode() | ((long)members.Count << 32);
+        }
+
+        /// <summary>
+        /// A hash of every inventory on the island (main and output parts), read once each. The reads
+        /// are kept in <paramref name="reads"/> so a tick that runs does not read them again.
+        /// </summary>
+        static long InventoryFingerprint(ProgenitorWorld world, IEnumerable<PlotId> plots,
+            Dictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]>? reads = null)
+        {
+            unchecked
+            {
+                long h = 17;
+                foreach (var plot in plots)
+                    foreach (var c in world.ContainersOn(plot))
+                    {
+                        h = h * 31 + c.Id.GetHashCode();
+                        foreach (var part in c.Kind == NodeKind.Station ? new[] { InvPart.Main, InvPart.Output } : new[] { InvPart.Main })
+                        {
+                            var stacks = world.Contents(c.Id, part);
+                            if (reads != null) reads[(c.Id, part)] = stacks as Engine.Model.ItemStack[] ?? stacks.ToArray();
+                            foreach (var stack in stacks)
+                                h = h * 1_000_003 + stack.Item.Guid * 7919L + stack.Amount + (int)part;
+                        }
+                    }
+                return h;
+            }
+        }
+
         /// <summary>One island's specials and conveyor tick; returns the moves it made.</summary>
         int RunIsland(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget)
         {
+            // Skip the whole tick when nothing it reads changed since a tick that did nothing: no settings
+            // or structure change, the same inventories, and no timer waiting (leftovers, loops).
+            var check = Stopwatch.StartNew();
+            var layout = LayoutSignature(key, members, server);
+            var plots = members.Select(ProgenitorWorld.PlotOf).ToList();
+            // Several islands can share one settings key (a clan's castles split by sharing rules), so
+            // per-island caches are keyed by the island's own plots as well.
+            var island = IslandId(key, members);
+            var peek = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, _ => null, cachedRows: true);
+            var reads = new Dictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]>();
+            var inventory = InventoryFingerprint(peek, plots, reads);
+            if (!_idle.TryGetValue(island, out var idle)) _idle[island] = idle = new IdleState();
+            if (idle.Settled && idle.Layout == layout && idle.Inventory == inventory && Now - idle.LastFull < IdleMaxSeconds)
+            {
+                _skippedSinceLog++;
+                _skippedMsSinceLog += check.Elapsed.TotalMilliseconds;
+                return 0;
+            }
+            var moved = RunIslandFull(server, key, members, plot, budget, reads, out var pending);
+            idle.Layout = layout;
+            // Moves change inventories; read them again so the next tick compares against the result.
+            idle.Inventory = moved > 0 ? InventoryFingerprint(new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, _ => null, cachedRows: true), plots) : inventory;
+            idle.Settled = moved == 0 && !pending;
+            idle.LastFull = Now;
+            return moved;
+        }
+
+        int RunIslandFull(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget,
+            IReadOnlyDictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]> reads, out bool pending)
+        {
+            pending = false;
+            var phases = Stopwatch.StartNew();
+            var marks = new List<string>();
+            void Mark(string name) { marks.Add($"{name} {phases.Elapsed.TotalMilliseconds:0}"); }
+            try { return RunIslandFullCore(server, key, members, plot, budget, reads, out pending, Mark); }
+            finally
+            {
+                if (phases.Elapsed.TotalMilliseconds > 100)
+                    _ctx.Log.LogInfo($"Satisvampory: slow island tick {key}: {string.Join(", ", marks)} ms");
+            }
+        }
+
+        int RunIslandFullCore(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget,
+            IReadOnlyDictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]> reads, out bool pending, Action<string> Mark)
+        {
+            pending = false;
             {
                 var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, cachedRows: true));
+                Mark("load");
                 var configured = state.Graph.Lists.Count;
                 var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true, logistics: state)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };
+                Mark("world");
                 if (state.Graph.Lists.Count != configured || state.DefaultBeltMigrated) Stores.Save(_ctx.Save, key, state);
                 // A castle with Logistics off takes no part in conveyors (spec 10).
                 var scope = members.Where(m => Stores.Castle(_ctx.Save, m.Territory.Index).LogisticsOn).Select(ProgenitorWorld.PlotOf).ToList();
@@ -248,10 +362,13 @@ namespace Satisvampory.Server
                     Settings = state.MassDeposit,
                     Belts = state.Graph.BeltMembers(),
                 };
+                Mark("context");
                 var used = RunSpecials(world, members, server);
+                Mark("specials");
                 if (state.Graph.Lists.Count == 0 || scope.Count == 0)
                     return used;
-                if (!_tickStates.TryGetValue(key, out var tickState)) _tickStates[key] = tickState = new TickState();
+                var island = IslandId(key, members);
+                if (!_tickStates.TryGetValue(island, out var tickState)) _tickStates[island] = tickState = new TickState();
                 foreach (var (loopKey, mode) in state.LoopModes)
                 {
                     if (!tickState.Loops.TryGetValue(loopKey, out var ls)) tickState.Loops[loopKey] = ls = new Engine.Loops.LoopState();
@@ -260,12 +377,20 @@ namespace Satisvampory.Server
 
                 var report = new ConveyorTick(world, deposit, state.Graph, state.Rules, tickState, new TickOptions
                 {
+                    LayoutSignature = LayoutSignature(key, members, server),
+                    // Specials may have moved items since these reads; then the tick reads fresh.
+                    Prefetched = used == 0 ? reads : null,
                     MovesPerPlot = server.MovesPerPlot,
                     MovesPerTick = Math.Max(0, budget - used),
                     LoopMovesPerTick = server.LoopMovesPerTick,
                     LoopsAllowed = server.AllowLoops,
                 }).Run(Now);
+                Mark("conveyor");
+                foreach (var (phase, ms) in report.Timings) Mark("  " + phase + "@" + ms.ToString("0"));
                 _lastReports[key] = report;
+                // A sleeping loop wakes on an outside change, which the inventory fingerprint sees;
+                // only a leftover's grace timer needs ticks to pass.
+                pending = tickState.LeftoverSince.Count > 0;
                 _listIslandTicks++;
                 foreach (var codes in report.Diagnostics.Values)
                     foreach (var code in codes) _diagSinceLog[code] = (_diagSinceLog.TryGetValue(code, out var dn) ? dn : 0) + 1;
@@ -273,10 +398,13 @@ namespace Satisvampory.Server
                 _moveRecordsSinceLog += report.Moves.Count;
                 if (Now - _lastMoveLog >= 60 && _listIslandTicks > 0)
                 {
-                    _ctx.Log.LogInfo($"Satisvampory: lists moved {_movedSinceLog:N0} items in {_moveRecordsSinceLog} moves in the last {Now - _lastMoveLog:0} s ({_listIslandTicks} island ticks with lists)"
+                    _ctx.Log.LogInfo($"Satisvampory: lists moved {_movedSinceLog:N0} items in {_moveRecordsSinceLog} moves in the last {Now - _lastMoveLog:0} s ({_listIslandTicks} island ticks with lists, {_skippedSinceLog} idle ticks skipped at {(_skippedSinceLog == 0 ? 0 : _skippedMsSinceLog / _skippedSinceLog):0.0} ms each, slowest tick {_maxTickMsSinceLog:0} ms)"
                         + (_diagSinceLog.Count == 0 ? "" : "; waiting: " + string.Join(", ", _diagSinceLog.Select(kv => $"{kv.Key} x{kv.Value}"))));
                     _diagSinceLog.Clear();
                     _listIslandTicks = 0;
+                    _skippedSinceLog = 0;
+                    _skippedMsSinceLog = 0;
+                    _maxTickMsSinceLog = 0;
                     _movedSinceLog = 0;
                     _moveRecordsSinceLog = 0;
                     _lastMoveLog = Now;

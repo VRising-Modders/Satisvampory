@@ -45,8 +45,15 @@ namespace Satisvampory.Server
         public static CastleSettings Castle(IModStore store, int territory) =>
             store.Get<CastleSettings>(CastleKey(territory)) ?? new CastleSettings();
 
-        public static void SetCastle(IModStore store, int territory, CastleSettings settings) =>
+        /// <summary>Moves on every write of island or castle settings: the conveyor's idle skip keys on it.</summary>
+        public static long Revision => System.Threading.Interlocked.Read(ref _revision);
+        static long _revision;
+
+        public static void SetCastle(IModStore store, int territory, CastleSettings settings)
+        {
+            System.Threading.Interlocked.Increment(ref _revision);
             store.Set(CastleKey(territory), settings);
+        }
 
         /// <summary>Whose island-wide settings a castle uses: its owner's clan, else its owner.</summary>
         public static string SettingsKey(PluginContextLike ctx, ICastleHandle castle)
@@ -87,6 +94,7 @@ namespace Satisvampory.Server
         /// </summary>
         public static void Save(IModStore store, string settingsKey, IslandState state)
         {
+            System.Threading.Interlocked.Increment(ref _revision);
             var save = SaveCodec.Capture(state, state.Graph.Sequence);
             var containers = save.Containers;
             var recipes = save.TableRecipesOn;

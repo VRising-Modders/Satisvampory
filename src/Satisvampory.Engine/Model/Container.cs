@@ -27,6 +27,9 @@ namespace Satisvampory.Engine.Model
         /// <summary>Vanilla furniture name ("Large Chest"), used when <see cref="Name"/> is blank.</summary>
         public string FurnitureName { get; set; } = string.Empty;
 
+        /// <summary>The building's prefab guid (for its build-menu icon); 0 when unknown.</summary>
+        public int BuildingPrefab { get; set; }
+
         /// <summary>
         /// Category a dest-typed furniture stands for (Jewel Storage → "jewels"), or null for
         /// generic furniture.

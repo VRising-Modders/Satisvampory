@@ -233,6 +233,8 @@ namespace Satisvampory.Net
         [Field(13)] public float Y;
         [Field(14)] public float Z;
         [Field(15)] public float Yaw;
+        /// <summary>Find: the chest's or station's building prefab, for its icon; 0 when unknown.</summary>
+        [Field(16)] public int BuildingPrefab;
     }
 
     [ModMessage("sv.tryit.reply")]

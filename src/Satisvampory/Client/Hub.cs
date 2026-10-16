@@ -1183,7 +1183,7 @@ namespace Satisvampory.Client
             foreach (var item in r.Items)
             {
                 var name = ClientItems.NameOf(_ctx, item.Item, item.Name);
-                matches.Add((item.MatchRank, item.Total, name, new UiTableRow("item:" + item.Item).Text("name", name).Text("kind", "Item").Number("amount", item.Total)));
+                matches.Add((item.MatchRank, item.Total, name, new UiTableRow("item:" + item.Item) { ItemPrefab = item.Item }.Text("name", name).Text("kind", "Item").Number("amount", item.Total)));
             }
             for (int i = 0; i < r.ChestsByName.Count; i++)
             {

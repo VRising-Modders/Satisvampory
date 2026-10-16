@@ -756,6 +756,7 @@ namespace Satisvampory.Server
                 Why = c.Produces ? c.Count > 0 ? "Stores and makes" : "Can make" : "Stores",
                 Level = castles.FirstOrDefault(x => ProgenitorWorld.PlotOf(x) == c.Plot)?.Level ?? 0,
                 Holds = string.Join(", ", world.Contents(c.Id).OrderByDescending(x => x.Amount).Take(3).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
+                BuildingPrefab = world.Find(c.Id)?.BuildingPrefab ?? 0,
             }, c.Id);
                 if (_ctx.Castles.TryGetBuildingPosition(world.EntityOf(c.Id), out var position))
                 {

@@ -95,6 +95,7 @@ namespace Satisvampory.World
                     var info = new ContainerInfo(id, plot, row.IsStation ? NodeKind.Station : NodeKind.Chest, row.Nameplate)
                     {
                         FurnitureName = Pretty(row.Building.PrefabName),
+                        BuildingPrefab = row.Building.PrefabGuid,
                         X = CastleGeometry.TileToWorld(row.Building.TileX),
                         Z = CastleGeometry.TileToWorld(row.Building.TileY),
                         Role = RoleOf(row),

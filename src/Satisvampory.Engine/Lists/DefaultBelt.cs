@@ -39,6 +39,33 @@ namespace Satisvampory.Engine.Lists
             }
         }
 
+        /// <summary>
+        /// Once per island, for saves from before the Default Belt: containers that already had lists
+        /// never got the defaults, so stations crafted from no storage. Ordinary chests join the belt's
+        /// supply (their Output), and stations with no Input draw from it. Returns what changed.
+        /// </summary>
+        public static List<ContainerId> MigrateExisting(LogisticsGraph graph, IEnumerable<ContainerInfo> containers)
+        {
+            var changed = new List<ContainerId>();
+            foreach (var c in containers)
+            {
+                if (!graph.Lists.TryGetValue(c.Id, out var lists) || c.Kind == NodeKind.Heart || !c.DefaultBeltEligible) continue;
+                if (c.Deposit.Special != SpecialKind.None) continue;
+                if (c.Kind == NodeKind.Chest && !lists.Output.Any(IsEntry))
+                {
+                    lists.Output.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
+                    changed.Add(c.Id);
+                }
+                else if (c.Kind == NodeKind.Station && c.Role is StationRole.None or StationRole.Refinement or StationRole.Workstation && lists.Input.Count == 0)
+                {
+                    lists.Input.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
+                    lists.PullOrder = PullOrder.ReverseMassDeposit;
+                    changed.Add(c.Id);
+                }
+            }
+            return changed;
+        }
+
         public static IEnumerable<ContainerId> Suppliers(LogisticsGraph graph) =>
             graph.Suppliers(Id);
 

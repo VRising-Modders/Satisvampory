@@ -38,6 +38,40 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void Containers_from_before_the_default_belt_join_it_once()
+        {
+            // Lists that existed before the Default Belt: a chest with only a deposit setting, a
+            // station with no Input, a spoils chest. Initialize leaves every one of them alone.
+            var old = world.Chest(home, "Old ore");
+            state.Graph.For(old.Id).KeepEmpty = true;
+            var spoils = world.Chest(home, "Spoils");
+            spoils.Deposit.Special = SpecialKind.Spoils;
+            state.Graph.For(spoils.Id).KeepEmpty = true;
+            var station = Furnace();
+            state.Graph.For(station.Id).KeepEmpty = true;
+            Initialize();
+            var reverse = new[] { old.Id };
+            Assert.Empty(MaterialPolicy.ForInput(state.Graph, station.Id, reverse, IronOre, catalog));
+
+            var all = world.ContainersOn(home).ToList();
+            var changed = DefaultBelt.MigrateExisting(state.Graph, all);
+            Assert.Equal(new[] { old.Id, station.Id }.OrderBy(i => i.Value), changed.OrderBy(i => i.Value));
+            Assert.Contains(old.Id, DefaultBelt.Suppliers(state.Graph));
+            Assert.DoesNotContain(spoils.Id, DefaultBelt.Suppliers(state.Graph));
+            Assert.Equal(reverse, MaterialPolicy.ForInput(state.Graph, station.Id, reverse, IronOre, catalog));
+
+            // Running it again changes nothing.
+            Assert.Empty(DefaultBelt.MigrateExisting(state.Graph, all));
+        }
+
+        [Fact]
+        public void Only_saves_older_than_version_3_are_due_for_the_migration()
+        {
+            Assert.True(SaveCodec.Restore(new IslandSave { Version = 2 }, out _).DefaultBeltMigrationDue);
+            Assert.False(SaveCodec.Restore(new IslandSave { Version = IslandSave.CurrentVersion }, out _).DefaultBeltMigrationDue);
+        }
+
+        [Fact]
         public void Suppliers_do_not_empty_into_each_other()
         {
             var a = world.Chest(home, "A");

@@ -116,8 +116,18 @@ namespace Satisvampory.World
             if (logistics != null) InitializeDefaults(logistics);
         }
 
-        public void InitializeDefaults(Engine.Persistence.IslandState state) =>
-            Engine.Lists.DefaultBelt.Initialize(state.Graph, _nodes.Values.Select(n => n.Info));
+        public void InitializeDefaults(Engine.Persistence.IslandState state)
+        {
+            var infos = _nodes.Values.Select(n => n.Info).ToList();
+            if (state.DefaultBeltMigrationDue)
+            {
+                Engine.Lists.DefaultBelt.Initialize(state.Graph, Array.Empty<ContainerInfo>()); // the belt itself first
+                foreach (var id in Engine.Lists.DefaultBelt.MigrateExisting(state.Graph, infos)) state.Touched.Add(id);
+                state.DefaultBeltMigrationDue = false;
+                state.DefaultBeltMigrated = true;
+            }
+            Engine.Lists.DefaultBelt.Initialize(state.Graph, infos);
+        }
 
         /// <summary>
         /// Register the actor's bag for one action. It gets a throwaway id, is never on a plot, so it

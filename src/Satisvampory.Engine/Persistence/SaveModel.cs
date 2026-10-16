@@ -88,7 +88,8 @@ namespace Satisvampory.Engine.Persistence
     /// <summary>Everything one island's settings owner holds (spec 12): belts, Mass Deposit, rules, lists, loop modes.</summary>
     public sealed class IslandSave
     {
-        public const int CurrentVersion = 2;
+        /// <summary>3: containers that predate the Default Belt join it once (see DefaultBelt.MigrateExisting).</summary>
+        public const int CurrentVersion = 3;
 
         // Missing versions in typed store reads are legacy; Capture explicitly writes the current version.
         public int Version { get; set; } = 1;
@@ -123,6 +124,12 @@ namespace Satisvampory.Engine.Persistence
 
         /// <summary>Containers whose own record changed since the last save, including ones cleared or forgotten.</summary>
         public HashSet<ContainerId> Touched { get; } = new();
+
+        /// <summary>Loaded from a save older than the Default Belt: existing containers still need to join it.</summary>
+        public bool DefaultBeltMigrationDue { get; set; }
+
+        /// <summary>The migration ran in memory and the island should be saved.</summary>
+        public bool DefaultBeltMigrated { get; set; }
     }
 
     public static class SaveCodec
@@ -213,7 +220,7 @@ namespace Satisvampory.Engine.Persistence
                 throw new InvalidOperationException($"Save version {save.Version} is newer than this build ({IslandSave.CurrentVersion})");
             Normalize(save);
             nextSequence = save.NextSequence;
-            var state = new IslandState();
+            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3 };
             state.Graph.Sequence = save.NextSequence;
 
             foreach (var b in save.Belts.Where(b => b != null))

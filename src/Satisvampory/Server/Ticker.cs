@@ -240,7 +240,7 @@ namespace Satisvampory.Server
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };
-                if (state.Graph.Lists.Count != configured) Stores.Save(_ctx.Save, key, state);
+                if (state.Graph.Lists.Count != configured || state.DefaultBeltMigrated) Stores.Save(_ctx.Save, key, state);
                 // A castle with Logistics off takes no part in conveyors (spec 10).
                 var scope = members.Where(m => Stores.Castle(_ctx.Save, m.Territory.Index).LogisticsOn).Select(ProgenitorWorld.PlotOf).ToList();
                 var deposit = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, scope, plot)

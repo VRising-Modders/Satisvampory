@@ -25,6 +25,8 @@ Built on Progenitor's settings pages (`ctx.Settings.Page`) and keybinds (`ctx.Ke
 | Top up my island's hearts when I log in | OFF |
 | Also top up hearts outside my island | OFF |
 | Keybinds: Mass Deposit, Belts and categories, Inventory, Find, Tidy, Stash, Hunt log | all unbound; the player picks keys, checked against vanilla bindings |
+| Show vanilla redistribution tab | OFF; transfer ownership is separate (`04-stations.md`) |
+| Auto-pin Find selections | ON; pins the selected chest or station, replacing the previous Find pin |
 | Hunt log | button |
 | Show term hints (ⓘ) again | button |
 

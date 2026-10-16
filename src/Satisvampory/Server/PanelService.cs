@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -71,7 +71,7 @@ namespace Satisvampory.Server
                 ?? throw new RequestRefusedException("Stand on one of your or your clan's castles to change logistics.");
             var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, logistics: island.State)
             {
                 TableRecipesOn = id => island.State.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
             };
@@ -121,6 +121,7 @@ namespace Satisvampory.Server
 
         PanelMsg EditList(Session s, EditListReq r)
         {
+            if (r.Side is not (0 or 1)) throw new RequestRefusedException("Connections belong to Input or Output.");
             var side = r.Side == 0 ? ListSide.Input : ListSide.Output;
             switch (r.Op)
             {
@@ -146,27 +147,8 @@ namespace Satisvampory.Server
                     Must(s.Edits.SetOrders(s.Role, s.Container.Id, (PullOrder)r.PullOrder, (SendOrder)r.SendOrder));
                     break;
                 case 5:
-                {
-                    var graph = s.Island.State.Graph;
-                    BeltId belt;
-                    if (Guid.TryParse(r.Entry.BeltId, out var g) && graph.Belts.ContainsKey(new BeltId(g))) belt = new BeltId(g);
-                    else if (graph.FindBelt(r.Entry.Name ?? "") is { } named) belt = named.Id;
-                    else
-                    {
-                        Must(s.Edits.CreateBelt(s.Role, r.Entry.Name ?? "", out var made));
-                        belt = made!.Id;
-                    }
-                    Must(s.Edits.AddBeltMembers(s.Role, belt, new[] { s.Container.Id }));
-                    break;
-                }
                 case 6:
-                {
-                    if (s.Role == ActorRole.Guest) throw new RequestRefusedException("Clan members can change belts.");
-                    if (!Guid.TryParse(r.Entry.BeltId, out var g) || !s.Island.State.Graph.Belts.TryGetValue(new BeltId(g), out var belt))
-                        throw new RequestRefusedException("That belt no longer exists.");
-                    belt.Members.RemoveAll(m => m == s.Container.Id);
-                    break;
-                }
+                    throw new RequestRefusedException("Legacy belt membership edits are no longer supported. Use Input, Output or Manage belts.");
                 case 4:
                 {
                     var list = side == ListSide.Input ? s.Island.State.Graph.For(s.Container.Id).Input : s.Island.State.Graph.For(s.Container.Id).Output;
@@ -174,7 +156,7 @@ namespace Satisvampory.Server
                     if (s.Role == ActorRole.Guest) throw new RequestRefusedException("Clan members can change logistics.");
                     var old = list[r.Index];
                     var filter = string.IsNullOrWhiteSpace(r.Entry.FilterSpec?.Text) ? ToFilter(r.Entry.FilterSpec) : ParseFilter(s.Catalog, r.Entry.FilterSpec!.Text);
-                    list[r.Index] = new ListEntry { Kind = old.Kind, Container = old.Container, Belt = old.Belt, Sequence = old.Sequence, Filter = filter };
+                    list[r.Index] = new ListEntry { Kind = old.Kind, Container = old.Container, Belt = old.Belt, Sequence = old.Sequence, BeltOrder = old.BeltOrder, BeltPeers = old.BeltPeers == null ? null : new(old.BeltPeers), CounterpartOnly = old.CounterpartOnly, Filter = filter };
                     break;
                 }
                 default:
@@ -187,6 +169,8 @@ namespace Satisvampory.Server
         PanelMsg SetDeposit(Session s, SetDepositReq r)
         {
             var m = r.Deposit;
+            if (m.Belts is { Count: > 0 } || m.BeltIds is { Count: > 0 })
+                throw new RequestRefusedException("Accepts does not edit belt membership. Use Input, Output or Manage belts.");
             Must(s.Edits.SetDepositOptions(s.Role, s.Container.Id, d =>
             {
                 d.Takes = (Takes)Math.Clamp(m.Takes, 0, 2);
@@ -310,7 +294,7 @@ namespace Satisvampory.Server
                 0 => Evaluator.Pull(s.Deposit, item, amount, new Evaluator.PullOptions
                 {
                     Reserve = s.Island.State.Rules.Reserve(item, s.Catalog),
-                    Sources = InputSources(s),
+                    Sources = InputSources(s, item),
                 }),
                 1 => Evaluator.OutputList(s.Deposit, s.Island.State.Graph, s.Container.Id, item, amount),
                 _ => Evaluator.Push(s.Deposit, item, amount),
@@ -321,13 +305,10 @@ namespace Satisvampory.Server
             return reply;
         }
 
-        /// <summary>An Input list's own sources; null when it pulls from reverse Mass Deposit (the whole island).</summary>
-        IReadOnlyList<EngineId>? InputSources(Session s)
-        {
-            var lists = s.Island.State.Graph.For(s.Container.Id);
-            if (lists.Input.Any(e => e.Kind == EntryKind.MassDeposit)) return null;
-            return lists.Input.SelectMany(s.Island.State.Graph.Expand).Distinct().ToList();
-        }
+        /// <summary>Item-specific sources, including both ends of a belt connection.</summary>
+        IReadOnlyList<EngineId> InputSources(Session s, ItemId item) =>
+            Engine.World.MaterialPolicy.ForInput(s.Island.State.Graph, s.Container.Id,
+                DepositPlanner.ReverseOrder(s.Deposit, item), item, s.Catalog);
 
         // ---------------- panel view ----------------
 
@@ -350,6 +331,23 @@ namespace Satisvampory.Server
                 HasDemand = EditService.HasDemand(c),
                 HasOutput = c.Role is not (StationRole.UnitSpawner or StationRole.Brazier),
             };
+            if (c.AutomationSuspended)
+            {
+                var paused = c.NativeRoutingKnown
+                    ? "Automation paused: native redistribution is enabled."
+                    : "Automation paused: native routing status is unavailable.";
+                msg.Notice = msg.Notice.Length == 0 ? paused : msg.Notice + "\n" + paused;
+            }
+            var acceptance = s.World.DescribeAcceptance(c.Id);
+            if (!acceptance.Ok) msg.NativeRestriction = "Game restrictions unavailable; native storage rules still apply.";
+            else if (!acceptance.IsOpen)
+            {
+                var limits = new List<string>();
+                if (acceptance.Restriction.Item != 0) limits.Add(s.Catalog.NameOf(new ItemId(acceptance.Restriction.Item)));
+                if (acceptance.Restriction.Category != 0) limits.Add(((ProjectM.ItemCategory)acceptance.Restriction.Category).ToString());
+                msg.NativeRestriction = "Game rule (locked): " + string.Join("; ", limits) + " only.";
+            }
+            else msg.NativeRestriction = "Game rule: unrestricted storage.";
             var report = _half.Ticker?.LastReport(s.Island.OwnerKey);
             foreach (var e in lists.Input) msg.Input.Add(Row(s, e, ListSide.Input, report));
             foreach (var e in lists.Output) msg.Output.Add(Row(s, e, ListSide.Output, report));
@@ -362,11 +360,6 @@ namespace Satisvampory.Server
             foreach (var (cat, adj) in d.CategoryPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Adjust = adj });
             foreach (var item in d.BannedItems) msg.Deposit.Bans.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item) });
             foreach (var cat in d.BannedCategories) msg.Deposit.Bans.Add(new PriorityMsg { Category = cat, Label = "Category " + cat });
-            foreach (var b in graph.Belts.Values.Where(b => b.Members.Contains(c.Id)).OrderBy(b => b.Name))
-            {
-                msg.Deposit.Belts.Add(b.Name);
-                msg.Deposit.BeltIds.Add(b.Id.Value.ToString("N"));
-            }
             string NameOf(Engine.Model.ContainerId id) => s.World.Find(id) is { } x ? $"{x.DisplayName} · {PlotLabel(s.Island, x.Plot)}" : "a chest";
             foreach (var edge in graph.Edges().Where(x => x.DefinedOn != c.Id))
             {
@@ -418,9 +411,11 @@ namespace Satisvampory.Server
                     graph.Belts.TryGetValue(e.Belt, out var b);
                     row.BeltId = e.Belt.Value.ToString("N");
                     row.Name = b?.Name ?? "(deleted belt)";
-                    var plots = b?.Members.Select(m => s.World.Find(m)?.Plot).Where(p => p != null).Select(p => PlotLabel(s.Island, p!.Value)).Distinct().ToList() ?? new List<string>();
-                    row.Where = $"{b?.Members.Count ?? 0} chests" + (plots.Count > 0 ? " · " + string.Join(", ", plots) : "");
-                    ends = b?.Members ?? (IEnumerable<EngineId>)Array.Empty<EngineId>();
+                    var members = graph.Expand(e, side == ListSide.Output, s.Container.Id).ToList();
+                    var plots = members.Select(m => s.World.Find(m)?.Plot).Where(p => p != null).Select(p => PlotLabel(s.Island, p!.Value)).Distinct().ToList();
+                    row.Where = $"{members.Count} " + (side == ListSide.Input ? "suppliers" : "receivers")
+                        + (plots.Count > 0 ? " · " + string.Join(", ", plots) : "");
+                    ends = members;
                     break;
                 }
                 default:
@@ -464,10 +459,12 @@ namespace Satisvampory.Server
             var list = q.Side == 0 ? lists.Input : lists.Output;
             if (q.Index < 0 || q.Index >= list.Count) throw new RequestRefusedException("That row is gone; the list changed.");
             var entry = list[q.Index];
-            var sources = entry.Kind == EntryKind.Container && entry.Container is { } one ? new List<Engine.Model.ContainerId> { one }
-                : entry.Kind == EntryKind.Belt && entry.Belt is { } b && s.Island.State.Graph.Belts.TryGetValue(b, out var belt) ? belt.Members.ToList()
-                : throw new RequestRefusedException("Take works on a chest or belt row.");
+            if (entry.Kind is not (EntryKind.Container or EntryKind.Belt))
+                throw new RequestRefusedException("Take works on a chest or belt row.");
             if (!TryItem(s.Catalog, q.Item ?? "", out var item)) throw new RequestRefusedException($"No item called \"{q.Item}\".");
+            var graph = s.Island.State.Graph;
+            var sources = graph.Expand(entry, q.Side != 0, s.Container.Id)
+                .Where(id => graph.Allows(entry, s.Container.Id, q.Side != 0, id, item, s.Catalog)).ToList();
 
             var prefs = _half.PlayerFor(s.User.PlatformId);
             var bag = s.World.AddBag(_ctx.Inventory.Of(s.User.LocalCharacter._Entity), player: true);

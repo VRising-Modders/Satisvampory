@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System.Collections.Generic;
 using System.Linq;
 using Satisvampory.Engine.Deposit;
@@ -41,7 +41,7 @@ namespace Satisvampory.Engine.Tests
             _w.Chest(Outside, "Their chest");
             _g.For(near.Id).Input.Add(ListEntry.Of(self.Id));    // self → near already
             var belt = _g.BeltOrCreate("Ore belt");
-            belt.Members.Add(away.Id);
+            BeltOps.AddMembers(_g, belt.Id, new[] { away.Id });
 
             var rows = Picker.Rows(_w, _cat, _g, new[] { Home, Away }, Label, new PickerQuery
             {
@@ -95,7 +95,7 @@ namespace Satisvampory.Engine.Tests
             var partial = Find.Run(_w, _cat, new[] { Home, Away }, Home, Label, "ore");
             Assert.True(partial.Categories.Count == 1 || partial.Ambiguous);
             var chestHit = Find.Run(_w, _cat, new[] { Home, Away }, Home, Label, "chest");
-            Assert.Equal("Ore chest", Assert.Single(chestHit.ChestsByName).Name);
+            Assert.Equal(new[] { "Ore chest", "misc" }, chestHit.ChestsByName.Select(c => c.Name)); // furniture types are searchable too
 
             var iron = Find.Run(_w, _cat, new[] { Home, Away }, Home, Label, "iron");
             Assert.True(iron.Ambiguous);

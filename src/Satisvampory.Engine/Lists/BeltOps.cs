@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,6 +51,7 @@ namespace Satisvampory.Engine.Lists
 
         public static BeltEdit Rename(LogisticsGraph graph, BeltId id, string newName, BeltReferences refs)
         {
+            if (id == DefaultBelt.Id) return BeltEdit.Fail("The Default Belt cannot be renamed");
             if (!graph.Belts.TryGetValue(id, out var g)) return BeltEdit.Fail("No such group");
             var check = CheckName(graph, newName, except: id);
             if (!check.Ok) return check;
@@ -69,9 +70,14 @@ namespace Satisvampory.Engine.Lists
         public static BeltEdit Duplicate(LogisticsGraph graph, BeltId id, string newName, out Belt? copy)
         {
             copy = null;
+            if (id == DefaultBelt.Id) return BeltEdit.Fail("The Default Belt cannot be duplicated");
             if (!graph.Belts.TryGetValue(id, out var g)) return BeltEdit.Fail("No such group");
             var result = Create(graph, newName, out copy);
-            if (result.Ok) copy!.Members.AddRange(g.Members);
+            var copyId = copy?.Id;
+            if (result.Ok)
+                foreach (var lists in graph.Lists.Values)
+                    foreach (var list in new[] { lists.Input, lists.Output })
+                        list.AddRange(list.Where(e => e.Kind == EntryKind.Belt && e.Belt == id).Select(e => e.Copy(copyId)).ToArray());
             return result;
         }
 
@@ -82,13 +88,15 @@ namespace Satisvampory.Engine.Lists
         /// </summary>
         public static List<BeltUsage> Delete(LogisticsGraph graph, BeltId id, BeltReferences refs)
         {
+            if (id == DefaultBelt.Id) return new List<BeltUsage>();
             var usages = Usages(graph, id, refs);
             if (!graph.Belts.TryGetValue(id, out var g)) return usages;
 
             foreach (var lists in graph.Lists.Values)
             {
-                lists.Input.RemoveAll(e => e.Kind == EntryKind.Belt && e.Belt == id);
-                lists.Output.RemoveAll(e => e.Kind == EntryKind.Belt && e.Belt == id);
+                var removed = lists.Input.RemoveAll(e => e.Kind == EntryKind.Belt && e.Belt == id)
+                    + lists.Output.RemoveAll(e => e.Kind == EntryKind.Belt && e.Belt == id);
+                if (removed > 0) lists.KeepEmpty = true;
             }
             if (refs.MassDeposit is { } md)
             {
@@ -137,23 +145,40 @@ namespace Satisvampory.Engine.Lists
                 .ToList();
         }
 
-        /// <summary>Add members not already in the group, keeping order. Returns how many were added.</summary>
-        public static int AddMembers(LogisticsGraph graph, BeltId id, IEnumerable<ContainerId> members)
+        /// <summary>Output connections are suppliers; Input connections are receivers.</summary>
+        public static int AddMembers(LogisticsGraph graph, BeltId id, IEnumerable<ContainerId> members, bool output = true)
         {
-            if (!graph.Belts.TryGetValue(id, out var g)) return 0;
+            if (!graph.Belts.ContainsKey(id)) return 0;
             var added = 0;
             foreach (var m in members)
-                if (!g.Members.Contains(m)) { g.Members.Add(m); added++; }
+            {
+                var io = graph.For(m);
+                io.KeepEmpty = true;
+                var list = output ? io.Output : io.Input;
+                if (list.Any(e => e.Kind == EntryKind.Belt && e.Belt == id)) continue;
+                list.Add(ListEntry.OfBelt(id, graph.NextSequence()));
+                added++;
+            }
             return added;
         }
 
-        public static bool Move(LogisticsGraph graph, BeltId id, int from, int to)
+        public static bool Remove(LogisticsGraph graph, BeltId id, ContainerId member, bool output = true)
         {
-            if (!graph.Belts.TryGetValue(id, out var g)) return false;
-            if (from < 0 || from >= g.Members.Count || to < 0 || to >= g.Members.Count) return false;
-            var m = g.Members[from];
-            g.Members.RemoveAt(from);
-            g.Members.Insert(to, m);
+            if (!graph.Lists.TryGetValue(member, out var io)) return false;
+            io.KeepEmpty = true;
+            return (output ? io.Output : io.Input).RemoveAll(e => e.Kind == EntryKind.Belt && e.Belt == id) > 0;
+        }
+
+        public static bool Move(LogisticsGraph graph, BeltId id, int from, int to, bool output = true)
+        {
+            var members = (output ? graph.Suppliers(id) : graph.Receivers(id)).ToList();
+            if (from < 0 || from >= members.Count || to < 0 || to >= members.Count) return false;
+            var member = members[from]; members.RemoveAt(from); members.Insert(to, member);
+            foreach (var m in members)
+            {
+                var order = graph.NextSequence();
+                foreach (var c in graph.Connections(id, output).Where(c => c.Owner == m)) c.Entry.BeltOrder = order;
+            }
             return true;
         }
 

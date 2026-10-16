@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System.Linq;
 using Satisvampory.Engine.Import;
 using Satisvampory.Engine.Lists;
@@ -68,8 +68,8 @@ namespace Satisvampory.Engine.Tests
 
             var report = LegacyImporter.Apply(new[] { s1, s1b, r1, banned }, cat, g);
             Assert.Equal(1, report.GroupsCreated);
-            Assert.Equal(1, report.EntriesCreated);
-            Assert.Equal(2, g.FindBelt("line 1")!.Members.Count);
+            Assert.Equal(3, report.EntriesCreated);
+            Assert.Equal(2, g.Suppliers(g.FindBelt("line 1")!.Id).Count());
             Assert.Equal(EntryKind.Belt, g.For(r1.Id).Input.Single().Kind);
             Assert.Contains(IronSwordFreeCheck(banned), new[] { true });
             Assert.Contains("ore", banned.Deposit.BannedCategories);

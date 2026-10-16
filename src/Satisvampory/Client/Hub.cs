@@ -114,6 +114,7 @@ namespace Satisvampory.Client
             if (_storageMenu == null)
             {
                 var p = _storageMenu = UiApi.Panel("Storage", _ctx.Owner, _ctx.Guid);
+                p.GameWindow();
                 p.CaptureMode = UiCaptureMode.WhenHovered;
                 _ctx.Track(p);
                 var stash = p.Button("Stash");
@@ -216,6 +217,12 @@ namespace Satisvampory.Client
             // Select after showing: showing a panel restores its remembered tab.
             _tabs.Selected = tab;
             Refresh(tab);
+            if (tab == FindTab)
+            {
+                _findMatches.SetSelected(Array.Empty<string>());
+                ShowFindStage(false);
+                Progenitor.Dev.MainThread.PostDelayed(0.12, () => { if (panel.Visible && _tabs.Selected == FindTab) _findText.Focus(); }, _ctx.Owner);
+            }
             Progenitor.Dev.MainThread.PostDelayed(0.05, () => { if (_tabs.Selected != tab) { _tabs.Selected = tab; Refresh(tab); } }, _ctx.Owner);
             Help.Tip(_ctx, Help.HubTip, panel);
             TabTip(tab);
@@ -241,6 +248,7 @@ namespace Satisvampory.Client
                 case MassDepositTab: Send<GetMassDepositReq, MassDepositMsg>(new GetMassDepositReq(), DrawMassDeposit); break;
                 case BeltsTab: Send<GetBeltsReq, BeltsMsg>(new GetBeltsReq(), DrawBelts); break;
                 case InventoryTab: LoadInventory(); break;
+                case FindTab: ShowFindStage(_findAtLocations); break;
                 case HuntLogTab:
                     Send<GetHuntLogReq, HuntLogReply>(new GetHuntLogReq(), r =>
                         _huntLog.Text = (r.Lines.Count == 0 ? "No hunts in the last 72 hours." : string.Join("\n", r.Lines.Take(40)))
@@ -266,6 +274,7 @@ namespace Satisvampory.Client
             {
                 if (_panel != null) return _panel;
                 var p = _panel = UiApi.Panel("Satisvampory", _ctx.Owner, _ctx.Guid);
+                p.GameWindow(1440);
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
                 _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" });
@@ -275,14 +284,14 @@ namespace Satisvampory.Client
                 BuildBelts(p);
                 BuildInventory(p);
                 BuildFind(p);
-                _huntLog = In(HuntLogTab, p.Label(""));
+                _huntLog = _tabs.Add(HuntLogTab, p.Label(""));
                 // A new panel draws at once; only Open shows the hub, so a redraw from a reply (Tidy) stays hidden.
                 UiApi.Hide(p);
                 return p;
             }
         }
 
-        T In<T>(int tab, T handle) where T : IUiHandle => _tabs.Add(tab, handle);
+        // Call the framework generic directly: a mod-defined generic instantiated with Core types pins the mod to Core on .NET 6.
 
         void Track(IDisposable d) => _ctx.Track(d);
 
@@ -290,17 +299,17 @@ namespace Satisvampory.Client
 
         void BuildCastle(IUiPanel p)
         {
-            _castleHeader = In(CastleTab, p.Label(""));
-            _plotLabel = In(CastleTab, p.Input("Plot label", ""));
-            _logistics = In(CastleTab, p.Toggle("Logistics (lists run)", true));
-            _defaultReserve = In(CastleTab, p.Number("Default reserve", 10, 0, 10000));
+            _castleHeader = _tabs.Add(CastleTab, p.Label(""));
+            _plotLabel = _tabs.Add(CastleTab, p.Input("Plot label", ""));
+            _logistics = _tabs.Add(CastleTab, p.Toggle("Logistics (lists run)", true));
+            _defaultReserve = _tabs.Add(CastleTab, p.Number("Default reserve", 10, 0, 10000));
             Track(_defaultReserve.Term("Reserve"));
-            _salvage = In(CastleTab, p.Toggle("Feed salvage chests to the devourer", false));
-            _heartFeed = In(CastleTab, p.Toggle("Heart fuel auto-feed", true));
-            _repeat = In(CastleTab, p.Toggle("Repeat hunts on this castle", true));
-            _exclude = In(CastleTab, p.Toggle("Exclude this castle from sharing (owner only)", false));
-            _aliases = In(CastleTab, p.Input("Item aliases (this island): rb = Ruby; ior = Iron Ore", ""));
-            Track(In(CastleTab, p.Button("Save castle settings")).OnClick(() =>
+            _salvage = _tabs.Add(CastleTab, p.Toggle("Feed salvage chests to the devourer", false));
+            _heartFeed = _tabs.Add(CastleTab, p.Toggle("Heart fuel auto-feed", true));
+            _repeat = _tabs.Add(CastleTab, p.Toggle("Repeat hunts on this castle", true));
+            _exclude = _tabs.Add(CastleTab, p.Toggle("Exclude this castle from sharing (owner only)", false));
+            _aliases = _tabs.Add(CastleTab, p.Input("Item aliases (this island): rb = Ruby; ior = Iron Ore", ""));
+            Track(_tabs.Add(CastleTab, p.Button("Save castle settings")).OnClick(() =>
                 Send<SetCastleReq, CastleMsg>(new SetCastleReq
                 {
                     Castle = new CastleMsg
@@ -315,16 +324,16 @@ namespace Satisvampory.Client
                         Aliases = _aliases.Value,
                     },
                 }, c => { DrawCastle(c); _ctx.Hud.Notify("Castle settings saved.", kind: UiNoticeKind.Success, seconds: 3); })));
-            Track(In(CastleTab, p.Button("Tidy now")).OnClick(() => Send<TidyReq, CastleMsg>(new TidyReq(), DrawCastle)));
-            _tidyResult = In(CastleTab, p.Label(""));
-            Track(In(CastleTab, p.Button("Inventory: reserves and caps")).OnClick(() => OpenTab(InventoryTab)));
-            Track(In(CastleTab, p.Button("Belts and categories")).OnClick(() => OpenTab(BeltsTab)));
-            Track(In(CastleTab, p.Button("Mass Deposit")).OnClick(() => OpenTab(MassDepositTab)));
-            _need = In(CastleTab, p.Label(""));
-            Track(In(CastleTab, p.Button("Show all short items")).OnClick(() => { _ = Panel; _invShort.Value = true; OpenTab(InventoryTab); }));
-            In(CastleTab, p.Divider());
-            _clan = In(CastleTab, p.Label(""));
-            Track(In(CastleTab, p.Button("Repeat hunts: all on")).OnClick(() =>
+            Track(_tabs.Add(CastleTab, p.Button("Tidy now")).OnClick(() => Send<TidyReq, CastleMsg>(new TidyReq(), DrawCastle)));
+            _tidyResult = _tabs.Add(CastleTab, p.Label(""));
+            Track(_tabs.Add(CastleTab, p.Button("Inventory: reserves and caps")).OnClick(() => OpenTab(InventoryTab)));
+            Track(_tabs.Add(CastleTab, p.Button("Belts and categories")).OnClick(() => OpenTab(BeltsTab)));
+            Track(_tabs.Add(CastleTab, p.Button("Mass Deposit")).OnClick(() => OpenTab(MassDepositTab)));
+            _need = _tabs.Add(CastleTab, p.Label(""));
+            Track(_tabs.Add(CastleTab, p.Button("Show all short items")).OnClick(() => { _ = Panel; _invShort.Value = true; OpenTab(InventoryTab); }));
+            _tabs.Add(CastleTab, p.Divider());
+            _clan = _tabs.Add(CastleTab, p.Label(""));
+            Track(_tabs.Add(CastleTab, p.Button("Repeat hunts: all on")).OnClick(() =>
                 Send<SetCastleReq, CastleMsg>(new SetCastleReq { Castle = new CastleMsg { RepeatAllOn = true } }, DrawCastle)));
         }
 
@@ -355,9 +364,9 @@ namespace Satisvampory.Client
 
         void BuildMassDeposit(IUiPanel p)
         {
-            Track(In(MassDepositTab, p.Label("Each chest's deposit settings decide where items go. Overrides and rules below change that island-wide.")).Term("Mass Deposit"));
-            _overview = In(MassDepositTab, p.Label(""));
-            _homes = In(MassDepositTab, p.DataTable("md.homes", new[]
+            Track(_tabs.Add(MassDepositTab, p.Label("Each chest's deposit settings decide where items go. Overrides and rules below change that island-wide.")).Term("Mass Deposit"));
+            _overview = _tabs.Add(MassDepositTab, p.Label(""));
+            _homes = _tabs.Add(MassDepositTab, p.DataTable("md.homes", new[]
             {
                 new UiTableColumn("chest", "Chest") { Hideable = false },
                 new UiTableColumn("where", "Plot"),
@@ -374,15 +383,15 @@ namespace Satisvampory.Client
                     else e.Reject(r.Reason.Length > 0 ? r.Reason : "Not saved: " + r.Status);
                 });
             }));
-            Track(In(MassDepositTab, p.Button("Locate selected chest")).OnClick(() =>
+            Track(_tabs.Add(MassDepositTab, p.Button("Locate selected chest")).OnClick(() =>
             {
                 foreach (var id in _homes.Selected)
                     if (int.TryParse(id, out var i) && i < _homeRows.Count && _homeRows[i].NetType != 0
                         && _ctx.Hud.TryFindByNetworkId(_homeRows[i].NetIndex, _homeRows[i].NetGeneration, _homeRows[i].NetType, out var entity, out _))
                         _ctx.Hud.Locate(entity, _homeRows[i].Chest, 10);
             }));
-            In(MassDepositTab, p.Divider());
-            _overrides = In(MassDepositTab, p.OrderedList("md.overrides", Array.Empty<UiListItem>(), new UiOrderedListOptions { EmptyText = "No overrides. Chests' own settings decide." }));
+            _tabs.Add(MassDepositTab, p.Divider());
+            _overrides = _tabs.Add(MassDepositTab, p.OrderedList("md.overrides", Array.Empty<UiListItem>(), new UiOrderedListOptions { EmptyText = "No overrides. Chests' own settings decide." }));
             Track(_overrides.OnReorder(m =>
             {
                 var o = _overrideDraft[m.From];
@@ -396,31 +405,31 @@ namespace Satisvampory.Client
                 if (i < _overrideDraft.Count) _overrideDraft.RemoveAt(i);
                 SaveOverrides();
             }));
-            _ovItems = In(MassDepositTab, p.Input("For items (any / item / category name)", "any"));
-            _ovKind = In(MassDepositTab, p.Dropdown("Use first", KindValues, "belt"));
-            _ovTarget = In(MassDepositTab, p.Input("Target name (and plot after @)", ""));
-            Track(In(MassDepositTab, p.Button("+ Add override")).OnClick(() =>
+            _ovItems = _tabs.Add(MassDepositTab, p.Input("For items (any / item / category name)", "any"));
+            _ovKind = _tabs.Add(MassDepositTab, p.Dropdown("Use first", KindValues, "belt"));
+            _ovTarget = _tabs.Add(MassDepositTab, p.Input("Target name (and plot after @)", ""));
+            Track(_tabs.Add(MassDepositTab, p.Button("+ Add override")).OnClick(() =>
             {
                 var parts = _ovTarget.Value.Split('@');
                 _overrideDraft.Add(new OverrideMsg { Items = ClientItems.Resolve(_ctx, _ovItems.Value), TargetKind = _ovKind.Value, TargetName = parts[0].Trim(), TargetPlot = parts.Length > 1 ? parts[1].Trim() : "" });
                 SaveOverrides();
             }));
-            In(MassDepositTab, p.Divider());
-            _script = In(MassDepositTab, p.CodeArea("Advanced rules", "", 10));
+            _tabs.Add(MassDepositTab, p.Divider());
+            _script = _tabs.Add(MassDepositTab, p.CodeArea("Advanced rules", "", 10));
             _script.SetHighlighter(Highlight);
-            _scriptNote = In(MassDepositTab, p.Label(""));
-            Track(In(MassDepositTab, p.Button("Save rules")).OnClick(() =>
+            _scriptNote = _tabs.Add(MassDepositTab, p.Label(""));
+            Track(_tabs.Add(MassDepositTab, p.Button("Save rules")).OnClick(() =>
                 Send<SetMassDepositReq, MassDepositMsg>(new SetMassDepositReq { Script = _script.Value, SaveScript = true }, DrawMassDeposit)));
-            In(MassDepositTab, p.Divider());
-            _mdItem = In(MassDepositTab, p.Input("Try it: item", ""));
-            _mdAmount = In(MassDepositTab, p.Input("Amount", "100"));
-            _mdDirection = In(MassDepositTab, p.Dropdown("Direction", new[] { "0", "1" }, "0", new[] { "Push: where would it go", "Pull: where would it come from" }));
-            Track(In(MassDepositTab, p.Button("Try it")).OnClick(() =>
+            _tabs.Add(MassDepositTab, p.Divider());
+            _mdItem = _tabs.Add(MassDepositTab, p.Input("Try it: item", ""));
+            _mdAmount = _tabs.Add(MassDepositTab, p.Input("Amount", "100"));
+            _mdDirection = _tabs.Add(MassDepositTab, p.Dropdown("Direction", new[] { "0", "1" }, "0", new[] { "Push: where would it go", "Pull: where would it come from" }));
+            Track(_tabs.Add(MassDepositTab, p.Button("Try it")).OnClick(() =>
             {
                 RunTry();
                 if (!_tryWatching) { _tryWatching = true; Progenitor.Dev.MainThread.PostDelayed(5, RefreshTry, _ctx.Owner); }
             }));
-            _mdResult = In(MassDepositTab, p.Label(""));
+            _mdResult = _tabs.Add(MassDepositTab, p.Label(""));
         }
 
         bool _tryWatching;
@@ -500,9 +509,11 @@ namespace Satisvampory.Client
 
         // ---------------- Belts and categories ----------------
 
+        int _beltDirection;
+
         void BuildBelts(IUiPanel p)
         {
-            _beltsMd = In(BeltsTab, p.MasterDetail("belts", new UiMasterDetailOptions
+            _beltsMd = _tabs.Add(BeltsTab, p.MasterDetail("belts", new UiMasterDetailOptions
             {
                 Tabs = new[] { "Belts", "Categories" },
                 Rows = 12,
@@ -514,16 +525,20 @@ namespace Satisvampory.Client
             _beltsMd.SetTexts(CategoriesPage, newCaption: "+ New category", emptyText: "No categories.", detailEmptyText: "Select a category to see its items.");
             Track(_beltsMd.OnSelected(_ => ShowSelected()));
             Track(_beltsMd.OnAction(OnBeltAction));
-            Track(_beltsMd.OnReorder(m => WithBelt(id => EditBelt(new BeltEditReq { Op = 5, BeltId = id, Index = m.From, To = m.To }))));
+
             Track(_beltsMd.OnRemove(item =>
             {
-                if (_beltsMd.Tab == BeltsPage) WithBelt(id => EditBelt(new BeltEditReq { Op = 4, BeltId = id, Index = int.Parse(item.Id) }));
+                if (_beltsMd.Tab == BeltsPage) WithBelt(id =>
+                {
+                    var parts = item.Id.Split(':');
+                    EditBelt(new BeltEditReq { Op = 4, BeltId = id, Direction = int.Parse(parts[0]), Index = int.Parse(parts[1]), MemberId = parts[2] });
+                });
                 else if (_beltsMd.SelectedId is { } cat) EditBelt(new BeltEditReq { Op = 12, Name = cat, Text = item.Id });
             }));
-            _beltName = In(BeltsTab, p.Input("Belt name (new or rename)", ""));
-            _beltText = In(BeltsTab, p.Input("Add chests whose name contains", ""));
-            _catName = In(BeltsTab, p.Input("Category name (new, rename or duplicate)", ""));
-            _catItem = In(BeltsTab, p.Input("Item to add to the selected category", ""));
+            _beltName = _tabs.Add(BeltsTab, p.Input("Belt name (new or rename)", ""));
+            _beltText = _tabs.Add(BeltsTab, p.Input("Add chests whose name contains", ""));
+            _catName = _tabs.Add(BeltsTab, p.Input("Category name (new, rename or duplicate)", ""));
+            _catItem = _tabs.Add(BeltsTab, p.Input("Item to add to the selected category", ""));
         }
 
         string? _deleteArmed;
@@ -539,6 +554,15 @@ namespace Satisvampory.Client
         {
             if (a.Tab == BeltsPage)
             {
+                if (a.ActionId == "suppliers" || a.ActionId == "receivers")
+                { _beltDirection = a.ActionId == "suppliers" ? 0 : 1; ShowSelected(); return; }
+                if (a.ActionId.StartsWith("move:"))
+                {
+                    var parts = a.ActionId.Split(':');
+                    EditBelt(new BeltEditReq { Op = 5, BeltId = a.EntryId, Direction = int.Parse(parts[1]),
+                        Index = int.Parse(parts[2]), To = int.Parse(parts[3]), MemberId = parts[4] });
+                    return;
+                }
                 switch (a.ActionId)
                 {
                     case UiDetailAction.New: EditBelt(new BeltEditReq { Op = 0, Name = _beltName.Value }); break;
@@ -560,8 +584,8 @@ namespace Satisvampory.Client
                         EditBelt(new BeltEditReq { Op = 2, BeltId = a.EntryId });
                         break;
                     }
-                    case "byname": Send<BeltEditReq, BeltsMsg>(new BeltEditReq { Op = 8, BeltId = a.EntryId, Text = _beltText.Value }, DrawBelts); break;
-                    case "byname-confirm": EditBelt(new BeltEditReq { Op = 3, BeltId = a.EntryId, Text = _beltText.Value }); break;
+                    case "byname": Send<BeltEditReq, BeltsMsg>(new BeltEditReq { Op = 8, BeltId = a.EntryId, Direction = _beltDirection, Text = _beltText.Value }, DrawBelts); break;
+                    case "byname-confirm": EditBelt(new BeltEditReq { Op = 3, BeltId = a.EntryId, Direction = _beltsState?.PreviewDirection ?? _beltDirection, Text = _beltsState?.PreviewText ?? _beltText.Value }); break;
                     case "locate":
                     {
                         var b = _beltsState?.Belts.FirstOrDefault(x => x.Id == a.EntryId);
@@ -597,6 +621,7 @@ namespace Satisvampory.Client
             var panel = Panel;
             UiApi.Hide(panel);
             var added = 0;
+            var direction = _beltDirection;
             _ctx.Hud.PickInWorld(result =>
             {
                 if (!result.IsCurrent || !result.HasNetworkId)
@@ -604,7 +629,7 @@ namespace Satisvampory.Client
                     _ctx.Hud.Notify("That was not a container or station Satisvampory can use.", kind: UiNoticeKind.Warning, seconds: 4);
                     return;
                 }
-                Send<BeltEditReq, BeltsMsg>(new BeltEditReq { Op = 7, BeltId = beltId, PickIndex = result.NetworkIdIndex, PickGeneration = result.NetworkIdGeneration, PickType = result.NetworkId2 }, m =>
+                Send<BeltEditReq, BeltsMsg>(new BeltEditReq { Op = 7, BeltId = beltId, Direction = direction, PickIndex = result.NetworkIdIndex, PickGeneration = result.NetworkIdGeneration, PickType = result.NetworkId2 }, m =>
                 {
                     added++;
                     _beltsState = m;
@@ -625,7 +650,7 @@ namespace Satisvampory.Client
             _beltsState = m;
             _beltsMd.SetEntries(BeltsPage, m.Belts.Select(b => new UiMasterEntry(b.Id, b.Name)
             {
-                Note = $"{b.Members.Count} chests" + (b.Plots.Count > 0 ? " · " + string.Join(", ", b.Plots.Take(3)) + (b.Plots.Count > 3 ? "…" : "") : ""),
+                Note = $"{b.Suppliers.Count} suppliers / {b.Receivers.Count} receivers" + (b.Plots.Count > 0 ? " · " + string.Join(", ", b.Plots.Take(3)) + (b.Plots.Count > 3 ? "…" : "") : ""),
                 Keywords = b.Members.Select(x => x.Name).Concat(b.Plots).ToList(),
                 Badge = b.UsedBy.Count > 0 ? b.UsedBy.Count.ToString() : "",
                 Tooltip = b.UsedBy.Count == 0 ? "Not used anywhere yet." : "Used by " + b.UsedBy.Count,
@@ -660,25 +685,46 @@ namespace Satisvampory.Client
                 var lines = new List<UiDetailLine>
                 {
                     UiDetailLine.Title(b.Name,
-                        new UiDetailButton("rename", "Rename") { Enabled = edit },
-                        new UiDetailButton("duplicate", "Duplicate") { Enabled = edit },
-                        new UiDetailButton("delete", "Delete") { Enabled = edit }),
-                    UiDetailLine.Heading("Chests and stations", b.Members.Count, "Belt"),
-                    UiDetailLine.MemberList(b.Members.Select((x, i) => new UiListItem(i.ToString(), x.Name) { Note = x.Where + (x.Status.Length > 0 ? " · " + x.Status : ""), Removable = edit }),
-                        reorder: edit, remove: edit, emptyText: "No chests yet. Pick them in the world or add by name."),
+                        new UiDetailButton("rename", "Rename") { Enabled = edit && !b.BuiltIn },
+                        new UiDetailButton("duplicate", "Duplicate") { Enabled = edit && !b.BuiltIn },
+                        new UiDetailButton("delete", "Delete") { Enabled = edit && !b.BuiltIn }),
                     UiDetailLine.Actions(
-                        new UiDetailButton("pick", "◎ Pick in world") { Enabled = edit },
-                        new UiDetailButton("byname", "+ Add by name…") { Enabled = edit },
+                        new UiDetailButton("suppliers", _beltDirection == 0 ? "Adding suppliers (Output)" : "Add suppliers (Output)"),
+                        new UiDetailButton("receivers", _beltDirection == 1 ? "Adding receivers (Input)" : "Add receivers (Input)")),
+                    UiDetailLine.Actions(
+                        new UiDetailButton("pick", "Pick in world") { Enabled = edit },
+                        new UiDetailButton("byname", "Add by name...") { Enabled = edit },
                         new UiDetailButton("locate", "Locate all")),
-                    UiDetailLine.Heading("Used by", b.UsedBy.Count),
                 };
+                lines.Add(UiDetailLine.Heading($"Suppliers (Output): {b.Suppliers.Count} / Receivers (Input): {b.Receivers.Count}"));
+                // Master-detail supports one member list. Keep each direction's original index
+                // in the ID so removal and ordering never use the combined display index.
+                var connections = b.Suppliers.Select((x, i) => new UiListItem($"0:{i}:{x.ContainerId}", "Output - " + x.Name)
+                    { Note = x.Where + (x.Status.Length > 0 ? " - " + x.Status : ""), Removable = edit })
+                    .Concat(b.Receivers.Select((x, i) => new UiListItem($"1:{i}:{x.ContainerId}", "Input - " + x.Name)
+                    { Note = x.Where + (x.Status.Length > 0 ? " - " + x.Status : ""), Removable = edit }));
+                lines.Add(UiDetailLine.MemberList(connections, reorder: false, remove: edit,
+                    emptyText: "No connections. Add suppliers (Output) or receivers (Input)."));
+                foreach (var direction in new[] { 0, 1 })
+                {
+                    var members = direction == 0 ? b.Suppliers : b.Receivers;
+                    var prefix = direction == 0 ? "Output - " : "Input - ";
+                    if (edit)
+                        for (var i = 0; i < members.Count; i++)
+                        {
+                            var member = members[i];
+                            lines.Add(UiDetailLine.Actions(
+                                new UiDetailButton($"move:{direction}:{i}:{i - 1}:{member.ContainerId}", prefix + member.Name + " up") { Enabled = i > 0 },
+                                new UiDetailButton($"move:{direction}:{i}:{i + 1}:{member.ContainerId}", prefix + member.Name + " down") { Enabled = i + 1 < members.Count }));
+                        }
+                }
                 if (m.PreviewFor == b.Id)
                 {
-                    lines.Insert(4, UiDetailLine.Heading(m.Preview.Count == 0 ? "Add by name: nothing matches" : "Add by name would add", m.Preview.Count));
-                    var at = 5;
-                    foreach (var p in m.Preview.Take(8)) lines.Insert(at++, UiDetailLine.Line(p, LabelTone.Normal));
-                    if (m.Preview.Count > 0) lines.Insert(at, UiDetailLine.Actions(new UiDetailButton("byname-confirm", "Add these") { Enabled = edit }));
+                    lines.Add(UiDetailLine.Heading(m.PreviewDirection == 0 ? "Add suppliers by name" : "Add receivers by name", m.Preview.Count));
+                    foreach (var preview in m.Preview) lines.Add(UiDetailLine.Line(preview, LabelTone.Normal));
+                    if (m.Preview.Count > 0) lines.Add(UiDetailLine.Actions(new UiDetailButton("byname-confirm", "Add these") { Enabled = edit }));
                 }
+                lines.Add(UiDetailLine.Heading("Used by", b.UsedBy.Count));
                 if (b.UsedBy.Count == 0) lines.Add(UiDetailLine.Line("Not used anywhere yet. Add it to an Input or Output."));
                 lines.AddRange(b.UsedBy.Select(u => UiDetailLine.Line(u, LabelTone.Normal)));
                 _beltsMd.SetDetail(BeltsPage, lines);
@@ -727,20 +773,20 @@ namespace Satisvampory.Client
 
         void BuildInventory(IUiPanel p)
         {
-            _invSearch = In(InventoryTab, p.Input("Search", ""));
-            _invShort = In(InventoryTab, p.Toggle("Only short", false));
-            _invAtCap = In(InventoryTab, p.Toggle("Only at cap", false));
-            _invMine = In(InventoryTab, p.Toggle("Only with my overrides", false));
-            _invHere = In(InventoryTab, p.Toggle("Only here", false));
-            _invPlot = In(InventoryTab, p.Input("Plot (blank: all plots)", ""));
-            _invGroup = In(InventoryTab, p.Toggle("Group by category", false));
+            _invSearch = _tabs.Add(InventoryTab, p.Input("Search", ""));
+            _invShort = _tabs.Add(InventoryTab, p.Toggle("Only short", false));
+            _invAtCap = _tabs.Add(InventoryTab, p.Toggle("Only at cap", false));
+            _invMine = _tabs.Add(InventoryTab, p.Toggle("Only with my overrides", false));
+            _invHere = _tabs.Add(InventoryTab, p.Toggle("Only here", false));
+            _invPlot = _tabs.Add(InventoryTab, p.Input("Plot (blank: all plots)", ""));
+            _invGroup = _tabs.Add(InventoryTab, p.Toggle("Group by category", false));
             Track(_invSearch.OnChanged(_ => DrawInventory()));
             foreach (var t in new[] { _invShort, _invAtCap, _invMine, _invHere }) Track(t.OnChanged(_ => DrawInventory()));
             Track(_invPlot.OnChanged(_ => DrawInventory()));
             Track(_invGroup.OnChanged(on => { _invTable.Grouped = on; DrawInventory(); }));
-            Track(In(InventoryTab, p.Button("Refresh")).OnClick(() => { StopLiveInventory(); LoadInventory(); }));
-            _invIsland = In(InventoryTab, p.Label(""));
-            _invCats = In(InventoryTab, p.Chips("inv.cats", Array.Empty<UiChip>(), new UiChipsOptions
+            Track(_tabs.Add(InventoryTab, p.Button("Refresh")).OnClick(() => { StopLiveInventory(); LoadInventory(); }));
+            _invIsland = _tabs.Add(InventoryTab, p.Label(""));
+            _invCats = _tabs.Add(InventoryTab, p.Chips("inv.cats", Array.Empty<UiChip>(), new UiChipsOptions
             {
                 Toggle = true,
                 Remove = false,
@@ -749,7 +795,7 @@ namespace Satisvampory.Client
             }));
             Track(_invCats.Term("Category"));
             Track(_invCats.OnClick(_ => DrawInventory()));
-            _invTable = In(InventoryTab, p.DataTable("inv", new[]
+            _invTable = _tabs.Add(InventoryTab, p.DataTable("inv", new[]
             {
                 new UiTableColumn("item", "Item") { Hideable = false, Width = 210 },
                 new UiTableColumn("category", "Category") { Term = "Category", Hidden = true },
@@ -776,36 +822,36 @@ namespace Satisvampory.Client
 
             // Row actions on the selected (or expanded) rows (spec 15).
             Track(_invTable.OnExpand((id, open) => { if (open) _invTable.SetSelected(new[] { id }); }));
-            _invTakeAmount = In(InventoryTab, p.Input("Take amount (blank: one stack)", ""));
-            Track(In(InventoryTab, p.Button("Take into bags")).OnClick(() => ForSelected(1, item =>
+            _invTakeAmount = _tabs.Add(InventoryTab, p.Input("Take amount (blank: one stack)", ""));
+            Track(_tabs.Add(InventoryTab, p.Button("Take")).OnClick(() => ForSelected(1, item =>
             {
                 int.TryParse(_invTakeAmount.Value, out var n);
                 Send<PullReq, TextReply>(new PullReq { Text = item.ToString(), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
             })));
-            Track(In(InventoryTab, p.Button("Locate")).OnClick(() => ForSelected(1, item =>
+            Track(_tabs.Add(InventoryTab, p.Button("Locate")).OnClick(() => ForSelected(1, item =>
                 Send<FindReq, FindReply>(new FindReq { Text = item.ToString() }, r => { _lastFind = r; _findTable.SetSelected(Array.Empty<string>()); Locate(); }))));
-            Track(In(InventoryTab, p.Button("Where does it go?")).OnClick(() => ForSelected(1, item =>
+            Track(_tabs.Add(InventoryTab, p.Button("Where does it go?")).OnClick(() => ForSelected(1, item =>
             {
                 _mdItem.Value = _invRows.TryGetValue(item, out var row) ? ClientItems.NameOf(_ctx, item, row.Name) : item.ToString();
                 OpenTab(MassDepositTab);
             })));
-            Track(In(InventoryTab, p.Button("Category…")).OnClick(() => ForSelected(1, item =>
+            Track(_tabs.Add(InventoryTab, p.Button("Category…")).OnClick(() => ForSelected(1, item =>
             {
                 var cat = _invRows.TryGetValue(item, out var row) ? Cats(row).FirstOrDefault() : null;
                 if (cat == null) { _ctx.Hud.Notify("That item is in no category.", kind: UiNoticeKind.Info, seconds: 3); return; }
                 _pendingCategory = cat;
                 OpenTab(BeltsTab);
             })));
-            _invBulkValue = In(InventoryTab, p.Number("Bulk value (−1 clears the overrides)", -1, -1, 1_000_000));
-            Track(In(InventoryTab, p.Button("Set reserve on selected")).OnClick(() => Bulk(0)));
-            Track(In(InventoryTab, p.Button("Set cap on selected")).OnClick(() => Bulk(1)));
+            _invBulkValue = _tabs.Add(InventoryTab, p.Number("Bulk value (−1 clears the overrides)", -1, -1, 1_000_000));
+            Track(_tabs.Add(InventoryTab, p.Button("Set reserve on selected")).OnClick(() => Bulk(0)));
+            Track(_tabs.Add(InventoryTab, p.Button("Set cap on selected")).OnClick(() => Bulk(1)));
             Track(_invTable.OnSortChanged(_ => SaveInventoryView()));
             Track(_invTable.OnColumnsChanged(_ => SaveInventoryView()));
-            In(InventoryTab, p.Divider());
-            _ruleTarget = In(InventoryTab, p.Input("Category reserve or cap: \"category <name>\" (items: edit the table)", ""));
-            _ruleKind = In(InventoryTab, p.Dropdown("Set", new[] { "0", "1" }, "0", new[] { "Reserve", "Cap" }));
-            _ruleValue = In(InventoryTab, p.Number("Value (−1 clears)", -1, -1, 1_000_000));
-            Track(In(InventoryTab, p.Button("Apply")).OnClick(() =>
+            _tabs.Add(InventoryTab, p.Divider());
+            _ruleTarget = _tabs.Add(InventoryTab, p.Input("Category reserve or cap: \"category <name>\" (items: edit the table)", ""));
+            _ruleKind = _tabs.Add(InventoryTab, p.Dropdown("Set", new[] { "0", "1" }, "0", new[] { "Reserve", "Cap" }));
+            _ruleValue = _tabs.Add(InventoryTab, p.Number("Value (−1 clears)", -1, -1, 1_000_000));
+            Track(_tabs.Add(InventoryTab, p.Button("Apply")).OnClick(() =>
                 Send<SetRuleReq, InventoryMsg>(new SetRuleReq { Target = ClientItems.Resolve(_ctx, _ruleTarget.Value), Rule = int.Parse(_ruleKind.Value), Value = (int)Math.Round(_ruleValue.Value) }, ApplySnapshot)));
             Track(new OnDispose(StopLiveInventory));
         }
@@ -1007,101 +1053,230 @@ namespace Satisvampory.Client
 
         // ---------------- Find ----------------
 
-        IUiChips _findPick = null!;
+        IUiDataTable _findMatches = null!;
         IUiDataTable _findTable = null!;
+        bool _findClan, _findPartial = true;
+        int _findKind;
+        IUiLocatePing? _findPin;
         readonly List<EvalRowMsg> _findRows = new();
         int _findItem;
+        int _findSequence;
+        bool _findAtLocations;
+        readonly List<IUiHandle> _findSearchControls = new();
+        readonly List<IUiHandle> _findLocationControls = new();
+        void RegisterFindControl(IUiHandle handle, bool location)
+        {
+            (location ? _findLocationControls : _findSearchControls).Add(handle);
+            _tabs.Add(FindTab, handle);
+        }
+        // Concrete overloads avoid creating cross-context generic lifetime dependencies.
+        IUiButton FindControl(IUiButton handle, bool location = false) { RegisterFindControl(handle, location); return handle; }
+        IUiLabel FindControl(IUiLabel handle, bool location = false) { RegisterFindControl(handle, location); return handle; }
+        IUiDropdown FindControl(IUiDropdown handle, bool location = false) { RegisterFindControl(handle, location); return handle; }
+        IUiDataTable FindControl(IUiDataTable handle, bool location = false) { RegisterFindControl(handle, location); return handle; }
+        IUiInput FindControl(IUiInput handle, bool location = false) { RegisterFindControl(handle, location); return handle; }
+        void ShowFindStage(bool locations)
+        {
+            _findAtLocations = locations;
+            foreach (var handle in _findSearchControls) handle.Visible = !locations && _tabs.Selected == FindTab;
+            foreach (var handle in _findLocationControls) handle.Visible = locations && _tabs.Selected == FindTab;
+        }
+        IUiPanel? _previewPanel;
+        Progenitor.Cameras.PluginCamera.CameraPreview? _preview;
 
         void BuildFind(IUiPanel p)
         {
-            _findText = In(FindTab, p.Input("Item, category or chest name", ""));
-            Track(_findText.OnChanged(_ => RunFind()));
-            Track(In(FindTab, p.Button("Find")).OnClick(RunFind));
-            // Ambiguous names and category members: a pick list with icons; nothing is guessed (spec 07).
-            _findPick = In(FindTab, p.Chips("find.pick", Array.Empty<UiChip>(), new UiChipsOptions { Remove = false, MaxLines = 3, EmptyText = "" }));
-            Track(_findPick.OnClick(chip =>
+            _findText = _tabs.Add(FindTab, p.SearchInput("Search items, chests or stations", ""));
+            Track(_findText.OnChanged(_ => QueueFind()));
+            Track(_findText.OnSubmitted(_ => RunFind()));
+            p.BeginInline();
+            var scope = FindControl(p.Dropdown("Plots", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
+            Track(scope.OnChanged(value => { _findClan = value == "clan"; RunFind(); }));
+            var matching = FindControl(p.Dropdown("Match", new[] { "partial", "exact" }, "partial", new[] { "Partial name", "Full name" }));
+            Track(matching.OnChanged(value => { _findPartial = value == "partial"; RunFind(); }));
+            var kind = FindControl(p.Dropdown("Show", new[] { "0", "1", "2" }, "0", new[] { "All results", "Containers only", "Items only" }));
+            Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); RunFind(); }));
+            p.EndInline();
+            Track(FindControl(p.Button("Find")).OnClick(RunFind));
+            _findResult = FindControl(p.Label("Search, choose a match, then choose its location."));
+            _findMatches = FindControl(p.DataTable("find.matches", new[]
             {
-                if (chip.ItemPrefab == 0) return;
-                _findText.Value = chip.Label;
-                RunFind();
+                new UiTableColumn("name", "Matches — best first") { Hideable = false },
+                new UiTableColumn("kind", "Type") { Width = 210 },
+                new UiTableColumn("amount", "Stored", UiTableColumnKind.Number) { Width = 130 },
+            }, new UiDataTableOptions { VisibleRows = 4, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
+            Track(_findMatches.OnSelectionChanged(ids => SelectFindMatch(ids.FirstOrDefault())));
+            Track(FindControl(p.Button("Back to matches"), true).OnClick(() => { _findMatches.SetSelected(Array.Empty<string>()); ShowFindStage(false); }));
+            _findTable = FindControl(p.DataTable("find", new[]
+            {
+                new UiTableColumn("chest", "Chest or station") { Hideable = false },
+                new UiTableColumn("plot", "Plot") { Width = 320 },
+                new UiTableColumn("count", "Stored", UiTableColumnKind.Number) { Format = "#,0", Width = 130 },
+                new UiTableColumn("holds", "Details") { Width = 380 },
+            }, new UiDataTableOptions { VisibleRows = 4, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
+            Track(_findTable.OnSelectionChanged(_ =>
+            {
+                if (_player.AutoPinFind && SelectedFindLocation()?.HasPosition == true) Locate();
             }));
-            _findResult = In(FindTab, p.Label(""));
-            _findTable = In(FindTab, p.DataTable("find", new[]
+            p.BeginInline();
+            Track(FindControl(p.Button("View Object"), true).OnClick(PreviewFind));
+            Track(FindControl(p.Button("Pin location"), true).OnClick(Locate));
+            p.EndInline();
+            p.BeginInline();
+            _pullAmount = FindControl(p.Input("Take amount (blank: one stack)", ""), true);
+            Track(FindControl(p.Button("Take"), true).OnClick(() =>
             {
-                new UiTableColumn("chest", "Chest") { Hideable = false },
-                new UiTableColumn("count", "Count", UiTableColumnKind.Number) { Format = "#,0", Subtotal = UiTableSubtotal.Sum },
-                new UiTableColumn("holds", "Holds"),
-            }, new UiDataTableOptions { VisibleRows = 10, Grouped = true, MultiSelect = true, TotalRow = false, EmptyText = "Nothing found on your island." }));
-            _pullAmount = In(FindTab, p.Input("Take amount (blank: one stack of each)", ""));
-            Track(In(FindTab, p.Button("Take into bags")).OnClick(() =>
-            {
+                if (_findItem == 0) { _ctx.Hud.Notify("Choose an item first."); return; }
                 int.TryParse(_pullAmount.Value, out var n);
-                var what = _findItem != 0 ? _findItem.ToString() : ClientItems.Resolve(_ctx, _findText.Value);
-                Send<PullReq, TextReply>(new PullReq { Text = what, Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
+                Send<PullReq, TextReply>(new PullReq { Text = _findItem.ToString(), Amount = n }, r => _ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 5));
             }));
-            Track(In(FindTab, p.Button("Locate")).OnClick(Locate));
+            p.EndInline();
         }
 
-        void RunFind()
+        void QueueFind()
         {
-            var text = (_findText.Value ?? "").Trim();
-            if (text.Length == 0) return;
-            Send<FindReq, FindReply>(new FindReq { Text = text }, DrawFind);
+            var sequence = ++_findSequence;
+            Progenitor.Dev.MainThread.PostDelayed(0.25, () => { if (sequence == _findSequence) RunFind(suggestions: true); }, _ctx.Owner);
         }
 
-        /// <summary>Ping the chests from the last search (spec 07): the first item's chests, else chests by name.</summary>
+        void RunFind() => RunFind(false);
+
+        void RunFind(bool suggestions)
+        {
+            var sequence = ++_findSequence;
+            var text = (_findText.Value ?? "").Trim();
+            if (text.Length == 0) { DrawFind(new FindReply()); return; }
+            Send<FindReq, FindReply>(new FindReq { Text = text, IncludeClanPlots = _findClan, PartialMatch = _findPartial, Kind = _findKind }, r =>
+            {
+                if (sequence == _findSequence) DrawFind(r, suggestions);
+            });
+        }
+
+        EvalRowMsg? SelectedFindLocation()
+        {
+            var id = _findTable.Selected.FirstOrDefault();
+            return int.TryParse(id, out var index) && index >= 0 && index < _findRows.Count ? _findRows[index] : null;
+        }
+
         void Locate()
         {
-            var picked = _findTable == null ? new List<EvalRowMsg>() : _findTable.Selected.Select(x => int.TryParse(x, out var i) && i < _findRows.Count ? _findRows[i] : null).Where(x => x != null).Select(x => x!).ToList();
-            var rows = picked.Count > 0 ? picked : _lastFind == null ? new List<EvalRowMsg>()
-                : (_lastFind.Items.FirstOrDefault()?.Chests ?? new List<EvalRowMsg>()).Concat(_lastFind.Items.Count == 0 ? _lastFind.ChestsByName : new List<EvalRowMsg>()).ToList();
-            int pinged = 0, far = 0;
-            foreach (var r in rows.Where(r => r.NetType != 0).Take(10))
-            {
-                if (_ctx.Hud.TryFindByNetworkId(r.NetIndex, r.NetGeneration, r.NetType, out var entity, out _))
-                {
-                    _ctx.Hud.Locate(entity, r.Name, 10);
-                    pinged++;
-                }
-                else far++;
-            }
-            _ctx.Hud.Notify(pinged == 0 ? "Nothing nearby to ping; those chests are too far away to show." : $"Pinged {pinged} chest{(pinged == 1 ? "" : "s")}." + (far > 0 ? $" {far} too far away." : ""),
-                kind: UiNoticeKind.Info, seconds: 4);
+            var selected = SelectedFindLocation();
+            if (selected == null && _findRows.Count == 1) selected = _findRows[0];
+            if (selected == null || !selected.HasPosition) { _ctx.Hud.Notify("Choose one location to pin."); return; }
+            _findPin?.Dispose();
+            _findPin = _ctx.Hud.Locate(new Unity.Mathematics.float3(selected.X, selected.Y, selected.Z),
+                selected.Name + " · " + selected.Where, 60, arrivalDistance: 3, showOnMaps: true);
+            _ctx.Hud.Notify("Pinned " + selected.Name + ".");
         }
 
-        void DrawFind(FindReply r)
+        void DrawFind(FindReply r, bool suggestions = false)
         {
             _ = Panel;
-            _lastFind = r;
-            _findRows.Clear();
+            _findMatches.SetSelected(Array.Empty<string>());
             _findTable.SetSelected(Array.Empty<string>());
-            var many = r.Ambiguous || r.Categories.Count > 0;
-            _findItem = !many && r.Items.Count == 1 ? r.Items[0].Item : 0;
-            _findPick.SetChips(many
-                ? r.Items.Select(it => new UiChip(it.Item.ToString(), ClientItems.NameOf(_ctx, it.Item, it.Name)) { ItemPrefab = it.Item, Note = it.Total.ToString("N0"), Removable = false })
-                : Array.Empty<UiChip>());
-            _findResult.Text = r.Ambiguous ? "Several items match; pick one:"
-                : r.Categories.Count > 0 ? "Category " + string.Join(", ", r.Categories) + ": Take gives one stack of each, or pick an item."
-                : r.Items.Count == 1 ? $"{ClientItems.NameOf(_ctx, r.Items[0].Item, r.Items[0].Name)} — {r.Items[0].Total:N0} on the island"
-                : r.Items.Count == 0 && r.ChestsByName.Count == 0 ? "Nothing found on your island." : "";
-
-            var rows = new List<UiTableRow>();
-            UiTableRow Row(EvalRowMsg c, string group, string holds)
+            _lastFind = r; _findItem = 0; _findRows.Clear();
+            ShowFindStage(false);
+            _findTable.SetRows(Array.Empty<UiTableRow>());
+            var matches = new List<(int Rank, long Stock, string Name, UiTableRow Row)>();
+            foreach (var item in r.Items)
             {
-                var id = _findRows.Count.ToString();
-                _findRows.Add(c);
-                var row = new UiTableRow(id) { Groups = new[] { group } };
-                row.Text("chest", c.Name).Number("count", c.Amount).Text("holds", holds);
-                return row;
+                var name = ClientItems.NameOf(_ctx, item.Item, item.Name);
+                matches.Add((item.MatchRank, item.Total, name, new UiTableRow("item:" + item.Item).Text("name", name).Text("kind", "Item").Number("amount", item.Total)));
             }
-            string Group(EvalRowMsg c) => c.Where + (c.Level > 0 ? $" · level {c.Level}" : "");
-            if (!many)
-                foreach (var it in r.Items)
-                    foreach (var c in it.Chests)
-                        rows.Add(Row(c, Group(c), ""));
-            foreach (var c in r.ChestsByName)
-                rows.Add(Row(c, "Chests named like this · " + Group(c), c.Holds));
-            _findTable.SetRows(rows);
+            for (int i = 0; i < r.ChestsByName.Count; i++)
+            {
+                var c = r.ChestsByName[i];
+                matches.Add((Engine.Ui.Find.MatchRank(c.Name, _findText.Value ?? ""), c.Amount, c.Name,
+                    new UiTableRow("place:" + i).Text("name", c.Name).Text("kind", "Chest / station").Number("amount", c.Amount)));
+            }
+            _findMatches.SetRows(matches.OrderBy(x => x.Rank).ThenByDescending(x => x.Stock > 0).ThenBy(x => x.Name).Take(suggestions ? 6 : 65).Select(x => x.Row));
+            _findResult.Text = matches.Count == 0 ? "No matches in the selected plots." : suggestions ? "Suggestions: choose one, or press Enter to show all matches." : "Choose a match, then a chest or station.";
+        }
+
+        void SelectFindMatch(string? id)
+        {
+            if (id != null) ++_findSequence; // A chosen match wins over a late suggestion response.
+            _findTable.SetSelected(Array.Empty<string>());
+            _findRows.Clear(); _findItem = 0;
+            if (_lastFind != null && id != null)
+            {
+                if (id.StartsWith("item:") && int.TryParse(id.Substring(5), out var item))
+                {
+                    _findItem = item;
+                    _findRows.AddRange(_lastFind.Items.FirstOrDefault(x => x.Item == item)?.Chests ?? new List<EvalRowMsg>());
+                }
+                else if (id.StartsWith("place:") && int.TryParse(id.Substring(6), out var index) && index >= 0 && index < _lastFind.ChestsByName.Count)
+                    _findRows.Add(_lastFind.ChestsByName[index]);
+            }
+            if (id != null) ShowFindStage(true);
+            _findTable.SetRows(_findRows.Select((c, i) => new UiTableRow(i.ToString())
+                .Text("chest", c.Name).Text("plot", c.Where).Number("count", c.Amount)
+                .Text("holds", c.Why + (string.IsNullOrEmpty(c.Holds) ? "" : " · " + c.Holds))));
+            // A single result is unambiguous; multiple locations wait for the player's choice.
+            if (id != null && _findRows.Count == 1) _findTable.SetSelected(new[] { "0" });
+        }
+
+        int _previewSequence;
+        string _previewToken = "";
+
+        void EndFindPreview()
+        {
+            var token = _previewToken; _previewToken = "";
+            if (token.Length > 0) Send<EndPreviewReq, ViewSaved>(new EndPreviewReq { Token = token }, _ => { });
+            if (_previewPanel != null) UiApi.Hide(_previewPanel);
+            UiApi.Show(Panel);
+        }
+
+        void PreviewFind()
+        {
+            var row = SelectedFindLocation();
+            if (row == null || !row.HasPosition) return;
+            _preview?.Dispose();
+            var sequence = ++_previewSequence;
+            Send<PreviewReq, PreviewReply>(new PreviewReq { ContainerId = row.ContainerId, IncludeClanPlots = _findClan }, reply =>
+            {
+                if (sequence != _previewSequence)
+                {
+                    Send<EndPreviewReq, ViewSaved>(new EndPreviewReq { Token = reply.Token }, _ => { });
+                    return;
+                }
+                _previewToken = reply.Token;
+                if (_previewPanel == null)
+                {
+                    _previewPanel = UiApi.Panel("Room preview", _ctx.Owner, "sv.find.preview");
+                    _previewPanel.GameWindow(640);
+                    UiApi.TopPanel(_previewPanel);
+                    _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
+                    _ctx.Track(_previewPanel);
+                    _previewPanel.Label("Right-drag to rotate. Escape returns. Ends after 5 seconds.");
+                    Track(_previewPanel.Button("Return").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
+                }
+                UiApi.Hide(Panel);
+                UiApi.Show(_previewPanel);
+                Progenitor.Dev.MainThread.PostDelayed(0.75, () =>
+                {
+                    if (sequence != _previewSequence || !_previewPanel.Visible) { EndFindPreview(); return; }
+                    try
+                    {
+                        _preview = _ctx.Camera.Preview(new Progenitor.Units.UnitVec3(reply.X, reply.Y + 0.7f, reply.Z), reply.Yaw, 5,
+                            EndFindPreview, reply.FloorHeight);
+                        WatchPreview();
+                    }
+                    catch (Exception e)
+                    {
+                        EndFindPreview();
+                        _ctx.Hud.Notify("Unable to preview this room: " + e.Message);
+                    }
+                }, _ctx.Owner);
+            });
+        }
+
+        void WatchPreview()
+        {
+            if (_preview == null) return;
+            if (!_preview.Active) { if (_previewToken.Length > 0) EndFindPreview(); return; }
+            if (_previewPanel == null || !_previewPanel.Visible) { _preview.Dispose(); return; }
+            Progenitor.Dev.MainThread.PostDelayed(0.033, WatchPreview, _ctx.Owner);
         }
 
         internal static string TryText(int n, TryItReply r)

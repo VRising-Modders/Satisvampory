@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,6 +22,9 @@ namespace Satisvampory.Engine.Persistence
         public string? Belt { get; set; }
         public FilterDto? Filter { get; set; }
         public long Sequence { get; set; }
+        public long BeltOrder { get; set; }
+        public List<string>? BeltPeers { get; set; }
+        public bool CounterpartOnly { get; set; }
     }
 
     public sealed class FilterDto
@@ -34,6 +37,7 @@ namespace Satisvampory.Engine.Persistence
 
     public sealed class ContainerDto
     {
+        public bool KeepEmpty { get; set; }
         public List<EntryDto> Input { get; set; } = new();
         public List<EntryDto> Output { get; set; } = new();
         public string PullOrder { get; set; } = nameof(Lists.PullOrder.ListOrder);
@@ -51,7 +55,8 @@ namespace Satisvampory.Engine.Persistence
     {
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
-        public List<string> Members { get; set; } = new();
+        /// <summary>Read only for v1 migration; never emitted by current captures.</summary>
+        public List<string>? Members { get; set; }
     }
 
     public sealed class TargetDto
@@ -83,9 +88,10 @@ namespace Satisvampory.Engine.Persistence
     /// <summary>Everything one island's settings owner holds (spec 12): belts, Mass Deposit, rules, lists, loop modes.</summary>
     public sealed class IslandSave
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
 
-        public int Version { get; set; } = CurrentVersion;
+        // Missing versions in typed store reads are legacy; Capture explicitly writes the current version.
+        public int Version { get; set; } = 1;
         public long NextSequence { get; set; }
         public List<BeltDto> Belts { get; set; } = new();
         public List<ItemRuleDto> MassDepositItemRules { get; set; } = new();
@@ -132,7 +138,8 @@ namespace Satisvampory.Engine.Persistence
         /// <summary>Reads a save; a file from a newer version is refused rather than half-read.</summary>
         public static IslandSave FromJson(string json)
         {
-            var save = JsonSerializer.Deserialize<IslandSave>(json, Json) ?? new IslandSave();
+            var save = JsonSerializer.Deserialize<IslandSave>(json, Json)
+                ?? throw new JsonException("An island save must be an object.");
             if (save.Version > IslandSave.CurrentVersion)
                 throw new InvalidOperationException($"Save version {save.Version} is newer than this build ({IslandSave.CurrentVersion})");
             return save;
@@ -144,6 +151,7 @@ namespace Satisvampory.Engine.Persistence
         {
             var save = new IslandSave
             {
+                Version = IslandSave.CurrentVersion,
                 NextSequence = nextSequence,
                 AdvancedScript = s.MassDeposit.AdvancedScript,
                 Rules = new RulesDto
@@ -163,7 +171,7 @@ namespace Satisvampory.Engine.Persistence
             };
 
             foreach (var b in s.Graph.Belts.Values)
-                save.Belts.Add(new BeltDto { Id = b.Id.Value.ToString("N"), Name = b.Name, Members = b.Members.Select(Id).ToList() });
+                save.Belts.Add(new BeltDto { Id = b.Id.Value.ToString("N"), Name = b.Name });
 
             foreach (var (sel, t) in s.MassDeposit.ItemRules)
                 save.MassDepositItemRules.Add(new ItemRuleDto { Selector = sel.Kind.ToString(), Item = sel.Item.Guid, Category = sel.Category, Target = ToDto(t) });
@@ -174,6 +182,7 @@ namespace Satisvampory.Engine.Persistence
                 var dto = new ContainerDto();
                 if (s.Graph.Lists.TryGetValue(id, out var lists))
                 {
+                    dto.KeepEmpty = lists.KeepEmpty;
                     dto.Input = lists.Input.Select(ToDto).ToList();
                     dto.Output = lists.Output.Select(ToDto).ToList();
                     dto.PullOrder = lists.PullOrder.ToString();
@@ -199,15 +208,18 @@ namespace Satisvampory.Engine.Persistence
         /// <summary>Rebuilds engine state. Unknown enum names fall back to defaults rather than failing the whole load.</summary>
         public static IslandState Restore(IslandSave save, out long nextSequence)
         {
+            if (save == null) throw new ArgumentNullException(nameof(save));
+            if (save.Version > IslandSave.CurrentVersion)
+                throw new InvalidOperationException($"Save version {save.Version} is newer than this build ({IslandSave.CurrentVersion})");
+            Normalize(save);
             nextSequence = save.NextSequence;
             var state = new IslandState();
             state.Graph.Sequence = save.NextSequence;
 
-            foreach (var b in save.Belts)
+            foreach (var b in save.Belts.Where(b => b != null))
             {
                 if (!Guid.TryParse(b.Id, out var g)) continue;
-                var belt = new Belt(new BeltId(g), b.Name);
-                belt.Members.AddRange(b.Members.Select(ParseId).Where(x => x != null).Select(x => x!.Value));
+                var belt = new Belt(new BeltId(g), b.Name) { Graph = state.Graph };
                 state.Graph.Belts[belt.Id] = belt;
             }
 
@@ -228,10 +240,11 @@ namespace Satisvampory.Engine.Persistence
 
             foreach (var (key, dto) in save.Containers)
             {
-                if (ParseId(key) is not { } id) continue;
+                if (dto == null || ParseId(key) is not { } id) continue;
                 var lists = state.Graph.For(id);
-                lists.Input.AddRange(dto.Input.Select(FromDto).Where(e => e != null).Select(e => e!));
-                lists.Output.AddRange(dto.Output.Select(FromDto).Where(e => e != null).Select(e => e!));
+                lists.KeepEmpty = true; // Existing records, including empty ones, are explicit setup.
+                lists.Input.AddRange((dto.Input ?? new()).Where(e => e != null).Select(FromDto).Where(e => e != null).Select(e => e!));
+                lists.Output.AddRange((dto.Output ?? new()).Where(e => e != null).Select(FromDto).Where(e => e != null).Select(e => e!));
                 lists.PullOrder = Enum.TryParse<PullOrder>(dto.PullOrder, out var po) ? po : PullOrder.ListOrder;
                 lists.SendOrder = Enum.TryParse<SendOrder>(dto.SendOrder, out var so) ? so : SendOrder.FillInOrder;
 
@@ -240,13 +253,19 @@ namespace Satisvampory.Engine.Persistence
                     BasePriority = dto.BasePriority,
                     Takes = Enum.TryParse<Takes>(dto.Takes, out var tk) ? tk : Takes.Anything,
                 };
-                foreach (var kv in dto.ItemPriority) d.ItemPriority[new ItemId(kv.Key)] = kv.Value;
-                foreach (var kv in dto.CategoryPriority) d.CategoryPriority[kv.Key] = kv.Value;
-                foreach (var i in dto.BannedItems) d.BannedItems.Add(new ItemId(i));
-                foreach (var c in dto.BannedCategories) d.BannedCategories.Add(c);
+                foreach (var kv in dto.ItemPriority ?? new()) d.ItemPriority[new ItemId(kv.Key)] = kv.Value;
+                foreach (var kv in dto.CategoryPriority ?? new()) d.CategoryPriority[kv.Key] = kv.Value;
+                foreach (var i in dto.BannedItems ?? new()) d.BannedItems.Add(new ItemId(i));
+                foreach (var c in dto.BannedCategories ?? new()) d.BannedCategories.Add(c);
                 d.Special = Enum.TryParse<SpecialKind>(dto.Special, out var sk) ? sk : SpecialKind.None;
                 state.Deposit[id] = d;
             }
+
+            // Sequence is a high-water mark, including old saves with stale metadata.
+            foreach (var io in state.Graph.Lists.Values)
+                foreach (var e in io.Input.Concat(io.Output)) state.Graph.Sequence = Math.Max(e.Sequence, e.BeltOrder);
+            if (save.Version < 2) MigrateBelts(state, save.Belts.Where(b => b != null));
+            nextSequence = state.Graph.Sequence;
 
             foreach (var (name, items) in save.EditedCategories) state.Categories.Edited[name] = items.Select(i => new ItemId(i)).ToList();
             foreach (var (name, items) in save.CustomCategories) state.Categories.Custom[name] = items.Select(i => new ItemId(i)).ToList();
@@ -258,6 +277,66 @@ namespace Satisvampory.Engine.Persistence
                 if (Enum.TryParse<LoopMode>(mode, out var m)) state.LoopModes[key] = m;
 
             return state;
+        }
+
+        // Explicit null collections in older saves mean empty, not a new-container default.
+        static void Normalize(IslandSave save)
+        {
+            save.Belts ??= new();
+            save.Containers ??= new();
+            save.MassDepositItemRules ??= new();
+            save.Rules ??= new();
+            save.Rules.ItemReserve ??= new();
+            save.Rules.CategoryReserve ??= new();
+            save.Rules.ItemCap ??= new();
+            save.Rules.CategoryCap ??= new();
+            save.LoopModes ??= new();
+            save.EditedCategories ??= new();
+            save.CustomCategories ??= new();
+            save.Aliases ??= new();
+        }
+
+        static void MigrateBelts(IslandState state, IEnumerable<BeltDto> belts)
+        {
+            var graph = state.Graph;
+            foreach (var dto in belts)
+            {
+                if (!Guid.TryParse(dto.Id, out var guid)) continue;
+                var id = new BeltId(guid);
+                if (id == DefaultBelt.Id) continue;
+                var members = (dto.Members ?? new()).Select(ParseId).Where(x => x != null).Select(x => x!.Value).Distinct().ToList();
+                // Snapshot first: added counterpart entries must never themselves be migrated.
+                var originals = graph.Connections(id, true).Select(c => (c.Owner, c.Entry, Output: true))
+                    .Concat(graph.Connections(id, false).Select(c => (c.Owner, c.Entry, Output: false))).ToArray();
+                // An unused legacy belt still retains visible connections, without inventing transfers.
+                if (originals.Length == 0)
+                    foreach (var member in members)
+                    {
+                        var io = graph.For(member);
+                        io.KeepEmpty = true;
+                        io.Output.Add(new ListEntry { Kind = EntryKind.Belt, Belt = id, Sequence = graph.NextSequence(),
+                            BeltPeers = new(), CounterpartOnly = true });
+                        state.Touched.Add(member);
+                    }
+                foreach (var c in originals)
+                {
+                    var io = graph.For(c.Owner);
+                    var list = c.Output ? io.Output : io.Input;
+                    var index = list.IndexOf(c.Entry);
+                    list[index] = new ListEntry { Kind = EntryKind.Belt, Belt = id, Filter = c.Entry.Filter,
+                        Sequence = c.Entry.Sequence, BeltOrder = c.Entry.BeltOrder, BeltPeers = new(members) };
+                    state.Touched.Add(c.Owner);
+                    foreach (var member in members)
+                    {
+                        var counterpart = graph.For(member);
+                        counterpart.KeepEmpty = true;
+                        var target = c.Output ? counterpart.Input : counterpart.Output;
+                        target.Add(new ListEntry { Kind = EntryKind.Belt, Belt = id, Sequence = graph.NextSequence(),
+                            BeltOrder = members.IndexOf(member) + 1, BeltPeers = new() { c.Owner }, CounterpartOnly = true });
+                        state.Touched.Add(member);
+                    }
+                }
+            }
         }
 
         // ---------------- helpers ----------------
@@ -279,6 +358,9 @@ namespace Satisvampory.Engine.Persistence
                 ExcludeCategories = e.Filter.ExcludeCategories.ToList(),
             },
             Sequence = e.Sequence,
+            BeltOrder = e.BeltOrder,
+            BeltPeers = e.BeltPeers?.Select(Id).ToList(),
+            CounterpartOnly = e.CounterpartOnly,
         };
 
         static ListEntry? FromDto(EntryDto d)
@@ -286,17 +368,17 @@ namespace Satisvampory.Engine.Persistence
             var filter = new ItemFilter();
             if (d.Filter != null)
             {
-                foreach (var i in d.Filter.Items) filter.Items.Add(new ItemId(i));
-                foreach (var c in d.Filter.Categories) filter.Categories.Add(c);
-                foreach (var i in d.Filter.ExcludeItems) filter.ExcludeItems.Add(new ItemId(i));
-                foreach (var c in d.Filter.ExcludeCategories) filter.ExcludeCategories.Add(c);
+                foreach (var i in d.Filter.Items ?? new()) filter.Items.Add(new ItemId(i));
+                foreach (var c in d.Filter.Categories ?? new()) filter.Categories.Add(c);
+                foreach (var i in d.Filter.ExcludeItems ?? new()) filter.ExcludeItems.Add(new ItemId(i));
+                foreach (var c in d.Filter.ExcludeCategories ?? new()) filter.ExcludeCategories.Add(c);
             }
             switch (d.Kind)
             {
                 case "massDeposit":
                     return new ListEntry { Kind = EntryKind.MassDeposit, Filter = filter, Sequence = d.Sequence };
                 case "belt":
-                    return Guid.TryParse(d.Belt, out var b) ? new ListEntry { Kind = EntryKind.Belt, Belt = new BeltId(b), Filter = filter, Sequence = d.Sequence } : null;
+                    return Guid.TryParse(d.Belt, out var b) ? new ListEntry { Kind = EntryKind.Belt, Belt = new BeltId(b), Filter = filter, Sequence = d.Sequence, BeltOrder = d.BeltOrder, CounterpartOnly = d.CounterpartOnly, BeltPeers = d.BeltPeers == null ? null : new HashSet<ContainerId>(d.BeltPeers.Select(ParseId).Where(x => x != null).Select(x => x!.Value)) } : null;
                 default:
                     return ParseId(d.Container ?? string.Empty) is { } id ? new ListEntry { Kind = EntryKind.Container, Container = id, Filter = filter, Sequence = d.Sequence } : null;
             }

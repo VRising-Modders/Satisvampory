@@ -25,6 +25,8 @@ namespace Satisvampory.Server
 
         string _aliasText = "";
         List<GameItem>? _items;
+        readonly HashSet<int> _construction = new();
+        public bool Findable(ItemId item) => !_construction.Contains(item.Guid);
 
         /// <summary>Main thread only. Cheap when nothing changed.</summary>
         public void Refresh(PluginContext ctx)
@@ -39,6 +41,8 @@ namespace Satisvampory.Server
             if (fresh)
             {
                 _items = entries.Select(e => new GameItem(e.PrefabGuid, e.PrefabName, e.DisplayName, e.MaxAmount, e.ItemCategory, e.ItemType)).ToList();
+                _construction.Clear();
+                foreach (var item in _items.Where(x => x.ItemType == (int)GameItemType.ItemBuilding)) _construction.Add(item.Guid);
                 _builds = info.Builds;
                 _epoch = info.Epoch;
                 ctx.Log.LogInfo($"Satisvampory: item catalog built ({_items.Count} items).");

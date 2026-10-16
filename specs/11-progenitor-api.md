@@ -58,8 +58,8 @@ An id that survives restart and does not reuse a destroyed chest's id. Satisvamp
 
 | Site | Use |
 |---|---|
-| `ContainerPanel` (left edge, right edge, beside rename) | Input and output buttons and side panels; Deposit settings gear |
-| `StationPanel` (refinement and workstation, both edges) | Same, plus recipe switches where vanilla has none |
+| `ContainerPanel` (left edge, right edge, beside rename) | Native in-window Inventory/Input/Output/Accepts tabs; game acceptance constraints |
+| `StationPanel` (refinement and workstation, both edges) | Native Production/Input/Output tabs; queue/active demand; redistribution ownership |
 | `InventoryPanel` (beside sort) | Stash button, double-click sort detection |
 | `ThronePanel` | Castle dropdown |
 | `InventoryTooltip` | "In storage" line |
@@ -85,3 +85,11 @@ Typed, chunked request and reply messages above the packet cap, plus subscriptio
 ## Order
 
 P1, P4, P5 first (the server engine needs them). P6 and P7 next (they gate every visible feature). P3 is the riskiest seam and gets an early spike on the test save. P2 and P8 as the engine needs them.
+
+### Native tab hosting
+
+Progenitor's `AttachPanelTabs` mounts Satisvampory content inside the native Container and Station windows: **Inventory / Input / Output / Accepts** for containers and **Production / Input / Output** for stations. Progenitor owns native tab styling and hitboxes, content mounting, selection, target changes, layout alongside redistribution, and restoration of vanilla content on close/unload. Inventory and Production retain the game controls; Satisvampory supplies the custom content and routing policy.
+
+Game acceptance restrictions are displayed read-only. The native redistribution preference defaults off; `AutomationSuspended` guards prevent competing engine transfers while native redistribution owns them. Station queue protection is conservative: any nonempty or unknown queue protects all inputs, while known idle stations may return leftovers after the grace period. This does not provide per-ingredient reservation accounting.
+
+Chest and furnace native/custom tabs have been tested live at 3840 x 1080 and 1920 x 1080, including hitboxes. Crafting-bench validation remains pending; these checks are not full station or product qualification.

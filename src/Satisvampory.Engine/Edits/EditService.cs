@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -69,7 +69,11 @@ namespace Satisvampory.Engine.Edits
             if (r.Ok)
             {
                 Revision++;
-                if (touched is { } t) _island.Touched.Add(t);
+                if (touched is { } t)
+                {
+                    _island.Touched.Add(t);
+                    if (Graph.Lists.TryGetValue(t, out var lists)) lists.KeepEmpty = true;
+                }
             }
             return r;
         }
@@ -102,7 +106,8 @@ namespace Satisvampory.Engine.Edits
             else if (entry.Kind == EntryKind.Belt)
             {
                 if (!Graph.Belts.TryGetValue(entry.Belt, out var belt)) return EditResult.No("That belt no longer exists");
-                if (belt.Members.Contains(owner)) return EditResult.No("This container is on that belt");
+                if (self.Deposit.Special == SpecialKind.Skip) return EditResult.No("Skip chests are never used");
+                if (side == ListSide.Output && self.Role == StationRole.UnitSpawner) return EditResult.No("Spawners have no Output");
             }
             else if (entry.Kind == EntryKind.MassDeposit && side == ListSide.Input && !HasDemand(self))
             {
@@ -272,19 +277,23 @@ namespace Satisvampory.Engine.Edits
         public EditResult DeleteBelt(ActorRole role, BeltId id, out List<BeltUsage> removed)
         {
             removed = new List<BeltUsage>();
+            if (id == DefaultBelt.Id) return EditResult.No("The Default Belt cannot be deleted; remove its Input or Output connection instead");
             if (!CanEdit(role)) return EditResult.No("Clan members can change belts");
             if (!Graph.Belts.ContainsKey(id)) return EditResult.No("That belt no longer exists");
+            foreach (var member in Graph.Members(id)) _island.Touched.Add(member);
             removed = BeltOps.Delete(Graph, id, new BeltReferences { MassDeposit = _island.MassDeposit });
             RecompileAfterBeltChange();
             return Accept(EditResult.Done);
         }
 
-        public EditResult AddBeltMembers(ActorRole role, BeltId id, IEnumerable<ContainerId> members)
+        public EditResult AddBeltMembers(ActorRole role, BeltId id, IEnumerable<ContainerId> members, bool output = true)
         {
+            if (!Graph.Belts.ContainsKey(id)) return EditResult.No("That belt no longer exists");
             if (!CanEdit(role)) return EditResult.No("Clan members can change belts");
-            var ok = members.Where(m => InIsland(m) && _world.Find(m)?.Kind != NodeKind.Heart).ToList();
+            var ok = members.Where(m => InIsland(m) && _world.Find(m) is { } c && c.Kind != NodeKind.Heart && c.Deposit.Special != SpecialKind.Skip && !(output && c.Role == StationRole.UnitSpawner)).ToList();
             if (ok.Count == 0) return EditResult.No("Nothing to add from your sharing island");
-            BeltOps.AddMembers(Graph, id, ok);
+            BeltOps.AddMembers(Graph, id, ok, output);
+            foreach (var member in ok) _island.Touched.Add(member);
             return Accept(EditResult.Done);
         }
 

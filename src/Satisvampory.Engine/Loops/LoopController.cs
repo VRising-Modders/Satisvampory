@@ -12,6 +12,7 @@ namespace Satisvampory.Engine.Loops
     {
         public LoopMode Mode { get; set; } = LoopMode.CycleOnce;
         public ulong Fingerprint { get; set; }
+        internal LoopMode? ActiveMode { get; set; }
         public int PassesLeft { get; set; }
         public double AwakeSince { get; set; }
         /// <summary>Set when the 60 s guard stopped the loop; cleared by an outside change.</summary>
@@ -65,14 +66,15 @@ namespace Satisvampory.Engine.Loops
             }
         }
 
-        public static LoopDecision Decide(Loop loop, LoopState state, IWorldView world, double now, bool loopsAllowed)
+        public static LoopDecision Decide(Loop loop, LoopState state, IWorldView world, double now, bool loopsAllowed, Func<ItemId, int>? stackSize = null)
         {
             if (!loopsAllowed || state.Mode == LoopMode.Off) return LoopDecision.OpenAtClosingEdge;
 
             var fp = Fingerprint(loop, world);
-            if (fp != state.Fingerprint)
+            if (fp != state.Fingerprint || state.ActiveMode != state.Mode)
             {
                 state.Fingerprint = fp;
+                state.ActiveMode = state.Mode;
                 state.PassesLeft = loop.Members.Count;
                 state.AwakeSince = now;
                 state.Stalled = false;
@@ -88,7 +90,7 @@ namespace Satisvampory.Engine.Loops
             }
 
             // Even distribution: run until balanced; the guard stops a loop that never settles.
-            if (IsBalanced(loop, world)) return LoopDecision.Sleep;
+            if (IsBalanced(loop, world, stackSize: stackSize)) return LoopDecision.Sleep;
             if (now - state.AwakeSince > StallSeconds)
             {
                 state.Stalled = true;
@@ -98,13 +100,13 @@ namespace Satisvampory.Engine.Loops
         }
 
         /// <summary>Balanced when no item differs by more than one stack between any two members.</summary>
-        public static bool IsBalanced(Loop loop, IWorldView world, int stack = 100)
+        public static bool IsBalanced(Loop loop, IWorldView world, int stack = 100, Func<ItemId, int>? stackSize = null)
         {
             var items = loop.Members.SelectMany(m => world.Contents(m)).Select(s => s.Item).Distinct();
             foreach (var item in items)
             {
                 var counts = loop.Members.Select(m => world.Count(m, item)).ToList();
-                if (counts.Max() - counts.Min() > stack) return false;
+                if (counts.Max() - counts.Min() > (stackSize?.Invoke(item) ?? stack)) return false;
             }
             return true;
         }

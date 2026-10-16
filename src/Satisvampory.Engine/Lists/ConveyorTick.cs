@@ -66,7 +66,7 @@ namespace Satisvampory.Engine.Lists
         readonly CastleRules _rules;
         readonly TickState _state;
         readonly TickOptions _opt;
-        readonly IWorld _world;
+        readonly TickWorld _world;
         readonly TickReport _report = new();
         readonly Dictionary<PlotId, int> _plotMoves = new();
         readonly Dictionary<ItemId, long> _islandTotals = new();
@@ -75,8 +75,12 @@ namespace Satisvampory.Engine.Lists
 
         public ConveyorTick(IWorld world, DepositContext ctx, LogisticsGraph graph, CastleRules rules, TickState state, TickOptions? options = null)
         {
-            _world = world;
-            _ctx = ctx;
+            _world = new TickWorld(world);
+            _ctx = new DepositContext(ctx.Catalog, _world, ctx.Scope, ctx.Standing)
+            {
+                Settings = ctx.Settings, Script = ctx.Script, Belts = ctx.Belts,
+                PlotLabel = ctx.PlotLabel, Player = ctx.Player,
+            };
             _graph = graph;
             _rules = rules;
             _state = state;
@@ -88,6 +92,7 @@ namespace Satisvampory.Engine.Lists
 
         public TickReport Run(double now)
         {
+            _world.Clear();
             if (!_rules.LogisticsOn)
             {
                 foreach (var id in _graph.Lists.Keys) _report.Diag(id, "disabled");
@@ -110,7 +115,7 @@ namespace Satisvampory.Engine.Lists
             foreach (var loop in loops)
             {
                 if (!_state.Loops.TryGetValue(loop.Key, out var ls)) _state.Loops[loop.Key] = ls = new LoopState();
-                switch (LoopController.Decide(loop, ls, _world, now, _opt.LoopsAllowed))
+                switch (LoopController.Decide(loop, ls, _world, now, _opt.LoopsAllowed, Catalog.MaxStack))
                 {
                     case LoopDecision.OpenAtClosingEdge:
                         skip.Add(loop.Closing);
@@ -144,13 +149,24 @@ namespace Satisvampory.Engine.Lists
                 .Select(c => c!)
                 .ToList();
 
+            foreach (var station in stations.Where(s => s.AutomationSuspended))
+            {
+                _report.Diag(station.Id, station.NativeRoutingKnown ? "native-routing" : "native-routing-unknown");
+                foreach (var key in _state.LeftoverSince.Keys.Where(k => k.Station == station.Id).ToList())
+                    _state.LeftoverSince.Remove(key);
+            }
+            stations.RemoveAll(s => s.AutomationSuspended);
+
+            // Topology is unchanged during this synchronous pass. Build source lists once.
+            var incoming = edges.ToLookup(e => e.To);
+            var sourceLists = stations.ToDictionary(s => s.Id, s => Sources(s, incoming[s.Id].ToList()));
             // Fair share in whole crafts: round k feeds every station up to k crafts.
             for (var round = 1; round <= _opt.FeedCrafts && Budget(); round++)
                 foreach (var st in stations)
                 {
                     var depth = st.Role == StationRole.UnitSpawner ? Math.Min(_opt.FeedCrafts, SpecialJobs.SpawnerFeedCrafts) : _opt.FeedCrafts;
-                    if (round > depth) continue;
-                    FeedStation(st, Sources(st, edges), round, now, final: round == depth);
+                    if (round > depth || (st.Role == StationRole.Workstation && round != depth)) continue;
+                    FeedStation(st, sourceLists[st.Id], round, now, final: round == depth);
                 }
         }
 
@@ -162,7 +178,7 @@ namespace Satisvampory.Engine.Lists
             foreach (var e in lists.Input)
             {
                 if (e.Kind == EntryKind.MassDeposit) continue; // resolved per item below
-                foreach (var id in _graph.Expand(e))
+                foreach (var id in _graph.Expand(e, output: false, owner: station.Id))
                     if (edges.Any(x => x.From == id && x.To == station.Id) && !result.Contains(id)) result.Add(id);
             }
             foreach (var e in edges.Where(x => x.To == station.Id && x.DefinedAsOutput))
@@ -178,7 +194,6 @@ namespace Satisvampory.Engine.Lists
                 return;
             }
             var lists = _graph.For(station.Id);
-            var massInput = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit);
             var original = _world.Recipes(station.Id);
             var capped = original.Where(r => r.Enabled && !CapAllows(r)).Select(r => r.Id).ToHashSet();
             var recipes = original
@@ -189,7 +204,9 @@ namespace Satisvampory.Engine.Lists
             List<ContainerId> SourcesFor(ItemId item)
             {
                 var list = new List<ContainerId>(sources);
-                if (massInput)
+                var massSources = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit && e.Filter.Allows(item, Catalog))
+                    ? DepositPlanner.ReverseOrder(_ctx, item).ToHashSet() : new HashSet<ContainerId>();
+                if (massSources.Count > 0)
                     foreach (var id in DepositPlanner.ReverseOrder(_ctx, item))
                         if (!list.Contains(id)) list.Add(id);
                 if (lists.PullOrder == PullOrder.ReverseMassDeposit)
@@ -197,7 +214,25 @@ namespace Satisvampory.Engine.Lists
                     var reverse = DepositPlanner.ReverseOrder(_ctx, item);
                     list = list.OrderBy(id => { var i = reverse.IndexOf(id); return i < 0 ? int.MaxValue : i; }).ToList();
                 }
-                return list.Where(id => _world.Find(id)?.Kind == NodeKind.Chest || _world.Find(id)?.Kind == NodeKind.Station).ToList();
+                return list.Where(id => _inScope.Contains(id) && id != station.Id)
+                    .Where(id => _world.Find(id) is { } c && c.Kind is NodeKind.Chest or NodeKind.Station
+                        && !c.AutomationSuspended && c.Deposit.Special != SpecialKind.Skip && !_world.IsRaided(c.Plot))
+                    .Where(id => massSources.Contains(id)
+                        || lists.Input.Any(e => _graph.Allows(e, station.Id, false, id, item, Catalog))
+                        || _graph.For(id).Output.Any(e => _graph.Allows(e, id, true, station.Id, item, Catalog)))
+                    .ToList();
+            }
+
+            // Bench crafting is paid through MaterialSource from the player's native queue.
+            // Recipe switches never create conveyor demand, even when all recipes are enabled.
+            if (station.Role == StationRole.Workstation)
+            {
+                // No recipe rows means products cannot be classified safely. Keep the inventory intact.
+                if (original.Count == 0) return;
+                if (final) ReturnLeftovers(station, held.Where(s => !IsBenchProduct(station.Id, s.Item)).GroupBy(s => s.Item)
+                    .ToDictionary(g => g.Key, g => g.Sum(s => s.Amount)),
+                    item => SourcesFor(item).ToHashSet(), now);
+                return;
             }
 
             int Available(ItemId item)
@@ -236,18 +271,34 @@ namespace Satisvampory.Engine.Lists
                 _report.Diag(station.Id, inSources > Available(short1) ? "reserve" : "not-enough");
             }
 
-            // Leftovers: returned after the grace period, to where they came from, else their home.
-            foreach (var key in _state.LeftoverSince.Keys.Where(k => k.Station == station.Id && !plan.Leftovers.ContainsKey(k.Item)).ToList())
+            ReturnLeftovers(station, plan.Leftovers, item => SourcesFor(item).ToHashSet(), now);
+        }
+
+        void ReturnLeftovers(ContainerInfo station, IReadOnlyDictionary<ItemId, int> leftovers,
+            Func<ItemId, HashSet<ContainerId>> sourcesFor, double now)
+        {
+            if (ProtectsInputs(station) && !_world.StationInputs(station.Id).CanReclaim)
+            {
+                // A new queue or an unknown read interrupts the grace period; never age reservations into leftovers.
+                foreach (var key in _state.LeftoverSince.Keys.Where(k => k.Station == station.Id).ToList())
+                    _state.LeftoverSince.Remove(key);
+                return;
+            }
+            foreach (var key in _state.LeftoverSince.Keys.Where(k => k.Station == station.Id && !leftovers.ContainsKey(k.Item)).ToList())
                 _state.LeftoverSince.Remove(key);
-            foreach (var (item, amount) in plan.Leftovers)
+            foreach (var (item, amount) in leftovers)
             {
                 var key = (station.Id, item);
                 if (!_state.LeftoverSince.TryGetValue(key, out var since)) { _state.LeftoverSince[key] = now; continue; }
                 if (now - since < _opt.LeftoverGraceSeconds) continue;
 
                 var left = amount;
-                if (_state.FedFrom.TryGetValue(key, out var origin) && _inScope.Contains(origin))
-                    left -= Move(station.Id, InvPart.Main, origin, item, left, "leftover return");
+                var inputHomes = sourcesFor(item);
+                foreach (var home in DepositRanker.Rank(_ctx, item, inputHomes).Tiers.SelectMany(t => t.Members))
+                {
+                    if (left <= 0 || !Budget(station.Id)) break;
+                    left -= Move(station.Id, InvPart.Main, home.Chest.Id, item, left, "leftover return");
+                }
                 foreach (var m in DepositPlanner.Plan(_ctx, item, left, station.Id))
                     left -= Move(station.Id, InvPart.Main, m.To, item, m.Amount, "leftover home");
                 if (left > 0) _report.Diag(station.Id, "sink-full");
@@ -269,7 +320,7 @@ namespace Satisvampory.Engine.Lists
             foreach (var group in edges.GroupBy(e => e.From))
             {
                 var from = _world.Find(group.Key);
-                if (from == null || from.Deposit.Special == SpecialKind.Skip) continue;
+                if (from == null || from.AutomationSuspended || from.Deposit.Special == SpecialKind.Skip) continue;
                 var targets = group.Where(e => _world.Find(e.To)?.Kind == NodeKind.Chest).ToList();
                 if (targets.Count == 0) continue;
                 var spread = _graph.For(from.Id).SendOrder == SendOrder.SpreadEvenly;
@@ -303,15 +354,57 @@ namespace Satisvampory.Engine.Lists
         void Balance(Loop loop)
         {
             var budget = _opt.LoopMovesPerTick;
-            foreach (var e in loop.Edges)
-                foreach (var stack in _world.Contents(e.From))
+            var outgoing = loop.Edges.ToLookup(e => e.From);
+            // Follow connection order rather than random container ids. This lets the same
+            // ring settle consistently regardless of which ids a save assigned its chests.
+            var members = loop.Edges.OrderBy(e => e.Sequence).Select(e => e.From).Distinct().ToArray();
+            var items = members.SelectMany(m => _world.Contents(m)).Select(s => s.Item).Distinct().OrderBy(i => i.Guid).ToArray();
+            foreach (var item in items)
+            {
+                var counts = loop.Members.ToDictionary(m => m, m => _world.Count(m, item));
+                if (counts.Values.Max() - counts.Values.Min() <= Catalog.MaxStack(item)) continue;
+                var total = counts.Values.Sum(n => (long)n);
+                var targets = loop.Members.Select((m, i) => (m, n: (int)(total / counts.Count + (i < total % counts.Count ? 1 : 0))))
+                    .ToDictionary(x => x.m, x => x.n);
+                // Incoming items are not forwarded again in this pass. Existing stock may travel
+                // one edge toward a downstream deficit, even when the next chest has its share.
+                var available = new Dictionary<ContainerId, int>(counts);
+                foreach (var from in members)
                 {
-                    if (budget <= 0 || !Budget(e.From)) return;
-                    if (!e.Filter.Allows(stack.Item, Catalog)) continue;
-                    var n = LoopController.BalanceAmount(stack.Amount, _world.Count(e.To, stack.Item), Catalog.MaxStack(stack.Item));
-                    if (n <= 0) continue;
-                    if (Move(e.From, InvPart.Main, e.To, stack.Item, n, "loop balance") > 0) budget--;
+                    if (budget <= 0 || !Budget()) return;
+                    if (!Budget(from) || available[from] <= 0 || counts[from] <= targets[from]) continue;
+                    var queue = new Queue<ContainerId>();
+                    var firstHop = new Dictionary<ContainerId, ContainerId> { [from] = from };
+                    queue.Enqueue(from);
+                    while (queue.Count > 0)
+                    {
+                        var current = queue.Dequeue();
+                        foreach (var edge in outgoing[current])
+                        {
+                            var to = edge.To;
+                            if (firstHop.ContainsKey(to) || !edge.Filter.Allows(item, Catalog)) continue;
+                            var target = _world.Find(to);
+                            if (target == null || target.AutomationSuspended || target.Deposit.Special == SpecialKind.Skip
+                                || (target.Kind == NodeKind.Chest && !DepositScore.Takes(target, item, Catalog))
+                                || _world.FreeSpace(to, item) <= 0) continue;
+                            firstHop[to] = current == from ? to : firstHop[current];
+                            if (counts[to] < targets[to])
+                            {
+                                var hop = firstHop[to];
+                                var amount = Math.Min(available[from], Math.Min(counts[from] - targets[from], targets[to] - counts[to]));
+                                var moved = Move(from, InvPart.Main, hop, item, amount, "loop balance");
+                                if (moved > 0)
+                                {
+                                    counts[from] -= moved; counts[hop] += moved; available[from] -= moved; budget--;
+                                }
+                                queue.Clear();
+                                break;
+                            }
+                            queue.Enqueue(to);
+                        }
+                    }
                 }
+            }
         }
 
         // ---------------- Mass Deposit entries ----------------
@@ -321,7 +414,7 @@ namespace Satisvampory.Engine.Lists
             foreach (var (id, lists) in _graph.Lists)
             {
                 var entry = lists.Output.FirstOrDefault(e => e.Kind == EntryKind.MassDeposit);
-                if (entry == null || !_inScope.Contains(id)) continue;
+                if (entry == null || !_inScope.Contains(id) || _world.Find(id)?.AutomationSuspended == true) continue;
                 foreach (var stack in _world.Contents(id, PartOf(id)))
                 {
                     if (!entry.Filter.Allows(stack.Item, Catalog) || IsStableFeed(id, stack.Item)) continue;
@@ -350,8 +443,8 @@ namespace Satisvampory.Engine.Lists
                 if (!Budget(src)) break;
                 foreach (var stack in _world.Contents(src).ToList())
                 {
-                    if (!filters.Any(e => _graph.Expand(e).Contains(src) && e.Filter.Allows(stack.Item, Catalog))
-                        && !_graph.For(src).Output.Any(e => _graph.Expand(e).Contains(brazier.Id) && e.Filter.Allows(stack.Item, Catalog)))
+                    if (!filters.Any(e => _graph.Allows(e, brazier.Id, false, src, stack.Item, Catalog))
+                        && !_graph.For(src).Output.Any(e => _graph.Allows(e, src, true, brazier.Id, stack.Item, Catalog)))
                         continue;
                     var room = _world.FreeSpace(brazier.Id, stack.Item);
                     var aboveReserve = IslandTotal(stack.Item) - _rules.Reserve(stack.Item, Catalog);
@@ -370,9 +463,19 @@ namespace Satisvampory.Engine.Lists
         bool IsStableFeed(ContainerId id, ItemId item) =>
             _world.Find(id)?.Role == StationRole.Stable && _world.Recipes(id).Any(r => r.Inputs.Any(i => i.Item == item));
 
-        InvPart PartOf(ContainerId id) => _world.Find(id)?.Kind == NodeKind.Station ? InvPart.Output : InvPart.Main;
+        InvPart PartOf(ContainerId id) => _world.Find(id) is { Kind: NodeKind.Station } station
+            && station.Role != StationRole.Workstation ? InvPart.Output : InvPart.Main;
 
-        int SourceCount(ContainerId id, ItemId item) => _world.Count(id, item, PartOf(id));
+        bool IsBenchProduct(ContainerId id, ItemId item) => _world.Recipes(id)
+            .Any(r => r.Outputs.Any(o => o.Item == item && o.Amount > 0));
+
+        int SourceCount(ContainerId id, ItemId item) => _world.Find(id) is { } source
+            && (source.AutomationSuspended || (source.Role == StationRole.Workstation
+                && (!_world.StationInputs(id).CanReclaim || !IsBenchProduct(id, item))))
+            ? 0 : _world.Count(id, item, PartOf(id));
+
+        static bool ProtectsInputs(ContainerInfo container) => container.Kind == NodeKind.Station
+            && container.Role is StationRole.Workstation or StationRole.Refinement;
 
         long IslandTotal(ItemId item)
         {
@@ -394,6 +497,23 @@ namespace Satisvampory.Engine.Lists
         int Move(ContainerId from, InvPart part, ContainerId to, ItemId item, int amount, string why)
         {
             if (amount <= 0 || from == to) return 0;
+            if (!_inScope.Contains(from) || !_inScope.Contains(to)) return 0;
+            var source = _world.Find(from);
+            var target = _world.Find(to);
+            if (source == null || target == null || _world.IsRaided(source.Plot) || _world.IsRaided(target.Plot)
+                || source.Deposit.Special == SpecialKind.Skip || target.Deposit.Special == SpecialKind.Skip) return 0;
+            if (source.AutomationSuspended || target.AutomationSuspended) return 0;
+            // Applies to edges, loops, and mass-deposit outputs too. Workstation inventories are
+            // shared input/output: products follow output routes; ingredients use the grace-controlled return path.
+            if (target.Role == StationRole.Workstation) return 0;
+            if (source.Role == StationRole.Workstation)
+            {
+                if (!_world.StationInputs(from).CanReclaim || _world.Recipes(from).Count == 0) return 0;
+                bool returning = why == "leftover return" || why == "leftover home";
+                if (returning == IsBenchProduct(from, item)) return 0;
+            }
+            if (part == InvPart.Main && ProtectsInputs(source) && !_world.StationInputs(from).CanReclaim) return 0;
+            if (target.Kind == NodeKind.Chest && !DepositScore.Takes(target, item, Catalog)) return 0;
             var moved = _world.Transfer(from, part, to, item, amount);
             if (moved <= 0) return 0;
             _moves++;
@@ -414,9 +534,12 @@ namespace Satisvampory.Engine.Lists
             var result = new List<ContainerId>();
             foreach (var e in lists.Input)
             {
-                var ids = e.Kind == EntryKind.MassDeposit ? DepositPlanner.ReverseOrder(ctx, blood) : graph.Expand(e);
+                var ids = e.Kind == EntryKind.MassDeposit
+                    ? (e.Filter.Allows(blood, ctx.Catalog) ? DepositPlanner.ReverseOrder(ctx, blood) : new List<ContainerId>())
+                    : graph.Expand(e, output: false, owner: heart)
+                        .Where(id => graph.Allows(e, heart, false, id, blood, ctx.Catalog));
                 foreach (var id in ids)
-                    if (world.Find(id) is { Kind: not NodeKind.Heart } && !result.Contains(id)) result.Add(id);
+                    if (world.Find(id) is { Kind: not NodeKind.Heart, AutomationSuspended: false } && !result.Contains(id)) result.Add(id);
             }
             if (lists.PullOrder == PullOrder.ReverseMassDeposit)
             {

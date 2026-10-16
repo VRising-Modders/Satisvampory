@@ -2,15 +2,17 @@
 
 Castle logistics for V Rising, built on [Progenitor](https://github.com/VRising-Modders/Progenitor).
 
-- Every chest, station and castle heart gets an **Input** and an **Output** button in its own vanilla panel, each opening an ordered list of chests, belts, Mass Deposit and special chests.
+- Native chest tabs: **Inventory / Input / Output / Accepts**; station tabs: **Production / Input / Output**, mounted through Progenitor `AttachPanelTabs`. Inventory and Production retain the game controls; game acceptance restrictions are read-only.
+- New storage supplies the **Default Belt**; ordinary stations draw on demand in reverse Mass Deposit order and send products to Mass Deposit. Existing configurations are preserved.
 - **Mass Deposit** decides where every item lives from each chest's own deposit settings (never its name), with island overrides, an Advanced rule script, and a Try it evaluator.
 - **Castle share** joins one player's castles and **clan share** joins the whole clan, so crafting and building at any station can use any chest on any shared plot. Treasury floor is not required.
-- Stations pull only whole crafts and return leftovers. Explicit loops run once or balance evenly.
+- Stations pull only whole crafts. Any nonempty or unknown station queue protects all inputs; known idle stations may return leftovers after the grace period. Explicit loops run once or balance evenly.
+- Native redistribution defaults off; `AutomationSuspended` guards prevent competing engine transfers while native redistribution owns them.
 - Quick stash, pull, find, tidy on a hotkey, servant loot stash, special chests, and heart blood feed.
 
 There are no chat commands at all, for players or admins: admins use the Server section of the settings page. Autoloot is a separate mod.
 
-Status: **in development, not yet tested in game**. The game-free engine, its tests and the plugin are here; the product contract is [`specs/`](specs/README.md).
+Status: **in development, partially tested live**. Chest, furnace and Anvil native/custom tabs have been observed on the isolated test client. Layout checks cover 1920 x 1080 and ultrawide 3840 x 1080; restricted chest content was also checked at 2560 x 1440. The current revision passes 178 engine tests and 294 focused Progenitor tests; plugin/Core builds pass. This does not qualify the full product: multi-castle logistics, optional native redistribution and extended play still need live validation. Queue protection is conservative, not per-ingredient reservation accounting.
 
 Crafting and building from storage uses Progenitor's experimental material sources. They are off until the server and every client set `[Materials] NativeSeams = true` in Progenitor's config and restart; without that, crafting and building use the game's own rules and everything else still works.
 

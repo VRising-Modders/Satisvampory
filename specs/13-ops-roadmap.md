@@ -34,9 +34,9 @@ Satisvampory 2.0 has **no** `.` commands, not even for admins. Every admin actio
 
 Autoloot is a separate mod with its own milestones; it starts once Progenitor's settings and keybinds are live-verified.
 
-## Status (2026-10-14)
+## Implementation baseline (2026-10-14)
 
-Built and tested outside the game; nothing has run in-game yet.
+The table records the pre-tab implementation baseline. Current UI and live qualification are described in the revision section below.
 
 | Area | State |
 |---|---|
@@ -65,3 +65,41 @@ Built and tested outside the game; nothing has run in-game yet.
 - Inventory: a category header's own reserve and cap in grouped view (bulk edits set per-item overrides).
 - Find: autofill while typing (an ambiguous name shows a pick list with icons instead).
 
+
+## Tab/default-belt revision (2026-10-15)
+
+Current contract: `01-containers.md`, `02-io-lists.md`, `04-stations.md` and `14-belts-categories.md` supersede the prior edge-button UI and undirected belt membership design.
+
+Implemented:
+- Native in-window tabs through Progenitor `AttachPanelTabs`: Container uses Inventory / Input / Output / Accepts; Station uses Production / Input / Output. Inventory and Production retain the game controls.
+- Accepts basic/Advanced controls with read-only game restriction descriptions; no Try, recipe picker or belt membership controls in the container editor.
+- Native redistribution preference defaults off. `AutomationSuspended` guards prevent engine automation from competing while native redistribution owns transfers.
+- Station input protection is conservative: any nonempty queue or unknown queue state protects all inputs. Known idle stations may return leftovers after the grace period; this is not per-ingredient reservation accounting.
+- Default Belt supplies new ordinary stations on demand, honors filters/scope, and preserves existing or intentionally empty lists. Bench material-source policy uses configured Input; repairs retain scope-wide storage.
+- Chest transfers check Accepts. Refining leftovers prefer configured input homes by forward Mass Deposit rank, then general Mass Deposit.
+- Custom and Default Belts use directed Output suppliers and Input receivers. The full-window manager shows both directions with plot labels and supports directional add/remove/reorder and custom-belt duplication. Filters apply at both ends, including material sources and previews; Accepts cannot edit membership.
+- Save v2 stores connections without a standalone member list. V1 migration adds restricted counterpart connections, preserving routes, filters, order and loops; cleared/default connections stay removed. Existing 1.x imports create directed connections.
+
+Remaining qualification: wider multi-castle logistics, optional native redistribution and extended play still need live validation. Chest, furnace and Anvil observations do not qualify every station or the full product. A follow-up isolated periodic server stalls to repeated belt scans and inventory reads; endpoint-local lookups and tick-scoped snapshots removed the multi-second stalls. Extended-play qualification remains open.
+
+Validation reported for this revision: **178 engine tests and 294 focused Progenitor tests pass; plugin and Core builds pass**. Chest and furnace native/custom tabs were tested at **3840 x 1080** and **1920 x 1080**. Anvil Production/Input mounting was observed; restricted chest Accepts was also checked at **2560 x 1440**. Tabs preserve the native font and silver baseline. Custom content scrolls within a height bounded above the bottom HUD; the wide belt manager implements the same bottom clearance. The final manager detail view and bottom HUD clearance were observed at 1920 x 1080 after the server-stall fix. Physical controller input and native 4K remain unqualified.
+
+Automatic defaults exclude servant coffins and servant-equipment containers using Progenitor native classification. Existing saved connections are preserved because their origin cannot be distinguished safely from manual configuration.
+
+### Logistics scaling
+
+Belt pair checks inspect the counterpart container directly instead of rebuilding and sorting all connections. Each conveyor pass builds incoming source lists once and uses read-through inventory/recipe snapshots shared with deposit ranking. Transfers and destruction invalidate affected inventory, capacity and reservation snapshots, including aliased station inventories. Snapshots never survive a pass. Large-belt allocation bounds and mutation invalidation have regression coverage.
+
+Live scaling check on the copied multi-castle save: a 60-second capture after the fix averaged 29.37 server frames/s, with a 165.9 ms maximum frame. Chest Input and Default Belt details loaded during the follow-up session without the prior connection warning. This is a short-session result, not extended-play qualification.
+
+### Circular-loop load check
+
+Observed on an isolated copied save: ten unrestricted chests in a directed ring, each starting and finishing at 75% stack capacity (10 full stacks plus one half stack in 14 slots). The 105,000-item stock was conserved. Cycle once became idle; even distribution recovered from a deliberate imbalance and became idle. The test exposed and corrected neighbor-only balancing that could strand uneven shares. Mode changes now wake a sleeping loop, and the idle threshold uses each item's catalog stack size.
+
+A 60-second live capture with the corrected loop averaged 29.47 server FPS, versus 29.45 at baseline; maximum frame time was 168.3 ms versus 166.7 ms, with p99 36.9 ms versus 34.2 ms. These measurements qualify this fixture, not arbitrary loop sizes or long-duration multiplayer load. The temporary fixture plugin was removed after verification.
+
+### Connected Core updates
+
+Hub tab registration calls Progenitor directly, and Find control registration uses concrete interface overloads. Mod-defined generic UI helpers instantiated with Core types create reverse loader dependencies on the embedded .NET runtime and prevent the mod from collecting before Core. Keep future UI helpers concrete or in Progenitor.
+
+Verified with the corrected Progenitor retirement/config cleanup: repeated client and server Core updates completed while connected, including after opening Find. Find reopened, accepted input and returned matches afterward. Bootstrap updates still require a process restart.

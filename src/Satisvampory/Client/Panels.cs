@@ -10,16 +10,16 @@ using UiApi = Progenitor.Ui.Ui;
 namespace Satisvampory.Client
 {
     /// <summary>
-    /// The container panels (spec 02, 01): Input on the left edge, Output on the right edge, and
-    /// Deposit settings beside the rename field of chests; Input and Output on stations and
-    /// hearts. Each button opens Satisvampory's own panel; every change is a request and the panel
-    /// redraws from the server's reply, never optimistically.
+    /// Native container tabs, mounted through Progenitor.
+    /// Every edit redraws from the server's reply.
     /// </summary>
     internal sealed class Panels
     {
         readonly SatisContext _ctx;
+        readonly Satisvampory.Config.PlayerConfig _player;
         VanillaPanelTarget _target;
         bool _hasTarget;
+        int _openVersion;
         string _containerId = string.Empty;
         PanelMsg? _state;
 
@@ -27,16 +27,16 @@ namespace Satisvampory.Client
         readonly ListView _output;
         readonly DepositView _deposit;
         readonly PickerView _picker;
-        readonly RecipesView _recipes;
+        IVanillaPanelTabs? _nativeTabs;
 
-        internal Panels(SatisContext ctx)
+        internal Panels(SatisContext ctx, Satisvampory.Config.PlayerConfig player)
         {
             _ctx = ctx;
+            _player = player;
             _input = new ListView(this, 0);
             _output = new ListView(this, 1);
             _deposit = new DepositView(this);
             _picker = new PickerView(this);
-            _recipes = new RecipesView(this);
         }
 
         internal SatisContext Ctx => _ctx;
@@ -45,14 +45,43 @@ namespace Satisvampory.Client
 
         internal void Attach()
         {
-            Site(VanillaUiSite.ContainerPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this pulls from", () => Open(_input));
-            Site(VanillaUiSite.ContainerPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: where this sends to", () => Open(_output));
-            Site(VanillaUiSite.ContainerPanel, VanillaPanelAnchor.BesideRename, "Deposit", "Deposit settings: what this chest takes for Mass Deposit", () => Open(_deposit));
-            Site(VanillaUiSite.StationPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this pulls from", () => Open(_input));
-            Site(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: where its products go", () => Open(_output));
+            Tabs(VanillaUiSite.ContainerPanel, new[] { "Inventory", "Input", "Output", "Accepts" });
+            Tabs(VanillaUiSite.StationPanel, new[] { "Production", "Input", "Output" });
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: only items you send out of the heart", () => Open(_output));
         }
+
+        void Tabs(VanillaUiSite site, string[] captions)
+        {
+            var tabs = UiApi.AttachPanelTabs(site, captions, _ctx.Owner);
+            _ctx.Track(tabs);
+            tabs.ShowRedistribution = _player.ShowRedistribution;
+            void Refresh() => tabs.ShowRedistribution = _player.ShowRedistribution;
+            _player.Changed += Refresh;
+            _ctx.Track(new OnDispose(() => _player.Changed -= Refresh));
+            tabs.SelectionChanged += SelectTab;
+            tabs.PanelChanged += e =>
+            {
+                if (e.Change == VanillaPanelChange.Closed)
+                {
+                    if (_nativeTabs != tabs) return;
+                    _hasTarget = false;
+                    _openVersion++;
+                    HideAll();
+                    _nativeTabs = null;
+                    return;
+                }
+                _nativeTabs = tabs;
+                _target = e.Target;
+                _hasTarget = e.Target.HasNetworkId;
+                _containerId = string.Empty;
+                _state = null;
+                _openVersion++;
+                HideAll();
+            };
+        }
+
+        internal void Mount(IUiPanel panel) => _nativeTabs?.Mount(panel);
 
         void Site(VanillaUiSite site, VanillaPanelAnchor anchor, string caption, string tip, Action onClick)
         {
@@ -65,6 +94,8 @@ namespace Satisvampory.Client
             {
                 if (e.Change == VanillaPanelChange.Closed)
                 {
+                    _hasTarget = false;
+                    _openVersion++;
                     HideAll();
                     return;
                 }
@@ -96,16 +127,22 @@ namespace Satisvampory.Client
         {
             if (!_hasTarget) return;
             HideAll();
-            Load(() => view.Show());
+            var version = ++_openVersion;
+            Load(() => { if (_hasTarget && version == _openVersion) view.Show(); });
         }
 
         /// <summary>Ask the server for the panel and redraw every open view from the reply.</summary>
-        internal void Load(Action? then = null) =>
+        internal void Load(Action? then = null)
+        {
+            var target = _target;
+            var version = _openVersion;
             Send<GetPanelReq, PanelMsg>(new GetPanelReq { Target = Target() }, reply =>
             {
+                if (!_hasTarget || !_target.Equals(target) || version != _openVersion) return;
                 Apply(reply);
                 then?.Invoke();
             });
+        }
 
         internal void Apply(PanelMsg reply)
         {
@@ -115,21 +152,29 @@ namespace Satisvampory.Client
             _input.RedrawIfOpen();
             _output.RedrawIfOpen();
             _deposit.RedrawIfOpen();
-            _recipes.RedrawIfOpen();
         }
 
-        internal void Send<TReq, TReply>(TReq req, Action<TReply> ok) where TReq : class, new() where TReply : class, new() =>
+        internal void Send<TReq, TReply>(TReq req, Action<TReply> ok) where TReq : class, new() where TReply : class, new()
+        {
+            var target = _target;
+            var version = _openVersion;
             _ctx.Requests.Send<TReq, TReply>(req, r =>
             {
+                if (r.Reply is PanelMsg && (!_hasTarget || !_target.Equals(target) || version != _openVersion)) return;
                 if (r.Ok && r.Reply != null) ok(r.Reply);
                 else _ctx.Hud.Notify(Reason(r.Status, r.Reason), kind: UiNoticeKind.Warning, seconds: 6);
             });
+        }
 
         internal void Edit(EditListReq req) => Send<EditListReq, PanelMsg>(req, Apply);
 
         internal void OpenPicker(int side) => _picker.Show(side);
 
-        internal void OpenRecipes() => _recipes.Show();
+        internal void SelectTab(int tab)
+        {
+            if (tab == 0) { _openVersion++; HideAll(); return; } // The game's inventory/production remains authoritative.
+            Open(tab == 1 ? _input : tab == 2 ? _output : _deposit);
+        }
 
         static string Reason(RequestStatus status, string reason) => status switch
         {
@@ -146,7 +191,6 @@ namespace Satisvampory.Client
             _output.Hide();
             _deposit.Hide();
             _picker.Hide();
-            _recipes.Hide();
         }
     }
 
@@ -156,9 +200,12 @@ namespace Satisvampory.Client
         protected readonly Panels Owner;
         IUiPanel? _panel;
 
+        int _nodeKind = -1;
+
         protected View(Panels owner) => Owner = owner;
 
         protected abstract string Title { get; }
+        protected virtual int NavigationTab => -1;
 
         protected abstract void Build(IUiPanel panel);
 
@@ -168,11 +215,20 @@ namespace Satisvampory.Client
         {
             get
             {
+                var kind = Owner.State?.NodeKind ?? -1;
+                if (_panel != null && NavigationTab >= 0 && _nodeKind != kind)
+                {
+                    _panel.Dispose();
+                    _panel = null;
+
+                }
                 if (_panel == null)
                 {
-                    _panel = UiApi.Panel(Title, Owner.Ctx.Owner, Owner.Ctx.Guid);
+                    _nodeKind = kind;
+                    _panel = UiApi.Panel(Title, Owner.Ctx.Owner, Owner.Ctx.Guid).GameWindow();
                     _panel.CaptureMode = UiCaptureMode.WhenHovered;
                     Owner.Ctx.Track(_panel);
+                    if (NavigationTab >= 0) Owner.Mount(_panel);
                     Build(_panel);
                 }
                 return _panel;
@@ -186,6 +242,7 @@ namespace Satisvampory.Client
         {
             _open = true;
             Redraw();
+            if (NavigationTab >= 0) Owner.Mount(Panel);
             UiApi.Show(Panel);
             if (TipId != null) Help.Tip(Owner.Ctx, TipId, Panel);
         }
@@ -229,16 +286,12 @@ namespace Satisvampory.Client
         IUiOrderedList _list = null!;
         IUiLabel _loop = null!;
         IUiDropdown _loopMode = null!;
-        IUiButton _recipesButton = null!;
-        IUiInput _tryAmount = null!;
-        IUiInput _tryItem = null!;
-        IUiLabel _tryResult = null!;
-        string? _tryFor;
         bool _redrawing;
 
         public ListView(Panels owner, int side) : base(owner) => _side = side;
 
-        protected override string Title => _side == 0 ? "Input" : "Output";
+        protected override string Title => "Logistics";
+        protected override int NavigationTab => _side + 1;
 
         static readonly string[] PullValues = { "0", "1" };
         static readonly string[] PullLabels = { "Respect list order", "Reverse Mass Deposit (worst-stored first)" };
@@ -268,9 +321,7 @@ namespace Satisvampory.Client
 
             _list = panel.OrderedList("rows", Array.Empty<UiListItem>(), new UiOrderedListOptions
             {
-                EmptyText = _side == 0
-                    ? "Add the chests or belts this pulls from, or Pull: reverse Mass Deposit to take items from wherever they are stored worst."
-                    : "Add where this sends items. Push: Mass Deposit sends each item to the chest that rates it highest.",
+                EmptyText = _side == 0 ? "No sources. Add a chest or belt." : "No destinations. Add a chest, belt or Mass Deposit.",
             });
             ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));
             ctx.Track(_list.OnReorder(m => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = m.From, To = m.To })));
@@ -306,7 +357,8 @@ namespace Satisvampory.Client
                 Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 4, Index = row, Entry = new RowMsg { FilterSpec = new FilterMsg { Text = string.IsNullOrWhiteSpace(_filterText.Value) ? "anything" : _filterText.Value } } });
             }));
 
-            ctx.Track(panel.Button("+ Add…").OnClick(() => Owner.OpenPicker(_side)));
+            ctx.Track(panel.Button("+ Add chest or belt…").OnClick(() => Owner.OpenPicker(_side)));
+            ctx.Track(panel.Button("Manage belts…").OnClick(() => Owner.OpenHub?.Invoke(Hub.BeltsTab)));
             ctx.Track(panel.Button("Mass Deposit screen…").OnClick(() => Owner.OpenHub?.Invoke(1)));
             ctx.Track(panel.Button("◎ Pick in world").OnClick(PickInWorld));
             _others = panel.Label("");
@@ -317,18 +369,7 @@ namespace Satisvampory.Client
                 if (_redrawing || Owner.State == null || Owner.State.LoopKey.Length == 0) return;
                 Owner.Send<SetLoopReq, PanelMsg>(new SetLoopReq { Target = Owner.Target(), LoopKey = Owner.State.LoopKey, Mode = int.Parse(v) }, Owner.Apply);
             }));
-            if (_side == 0)
-            {
-                _recipesButton = panel.Button("Recipes…");
-                ctx.Track(_recipesButton.OnClick(Owner.OpenRecipes));
-                ctx.Track(_recipesButton.Tooltip("Which recipes this station works on. Only switched-on recipes pull inputs.", "Recipes"));
-            }
 
-            panel.Divider();
-            _tryAmount = panel.Input("Try it: amount", "100");
-            _tryItem = panel.Input("Item", "");
-            ctx.Track(panel.Button("Try it").OnClick(TryIt));
-            _tryResult = panel.Label("");
         }
 
         public override void Redraw()
@@ -336,8 +377,6 @@ namespace Satisvampory.Client
             var s = Owner.State;
             if (s == null) return;
             _ = Panel;
-            // A result from another chest or station is not about this one.
-            if (_tryFor != s.ContainerId) { _tryFor = s.ContainerId; _tryResult.Text = ""; }
             _redrawing = true;
             try
             {
@@ -358,7 +397,6 @@ namespace Satisvampory.Client
                 _loop.Visible = s.LoopBanner.Length > 0;
                 _loopMode.Visible = s.LoopKey.Length > 0;
                 _loopMode.Value = s.LoopMode.ToString();
-                if (_side == 0) _recipesButton.Visible = s.NodeKind == 1;
             }
             finally
             {
@@ -395,23 +433,6 @@ namespace Satisvampory.Client
             }, () => Show(), new UiWorldPickOptions { Prompt = _side == 0 ? "Interact with a container or station to pull from. Esc to cancel." : "Interact with a container or station to send to. Esc to cancel." });
         }
 
-        void TryIt()
-        {
-            if (!int.TryParse(_tryAmount.Value, out var n) || n <= 0) n = 100;
-            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = _side == 0 ? 0 : 1, Item = ClientItems.Resolve(Owner.Ctx, _tryItem.Value), Amount = n }, r =>
-            {
-                var lines = new List<string> { $"{n:N0} {r.Item}:" };
-                lines.AddRange(r.Steps.Select(x => $"  {x.Name} · {x.Where} — {x.Amount:N0}  ({x.Why})"));
-                if (r.Short > 0) lines.Add($"  short by {r.Short:N0}");
-                if (r.NotUsed.Count > 0)
-                {
-                    lines.Add("Not used:");
-                    lines.AddRange(r.NotUsed.Take(8).Select(x => $"  {x.Name} · {x.Where} — {x.Why}"));
-                    if (r.NotUsed.Count > 8) lines.Add($"  … and {r.NotUsed.Count - 8} more");
-                }
-                _tryResult.Text = string.Join("\n", lines);
-            });
-        }
     }
 
     /// <summary>A chest's deposit settings (spec 01).</summary>
@@ -420,19 +441,17 @@ namespace Satisvampory.Client
         protected override string? TipId => Help.DepositTip;
 
         IUiLabel _header = null!;
+        IUiLabel _restriction = null!;
         IUiDropdown _takes = null!;
         IUiNumber _base = null!;
         IUiOrderedList _entries = null!;
         IUiInput _entryName = null!;
         IUiNumber _entryAdjust = null!;
         IUiDropdown _special = null!;
-        IUiChips _belts = null!;
-        IUiInput _beltToAdd = null!;
         IUiButton _empty = null!;
         float _emptyArmedAt = -10;
-        IUiInput _tryAmountDeposit = null!;
-        IUiInput _tryItem = null!;
-        IUiLabel _tryResult = null!;
+        IUiToggle _advanced = null!;
+        IUiButton _ban = null!;
         DepositMsg _draft = new();
         bool _dirty;
         string _draftFor = "";
@@ -441,7 +460,8 @@ namespace Satisvampory.Client
         {
         }
 
-        protected override string Title => "Deposit settings";
+        protected override string Title => "Logistics";
+        protected override int NavigationTab => 3;
 
         static readonly string[] TakesValues = { "0", "1", "2" };
         static readonly string[] TakesLabels = { "Anything", "Only what's listed", "Nothing" };
@@ -452,13 +472,17 @@ namespace Satisvampory.Client
         {
             var ctx = Owner.Ctx;
             _header = panel.Label("");
-            _takes = panel.Dropdown("Takes", TakesValues, "0", TakesLabels);
-            ctx.Track(_takes.Term("Deposit settings"));
+            panel.Label("Items accepted from belts and automatic deposits. Manual deposits are unaffected.");
+            _restriction = panel.Label("");
+            _takes = panel.Dropdown("Accepts", TakesValues, "0", TakesLabels);
+            ctx.Track(_takes.Term("Accepts"));
+            _advanced = panel.Toggle("Advanced settings", false);
+            ctx.Track(_advanced.OnChanged(_ => ShowAdvanced()));
             _base = panel.Number("Base priority", 0, -10, 10);
             _entries = panel.OrderedList("entries", Array.Empty<UiListItem>(), new UiOrderedListOptions
             {
                 Reorder = false,
-                EmptyText = "No items or categories listed. On \"Only what's listed\" the chest takes nothing until you add some.",
+                EmptyText = "No allowed items. Add an item or category.",
             });
             ctx.Track(_entries.OnRemove(item =>
             {
@@ -471,19 +495,11 @@ namespace Satisvampory.Client
             }));
             _entryName = panel.Input("Item or category", "");
             _entryAdjust = panel.Number("Priority change", 0, -10, 10);
-            ctx.Track(panel.Button("+ Add priority").OnClick(() => AddEntry(ban: false)));
-            ctx.Track(panel.Button("+ Never deposit here").OnClick(() => AddEntry(ban: true)));
+            ctx.Track(panel.Button("+ Add item or category").OnClick(() => AddEntry(ban: false)));
+            _ban = panel.Button("+ Never deposit here");
+            ctx.Track(_ban.OnClick(() => AddEntry(ban: true)));
             _special = panel.Dropdown("Special kind", SpecialValues, "0", SpecialLabels);
-            _belts = panel.Chips("dep.belts", Array.Empty<UiChip>(), new UiChipsOptions { Remove = true, Add = true, AddText = "+ belt", AddTooltip = "Put this chest on the belt named below (made if new)", EmptyText = "On no belts." });
-            ctx.Track(_belts.Term("Belt"));
-            _beltToAdd = panel.Input("Belt to put this chest on", "");
-            ctx.Track(_belts.OnRemove(chip => Owner.Edit(new EditListReq { Target = Owner.Target(), Op = 6, Entry = new RowMsg { BeltId = chip.Id } })));
-            ctx.Track(_belts.OnAdd(() =>
-            {
-                var name = (_beltToAdd.Value ?? "").Trim();
-                if (name.Length == 0) { ctx.Hud.Notify("Type a belt name first.", kind: UiNoticeKind.Info, seconds: 3); return; }
-                Owner.Edit(new EditListReq { Target = Owner.Target(), Op = 5, Entry = new RowMsg { Name = name } });
-            }));
+            ShowAdvanced();
             ctx.Track(panel.Button("Save").OnClick(Save));
             _empty = panel.Button("Empty trash");
             ctx.Track(_empty.OnClick(() =>
@@ -503,11 +519,7 @@ namespace Satisvampory.Client
                 });
             }));
 
-            panel.Divider();
-            _tryItem = panel.Input("Try it: item", "");
-            _tryAmountDeposit = panel.Input("Try it: amount", "100");
-            ctx.Track(panel.Button("Where would it go?").OnClick(TryIt));
-            _tryResult = panel.Label("");
+
         }
 
         public override void Redraw()
@@ -519,6 +531,7 @@ namespace Satisvampory.Client
             if (_dirty && _draftFor == s.ContainerId) return;
             _dirty = false;
             _draftFor = s.ContainerId;
+            _restriction.Text = s.NativeRestriction;
             var d = s.Deposit;
             _draft = new DepositMsg
             {
@@ -533,9 +546,13 @@ namespace Satisvampory.Client
             _takes.Value = d.Takes.ToString();
             _base.Value = d.BasePriority;
             _special.Value = d.Special.ToString();
-            _belts.SetChips(d.Belts.Select((name, i) => new UiChip(i < d.BeltIds.Count ? d.BeltIds[i] : name, name) { Removable = s.CanEdit }));
             _empty.Visible = d.Special == (int)Satisvampory.Engine.Model.SpecialKind.Trash && s.CanEdit;
             DrawEntries();
+        }
+
+        void ShowAdvanced()
+        {
+            _base.Visible = _entryAdjust.Visible = _special.Visible = _ban.Visible = _advanced.Value;
         }
 
         void DrawEntries()
@@ -577,27 +594,10 @@ namespace Satisvampory.Client
             {
                 _dirty = false;
                 Owner.Apply(reply);
-                Owner.Ctx.Hud.Notify("Deposit settings saved.", kind: UiNoticeKind.Success, seconds: 3);
+                Owner.Ctx.Hud.Notify("Accepts settings saved.", kind: UiNoticeKind.Success, seconds: 3);
             });
         }
 
-        void TryIt()
-        {
-            if (!int.TryParse(_tryAmountDeposit.Value, out var n) || n <= 0) n = 100;
-            Owner.Send<TryItReq, TryItReply>(new TryItReq { Target = Owner.Target(), Mode = 2, Item = ClientItems.Resolve(Owner.Ctx, _tryItem.Value), Amount = n }, r =>
-            {
-                var here = Owner.State?.Name ?? "";
-                var rank = r.Steps.FindIndex(x => x.Name == here);
-                var mine = r.NotUsed.FirstOrDefault(x => x.Name == here);
-                var first = r.Steps.FirstOrDefault();
-                string Ordinal(int i) => (i + 1) switch { 1 => "1st", 2 => "2nd", 3 => "3rd", var k => k + "th" };
-                _tryResult.Text = first == null
-                    ? $"{n:N0} {r.Item}: no chest on the island takes it."
-                    : rank >= 0
-                        ? $"{n:N0} {r.Item} → would land here {Ordinal(rank)} ({r.Steps[rank].Amount:N0})" + (rank > 0 ? $"; first {first.Name} · {first.Where}" : "")
-                        : $"{n:N0} {r.Item} → {first.Name} · {first.Where} ({first.Why})" + (mine != null ? $"\nThis chest: not used — {mine.Why}" : "\nThis chest: not reached.");
-            });
-        }
     }
 
     /// <summary>The Add… picker for an Input or Output list.</summary>
@@ -642,7 +642,7 @@ namespace Satisvampory.Client
                 {
                     Section = x.Section,
                     Note = x.ClosesLoop ? x.Note + " · closes a loop" : x.Note,
-                    DisabledReason = string.IsNullOrEmpty(x.Refused) ? null : x.Refused,
+                    DisabledReason = x.Refused ?? "",
                 }));
                 base.Show();
             });
@@ -653,44 +653,4 @@ namespace Satisvampory.Client
         }
     }
 
-    /// <summary>A station's recipe switches (spec 04): selected recipes are on.</summary>
-    internal sealed class RecipesView : View
-    {
-        IUiLabel _note = null!;
-        IUiPicker _picker = null!;
-
-        public RecipesView(Panels owner) : base(owner)
-        {
-        }
-
-        protected override string Title => "Recipes";
-
-        protected override void Build(IUiPanel panel)
-        {
-            var ctx = Owner.Ctx;
-            _note = panel.Label("Select the recipes this station should work on. Only those pull inputs, and only in whole crafts.");
-            _picker = panel.Picker("recipes", Array.Empty<UiPickerEntry>(), new UiPickerOptions { Multi = true, Rows = 12, Placeholder = "Search recipes" });
-            ctx.Track(panel.Button("Apply").OnClick(() =>
-                Owner.Send<SetRecipesReq, PanelMsg>(new SetRecipesReq
-                {
-                    Target = Owner.Target(),
-                    On = _picker.Selected.Select(int.Parse).ToList(),
-                }, reply =>
-                {
-                    Owner.Apply(reply);
-                    ctx.Hud.Notify("Recipes updated.", kind: UiNoticeKind.Success, seconds: 3);
-                })));
-        }
-
-        public override void Redraw()
-        {
-            var s = Owner.State;
-            if (s == null || s.NodeKind != 1) return;
-            _ = Panel;
-            _picker.SetEntries(s.Recipes.Select(r => new UiPickerEntry(r.Guid.ToString(), r.Name) { Note = r.Inputs }));
-            _picker.ClearSelection();
-            foreach (var r in s.Recipes.Where(r => r.On)) _picker.Select(r.Guid.ToString());
-            _note.Visible = true;
-        }
-    }
 }

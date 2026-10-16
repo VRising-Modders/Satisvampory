@@ -8,13 +8,15 @@ The server finds loops whenever the graph changes and gives each loop an id. A l
 
 ## Modes
 
-Set per loop from any member's panel. The default when a loop is first closed is **Cycle once**.
+Set per loop from any member's panel. The default when a loop is first closed is **Cycle once**. Changing the mode starts a fresh bounded pass, including after the loop has gone idle.
 
 | Mode | Behavior |
 |---|---|
 | **Cycle once** | Items move around the loop until each item has passed every member once, then the loop stops. It sleeps until something in the loop changes: an item added or removed by anything other than the loop, a member added or removed, or a filter changed. Then it runs one more cycle. |
 | **Even distribution** | The loop moves items until every member holds an even share of each item it accepts (by free space, rounded to stacks), then stops. It starts again when the balance is off by more than one stack. |
 | **Off** | The edge that closes the loop is not run. The rest of the path runs normally. |
+
+Even distribution routes surplus along configured, item-permitted edges toward downstream shortages. It can pass surplus through a chest that already has its share; comparing neighboring inventories alone can strand an uneven distribution around a long ring. The idle check uses the item catalog’s stack size.
 
 ## Guards
 

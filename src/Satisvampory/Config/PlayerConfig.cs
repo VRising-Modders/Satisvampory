@@ -45,8 +45,17 @@ namespace Satisvampory.Config
             c.Flag(ctx, 11, "HeartTopUpIslandOnLogin", d.HeartTopUpIslandOnLogin, "Top up my island's hearts at login", "Every heart on my island, once per login.");
             c.Flag(ctx, 12, "HeartTopUpOutsideIsland", d.HeartTopUpOutsideIsland, "Also top up hearts outside my island", "Plots of mine or my clan that are not on my island.");
             c.Flag(ctx, 13, "ShowTermHints", d.ShowTermHints, "Show term hints (ⓘ)", "Small markers that explain Belt, Category and the rest.");
+            var redistribution = ctx.Bind(Section, "ShowRedistribution", false, "Show the game redistribution tab beside Production, Input and Output.");
+            redistribution.SettingChanged += (_, _) => c.Changed?.Invoke();
+            c.Rows.Add((redistribution, "Show vanilla redistribution", "Show the game redistribution tab. Existing game routes remain under your control."));
+            var autoPin = ctx.Bind(Section, "AutoPinFind", true, "Automatically pin the chest or station selected in Find.");
+            autoPin.SettingChanged += (_, _) => c.Changed?.Invoke();
+            c.Rows.Add((autoPin, "Auto-pin Find selections", "Selecting a chest or station in Find pins its location for one minute or until you get close. Replaces the previous Find pin."));
             return c;
         }
+
+        public bool ShowRedistribution => Rows.Find(r => r.Entry.Definition.Key == "ShowRedistribution").Entry?.Value ?? false;
+        public bool AutoPinFind => Rows.Find(r => r.Entry.Definition.Key == "AutoPinFind").Entry?.Value ?? true;
 
         public uint Bits()
         {

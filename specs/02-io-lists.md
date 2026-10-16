@@ -2,16 +2,9 @@
 
 ## Where they live
 
-When a player opens a container or station, the vanilla panel gains two small icon buttons drawn with the game's button sprite:
+Chest: **Inventory · Input · Output · Accepts**. Station: **Production · Input · Output**, omitting unsupported directions. These tabs belong inside the existing vanilla window; Inventory/Production retain the game controls. Hearts keep their existing layout until separately specified.
 
-- **Left edge: Input** (arrow into a box). Tooltip "Input: where this pulls from".
-- **Right edge: Output** (arrow out of a box). Tooltip "Output: where this sends to".
-
-A third control, the **Deposit settings** gear beside the rename field, holds what the chest takes for Mass Deposit, its priorities and bans. It is not a list; see `01-containers.md`, "Deposit settings".
-
-The input and output buttons each show a small count badge (number of entries) and turns the game's warning red when an entry is blocked. Clicking opens a Satisvampory panel beside the vanilla window: Progenitor attaches the buttons to the vanilla window, and the panel itself is Satisvampory's own, closed together with the window. Only one side panel is open at a time.
-
-Guests see the buttons and can open the panels read-only, with the tooltip "Clan members can change logistics".
+Input answers "Where do supplies come from?" Output answers "Where do items go?" Accepts answers "What can automation put here?" Only chests have Accepts. Input/Output provide Add chest or belt, search with plot labels, Pick in world, and Manage belts. Neither contains duplicate recipes or Try controls. Guests can inspect but cannot edit.
 
 ## A list
 
@@ -42,7 +35,7 @@ Guests see the buttons and can open the panels read-only, with the tooltip "Clan
 |---|---|---|
 | A container | Pull from it | Send to it |
 | A station | Pull its finished products | Send it recipe inputs |
-| A belt | Pull from its members | Send to its members |
+| A belt | Pull from its suppliers | Supply its receivers |
 | **Pull: reverse Mass Deposit** / **Push: Mass Deposit** | **Pull: reverse Mass Deposit** — only on something that consumes (station, heart, spawner, stable): pull what it needs from wherever it is stored worst. Not offered on plain chests, which have no demand. | **Push: Mass Deposit** — send each item to the chest whose deposit settings rate it highest (1.x "RR"), on every tick |
 | A special chest (by its name, for example "Trash", "Salvage") | Pull from it where its kind allows | Send to it |
 
@@ -66,14 +59,14 @@ Special chests appear in pickers under their own names and kinds (`09-special-ch
 
 ## What moves
 
-- An output edge moves what the destination accepts and the row filter allows. A chest destination accepts anything unless filtered; a station accepts only inputs of recipes switched on (`04-stations.md`).
+- An output edge moves what the destination accepts and the row filter allows. A chest destination must pass Accepts and game restrictions; a station accepts only inputs of recipes switched on (`04-stations.md`).
 - An input edge pulls what this container needs: for a station, heart, spawner or stable, what it consumes; for a chest, anything its listed sources hold that the row filter allows.
 - Reserve: a castle **reserve** (default 10 per item, by item or category) is the island stock that feeding stations, heart fuel, and crafting from storage leave behind. Chest-to-chest moves keep items on the island, so reserve does not limit them. Pulls by the player (`07-stash-pull-find-tidy.md`) ignore it.
 - **Production cap** per item or category: stop feeding a station whose product is already at the cap on the island.
 - Several stations wanting the same item share it: each round feeds every station one more whole craft, up to the feed target.
 - Nothing moves on a raided plot, out of a skip chest, or into a full one.
 
-Each panel ends with a **Try it** line: an item and an amount, and the evaluator (`03-mass-deposit.md`, "Evaluator") lists, row by row, how much each target would get (0 included, with the reason) or where a pull would come from and which chests would not be used.
+No Try control appears in Input, Output or Accepts. The standalone Mass Deposit evaluator remains separate.
 
 An edge is defined once. An output entry on A pointing at B and an input entry on B pointing at A are the same edge, shown in both panels and marked "set on A".
 
@@ -109,3 +102,11 @@ Each row and each panel button can say why nothing moves, highest first:
 | `sink-full` | Destination has no free slot |
 | `not-wanted` | No recipe switched on uses this item |
 | `loop-waiting` | Loop finished its cycle; waiting for a change (`05-loops.md`) |
+
+## Default Belt and directed membership
+
+Output → belt makes a supplier; Input → belt makes a receiver. Both connection filters must allow each item, including crafting-from-storage and previews. There is no disconnected membership. The belt manager adds/removes the corresponding connection. Belts hold no items themselves.
+
+New eligible storage has Output → **Default Belt**. New ordinary refinement stations and crafting benches have Input → Default Belt, **Reverse Mass Deposit priority**, and Output → Mass Deposit. Supplying advertises stock: it does not push into other suppliers or prefill idle machines. Demand pulls complete crafts only.
+
+Hearts, skip and special-purpose storage, and special stations are not enrolled automatically. Defaults only apply to unconfigured containers. Imported/custom lists and deliberately cleared lists survive reloads unchanged. Default Belt uses the same directional rules as custom belts. It has a stable identity and cannot be renamed, duplicated or deleted; removed connections stay removed after reload. Scope, access, raids, filters and reserves still apply.

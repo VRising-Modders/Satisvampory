@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -128,7 +128,8 @@ namespace Satisvampory.Engine.Ui
 
             foreach (var belt in graph.Belts.Values)
             {
-                var hint = belt.Members.Count == 1 ? "1 chest" : $"{belt.Members.Count} chests";
+                var members = (q.Side == PickerSide.Output ? graph.Receivers(belt.Id) : graph.Suppliers(belt.Id)).ToList();
+                var hint = $"{graph.Suppliers(belt.Id).Count()} suppliers · {graph.Receivers(belt.Id).Count()} receivers";
                 if (!Matches(belt.Name, string.Empty, hint)) continue;
                 rows.Add(new PickerRow
                 {
@@ -137,8 +138,8 @@ namespace Satisvampory.Engine.Ui
                     Belt = belt.Id,
                     Name = belt.Name,
                     Hint = hint,
-                    Refused = belt.Members.Contains(q.Self) ? "This container is on that belt" : null,
-                    ClosesLoop = belt.Members.Any(WouldLoop),
+                    Refused = null,
+                    ClosesLoop = members.Any(WouldLoop),
                 });
             }
 
@@ -177,13 +178,14 @@ namespace Satisvampory.Engine.Ui
 
     // ---------------- find ----------------
 
-    public sealed record FoundChest(ContainerId Id, string Name, PlotId Plot, string PlotLabel, bool Here, int Count);
+    public sealed record FoundChest(ContainerId Id, string Name, PlotId Plot, string PlotLabel, bool Here, int Count, bool Produces = false);
 
     public sealed class FoundItem
     {
         public ItemId Item { get; init; }
         public string Name { get; init; } = string.Empty;
         public long Total { get; init; }
+        public int MatchRank { get; init; }
         /// <summary>Grouped by plot, standing plot first.</summary>
         public List<FoundChest> Chests { get; init; } = new();
     }
@@ -201,30 +203,41 @@ namespace Satisvampory.Engine.Ui
     public static class Find
     {
         public const int MaxItems = 25;
+        public static int MatchRank(string name, string query)
+        {
+            var value = NameFold.Fold(name); var needle = NameFold.Fold(query);
+            if (needle.Length == 0) return 4;
+            if (value == needle) return 0;
+            if (value.StartsWith(needle, StringComparison.Ordinal)) return 1;
+            if ((" " + value + " ").Contains(" " + needle + " ")) return 2;
+            return value.Contains(needle) ? 3 : 4;
+        }
 
         /// <summary>
         /// Exact item or alias first; then a category; then every item whose name contains the text.
         /// Chest names are searched too. Nothing is guessed: a partial match on several items is
         /// returned as an ambiguous list.
         /// </summary>
-        public static FindResult Run(IWorldView world, ItemCatalog catalog, IReadOnlyList<PlotId> island, PlotId standing, Func<PlotId, string> plotLabel, string query)
+        public static FindResult Run(IWorldView world, ItemCatalog catalog, IReadOnlyList<PlotId> island, PlotId standing, Func<PlotId, string> plotLabel, string query, bool partialMatch = true, int kind = 0, Func<ItemId, bool>? includeItem = null)
         {
             var text = NameFold.Fold(query);
+            if (text == "atheneum") text = "athenaeum";
             var items = new List<ItemId>();
             var categories = new List<string>();
             var ambiguous = false;
 
-            if (text.Length > 0)
+            if (text.Length > 0 && kind != 1)
             {
                 if (catalog.TryResolveItem(text, out var exact)) items.Add(exact);
-                else if (catalog.TryResolveCategory(text, out var cat))
+                else if (partialMatch && catalog.TryResolveCategory(text, out var cat))
                 {
                     categories.Add(cat);
                     items.AddRange(catalog.Members(cat));
                 }
                 else
                 {
-                    items.AddRange(catalog.AllItems.Where(i => NameFold.Fold(catalog.NameOf(i)).Contains(text)).Take(MaxItems));
+                    items.AddRange(catalog.AllItems.Where(i => (includeItem == null || includeItem(i)) && MatchRank(catalog.NameOf(i), text) < (partialMatch ? 4 : 1))
+                        .OrderBy(i => MatchRank(catalog.NameOf(i), text)).ThenBy(catalog.NameOf, StringComparer.OrdinalIgnoreCase).Take(MaxItems));
                     ambiguous = items.Count > 1;
                 }
             }
@@ -232,24 +245,29 @@ namespace Satisvampory.Engine.Ui
             var result = new FindResult { Ambiguous = ambiguous };
             result.Categories.AddRange(categories);
 
-            var chests = island.SelectMany(world.ContainersOn).Where(c => c.Kind == NodeKind.Chest).ToList();
-            foreach (var item in items)
+            var chests = island.SelectMany(world.ContainersOn).Where(c => c.Kind is NodeKind.Chest or NodeKind.Station).ToList();
+            var contents = chests.ToDictionary(c => c.Id, c => c.Role == StationRole.Refinement
+                ? world.Contents(c.Id).Concat(world.Contents(c.Id, InvPart.Output)).ToArray()
+                : world.Contents(c.Id).ToArray());
+            var outputs = chests.Where(c => c.Kind == NodeKind.Station)
+                .ToDictionary(c => c.Id, c => world.Recipes(c.Id).SelectMany(r => r.Outputs).Select(o => o.Item).ToHashSet());
+            foreach (var item in items.Where(i => includeItem == null || includeItem(i)).Take(MaxItems))
             {
-                var found = chests
-                    .Select(c => (c, n: world.Count(c.Id, item)))
-                    .Where(x => x.n > 0)
-                    .Select(x => new FoundChest(x.c.Id, x.c.DisplayName, x.c.Plot, x.c.Plot == standing ? "here" : plotLabel(x.c.Plot), x.c.Plot == standing, x.n))
-                    .OrderBy(f => f.Here ? 0 : 1).ThenBy(f => f.PlotLabel, StringComparer.OrdinalIgnoreCase).ThenByDescending(f => f.Count)
-                    .ToList();
-                result.Items.Add(new FoundItem { Item = item, Name = catalog.NameOf(item), Total = found.Sum(f => (long)f.Count), Chests = found });
+                var found = chests.Select(c => (c, n: contents[c.Id].Where(s => s.Item == item).Sum(s => s.Amount),
+                        makes: outputs.TryGetValue(c.Id, out var products) && products.Contains(item)))
+                    .Where(x => x.n > 0 || x.makes)
+                    .Select(x => new FoundChest(x.c.Id, x.c.DisplayName, x.c.Plot, plotLabel(x.c.Plot), x.c.Plot == standing, x.n, x.makes))
+                    .OrderBy(f => f.Here ? 0 : 1).ThenBy(f => f.Count > 0 ? 0 : 1)
+                    .ThenBy(f => f.PlotLabel, StringComparer.OrdinalIgnoreCase).ThenByDescending(f => f.Count)
+                    .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                result.Items.Add(new FoundItem { Item = item, Name = catalog.NameOf(item), MatchRank = MatchRank(catalog.NameOf(item), text), Total = found.Sum(f => (long)f.Count), Chests = found });
             }
-            result.Items.Sort((a, b) => b.Total.CompareTo(a.Total));
-
-            if (text.Length > 0)
-                result.ChestsByName.AddRange(chests
-                    .Where(c => NameFold.Fold(c.DisplayName).Contains(text))
-                    .Select(c => new FoundChest(c.Id, c.DisplayName, c.Plot, c.Plot == standing ? "here" : plotLabel(c.Plot), c.Plot == standing, world.Contents(c.Id).Sum(s => s.Amount)))
-                    .OrderBy(f => f.Here ? 0 : 1).ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase));
+            result.Items.Sort((a, b) => { int rank = a.MatchRank.CompareTo(b.MatchRank); return rank != 0 ? rank : b.Total != a.Total ? b.Total.CompareTo(a.Total) : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name); });
+            if (text.Length > 0 && kind != 2)
+                result.ChestsByName.AddRange(chests.Where(c => MatchRank(c.DisplayName, text) < (partialMatch ? 4 : 1) || MatchRank(c.FurnitureName, text) < (partialMatch ? 4 : 1))
+                    .OrderBy(c => Math.Min(MatchRank(c.DisplayName, text), MatchRank(c.FurnitureName, text)))
+                    .ThenBy(c => c.Plot == standing ? 0 : 1).ThenBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    .Take(40).Select(c => new FoundChest(c.Id, c.DisplayName, c.Plot, plotLabel(c.Plot), c.Plot == standing, contents[c.Id].Sum(s => s.Amount))));
 
             return result;
         }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -169,12 +169,12 @@ namespace Satisvampory.Engine.Ui
                     continue;
                 }
 
-                foreach (var id in RowTargets(graph, e))
+                foreach (var id in graph.Expand(e, output: true, owner: owner))
                 {
                     var target = ctx.World.Find(id);
                     if (target == null) continue;
                     string? zero = null;
-                    if (!e.Filter.Allows(item, ctx.Catalog)) zero = $"{row}: its filter excludes this item";
+                    if (!graph.Allows(e, owner, true, id, item, ctx.Catalog)) zero = $"{row}: its filter excludes this item";
                     else if (left <= 0) zero = PreviousTookAll(eval, row);
                     else if (target.Kind == NodeKind.Station && !ctx.World.Recipes(id).Any(r => r.Enabled && r.Inputs.Any(x => x.Item == item)))
                         zero = $"{row}: no recipe switched on uses this item";
@@ -205,7 +205,6 @@ namespace Satisvampory.Engine.Ui
             return $"{row}: earlier rows took it all";
         }
 
-        static IEnumerable<ContainerId> RowTargets(LogisticsGraph graph, ListEntry e) => graph.Expand(e);
 
         static EvalSkip Skip(DepositContext ctx, ContainerId id, string reason)
         {

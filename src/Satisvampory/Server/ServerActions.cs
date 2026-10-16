@@ -152,7 +152,7 @@ namespace Satisvampory.Server
                 island = Home(ctx, half, userEntity, server);
             if (island == null) return Notice(NoticeCode.Refused);
 
-            var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)
+            var world = new ProgenitorWorld(ctx.Inventory, ctx.Stations, island.Castles, id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, logistics: island.State)
             {
                 TableRecipesOn = id => island.State.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
             };

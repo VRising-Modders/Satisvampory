@@ -39,8 +39,20 @@ namespace Satisvampory.Engine.Model
 
         public DepositOptions Deposit { get; } = new DepositOptions();
 
+        /// <summary>May receive automatic Default Belt connections. Does not remove or override configured lists.</summary>
+        public bool DefaultBeltEligible { get; set; } = true;
+
         /// <summary>What kind of station this is, for the special jobs (spec 09). None for chests and hearts.</summary>
         public StationRole Role { get; set; } = StationRole.None;
+
+        /// <summary>Whether native redistribution ownership was successfully read for this station.</summary>
+        public bool NativeRoutingKnown { get; set; }
+        /// <summary>The game's InventoryRouteParent.AutoRouteItems flag; do not change native routes.</summary>
+        public bool NativeAutoRouteItems { get; set; }
+        /// <summary>Why native ownership is unknown, for diagnostics.</summary>
+        public string NativeRoutingReason { get; set; } = string.Empty;
+        /// <summary>Competing conveyor automation must pause on native-owned or unreadable stations.</summary>
+        public bool AutomationSuspended => Kind == NodeKind.Station && (!NativeRoutingKnown || NativeAutoRouteItems);
 
         public string DisplayName => Name.Length > 0 ? Name : FurnitureName;
     }

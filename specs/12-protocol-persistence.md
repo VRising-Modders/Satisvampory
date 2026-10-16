@@ -23,12 +23,16 @@ A castle uses the settings of its owner's clan, or its owner when clanless, so e
 
 A destroyed container's entries are removed from every list and belt, and the affected panels show "n entries removed: chest destroyed".
 
+### Belt records
+
+Save v2 stores belt identity plus directional Input/Output connections; it writes no standalone member list. V1 migration adds counterpart connections restricted to the old routes, preserving endpoint filters, order and loops without creating extra transfers. Versionless saves use v1 migration. Missing or null Input/Output collections on an existing container mean explicitly empty lists; Default Belt enrollment does not replace them. Capturing and reloading migrated state is idempotent.
+
 ## One-time import from Satisvampory 1.x or KindredLogistics
 
 On first boot with no 2.0 data, and again on demand from the Server settings page:
 
 1. Read the older mod's settings file (Satisvampory 1.x first, else KindredLogistics; both use the same layout because 1.x began as a fork of KindredLogistics) and its save data (reserves, caps, custom categories, aliases, ClanShare and exclusions, salvage, heart fuel, repeat hunts, player toggles) and map each onto the 2.0 setting.
-2. For every castle, read chest names. Each `s<n>` / `r<n>` line becomes a belt "Line n · <plot label>". Each receiver gets an input entry pointing at that group; each sender keeps its contents. A station receiver gets the group as input. A 1.x loop allowed by `.sg convloop` imports as a loop in **Cycle once**.
+2. For every castle, read chest names. Each `s<n>` / `r<n>` line becomes a belt "Line n · <plot label>". Each sender gets Output to that belt and each receiver gets Input from it, including station receivers; importing does not move items. A 1.x loop allowed by `.sg convloop` imports as a loop in **Cycle once**.
 3. Convert names into deposit settings, since 2.0 never reads names: item names, category words, generic names and other names become **Takes** settings, trailing `+` becomes base priority, `--word` becomes bans, and special words and `NS` / `''` become special kinds (`01-containers.md`, "Names are just names").
 4. Strip the converted tokens from names only when the admin ticks **Clean names after import** (default OFF), so a rollback to 1.x still works.
 5. Write an import report (counts, anything not mapped) to the log and the Server settings page.

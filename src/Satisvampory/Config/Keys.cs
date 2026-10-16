@@ -7,7 +7,7 @@ using Progenitor.Ui;
 namespace Satisvampory.Config
 {
     /// <summary>
-    /// Keybinds (spec 10). All unbound by default so none collides with vanilla; players pick
+    /// Keybinds (spec 10). Find defaults to Ctrl+F; the other actions start unbound. Players pick
     /// keys on the settings page or in Mods › Keybinds. Pressing one raises <see cref="Pressed"/>
     /// on the client.
     /// </summary>
@@ -44,10 +44,18 @@ namespace Satisvampory.Config
         {
             var k = new Keys();
             if (!ctx.IsClient) return k;
+            var migrated = ctx.Bind("Migration", "FindCtrlF", false, "Find default shortcut migration completed.");
+            if (!migrated.Value)
+            {
+                var saved = ctx.Bind("Keybinds", Find, "Ctrl+F", "Find");
+                if (string.IsNullOrWhiteSpace(saved.Value) || saved.Value == "None") saved.Value = "Ctrl+F";
+                migrated.Value = true;
+            }
             foreach (var (id, label) in All)
             {
                 var captured = id;
-                ctx.Keybinds.Register(id, KeyChord.None, label, () => k.Pressed?.Invoke(captured));
+                KeyChord.TryParse(id == Find ? "Ctrl+F" : "None", out var chord);
+                ctx.Keybinds.Register(id, chord, label, () => k.Pressed?.Invoke(captured));
             }
             k.Registered = All;
             return k;

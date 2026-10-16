@@ -30,6 +30,9 @@ namespace Satisvampory.Engine.World
 
         /// <summary>A station's recipes with their switch state; empty for chests.</summary>
         IReadOnlyList<Stations.Recipe> Recipes(ContainerId station);
+
+        /// <summary>Queue/activity read for ingredient protection. Missing implementations fail closed.</summary>
+        Stations.StationInputState StationInputs(ContainerId station) => Stations.StationInputState.Unknown;
     }
 
     /// <summary>Write side. Every move goes through one atomic transfer.</summary>

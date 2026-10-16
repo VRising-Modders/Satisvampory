@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System.Collections.Generic;
 using System.Linq;
 using Satisvampory.Engine.Lists;
@@ -176,7 +176,7 @@ namespace Satisvampory.Engine.Tests
             var g = new LogisticsGraph();
             var (a, b, c) = (Id(), Id(), Id());
             var group = g.BeltOrCreate("Ore in");
-            group.Members.AddRange(new[] { b, c });
+            BeltOps.AddMembers(g, group.Id, new[] { b, c }, output: false);
             Assert.Same(group, g.FindBelt("ore IN"));
             g.For(a).Output.Add(ListEntry.OfBelt(group.Id));
             Assert.Equal(2, g.Edges().Count);

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System.Linq;
 using Satisvampory.Engine.Deposit;
 using Satisvampory.Engine.Lists;
@@ -102,7 +102,7 @@ namespace Satisvampory.Engine.Tests
             var g = new LogisticsGraph();
             BeltOps.Create(g, "G", out var grp);
             var a = ContainerId.New();
-            grp!.Members.Add(a);
+            BeltOps.AddMembers(g, grp!.Id, new[] { a });
             Assert.True(BeltOps.Duplicate(g, grp.Id, "G copy", out var copy).Ok);
             Assert.Equal(new[] { a }, copy!.Members);
             Assert.NotEqual(grp.Id, copy.Id);
@@ -119,7 +119,7 @@ namespace Satisvampory.Engine.Tests
             g.For(b).Output.Add(ListEntry.Of(gone));
             g.For(b).Output.Add(ListEntry.Of(a));
             var belt = g.BeltOrCreate("Ore in");
-            belt.Members.Add(gone);
+            BeltOps.AddMembers(g, belt.Id, new[] { gone });
             Assert.Contains(gone, g.Referenced());
 
             var by = new System.Collections.Generic.Dictionary<ContainerId, int>();

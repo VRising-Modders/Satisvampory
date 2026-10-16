@@ -1,5 +1,6 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Satisvampory.Engine.Deposit;
 using Satisvampory.Engine.Lists;
@@ -29,6 +30,27 @@ namespace Satisvampory.Engine.World
     /// </summary>
     public sealed class MaterialPolicy
     {
+        /// <summary>Apply a bench's configured inputs to permitted storage. Repairs bypass this.</summary>
+        public static IReadOnlyList<ContainerId> ForInput(LogisticsGraph graph, ContainerId station,
+            IReadOnlyList<ContainerId> reverseOrder, ItemId item, ItemCatalog catalog)
+        {
+            if (!graph.Lists.TryGetValue(station, out var lists)) return reverseOrder;
+            var allowed = reverseOrder.ToHashSet();
+            var result = new List<ContainerId>();
+            foreach (var entry in lists.Input.Where(e => e.Filter.Allows(item, catalog)))
+            {
+                var sources = entry.Kind == EntryKind.MassDeposit ? reverseOrder : graph.Expand(entry, output: false, owner: station);
+                foreach (var id in sources)
+                {
+                    if (id == station || !allowed.Contains(id) || result.Contains(id)) continue;
+                    if (entry.Kind != EntryKind.MassDeposit && !graph.Allows(entry, station, false, id, item, catalog)) continue;
+                    result.Add(id);
+                }
+            }
+            return lists.PullOrder == PullOrder.ReverseMassDeposit
+                ? reverseOrder.Where(result.Contains).ToList() : result;
+        }
+
         long _revision;
 
         /// <summary>Operations Satisvampory governs. Research and Other stay vanilla.</summary>

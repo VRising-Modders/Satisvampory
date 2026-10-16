@@ -235,13 +235,12 @@ namespace Satisvampory.Server
         {
             {
                 var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, cachedRows: true));
-                if (state.Graph.Lists.Count == 0 && state.Deposit.Values.All(d => d.Special == SpecialKind.None))
-                    return 0;
-
-                var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true)
+                var configured = state.Graph.Lists.Count;
+                var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true, logistics: state)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };
+                if (state.Graph.Lists.Count != configured) Stores.Save(_ctx.Save, key, state);
                 // A castle with Logistics off takes no part in conveyors (spec 10).
                 var scope = members.Where(m => Stores.Castle(_ctx.Save, m.Territory.Index).LogisticsOn).Select(ProgenitorWorld.PlotOf).ToList();
                 var deposit = new DepositContext(_half.Catalog.Current.WithEdits(state.Categories), world, scope, plot)
@@ -449,7 +448,7 @@ namespace Satisvampory.Server
         {
             var (key, members) = IslandOf(castle, all, Sharing(server));
             var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, cachedRows: true));
-            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true)
+            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, id => state.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true, logistics: state)
                 {
                     TableRecipesOn = id => state.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
                 };

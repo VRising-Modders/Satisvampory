@@ -26,6 +26,7 @@ namespace Satisvampory.World
             public InventoryRef Output;
             public ICastleHandle Castle = null!;
             public Unity.Entities.Entity Entity;
+            public float Facing;
             /// <summary>Which source slots a move may draw from; a player's bag skips the action bar.</summary>
             public InventorySlotFilter SourceSlots;
         }
@@ -65,7 +66,7 @@ namespace Satisvampory.World
         /// <summary>Drop every cached row (plugin unload).</summary>
         public static void ForgetRows() => RowCache.Clear();
 
-        public ProgenitorWorld(PluginInventory inventory, Progenitor.Stations.PluginStations? stations, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit, bool cachedRows = false)
+        public ProgenitorWorld(PluginInventory inventory, Progenitor.Stations.PluginStations? stations, IEnumerable<ICastleHandle> castles, Func<EngineId, DepositOptions?> deposit, bool cachedRows = false, Engine.Persistence.IslandState? logistics = null)
         {
             _inv = inventory;
             _stations = stations;
@@ -97,13 +98,26 @@ namespace Satisvampory.World
                         X = CastleGeometry.TileToWorld(row.Building.TileX),
                         Z = CastleGeometry.TileToWorld(row.Building.TileY),
                         Role = RoleOf(row),
+                        DefaultBeltEligible = inventory.TryIsServantContainer(row.Entity.ToEntity(), out var servantContainer, out _)
+                            && !servantContainer,
                     };
                     if (_deposit(id) is { } d) Copy(d, info.Deposit);
-                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = row.Output, Castle = castle, Entity = row.Entity.ToEntity() };
+                    if (row.IsStation)
+                    {
+                        var routing = stations?.RedistributionOwnership(row.Entity.ToEntity());
+                        info.NativeRoutingKnown = routing?.Known == true;
+                        info.NativeAutoRouteItems = routing?.AutoRouteItems == true;
+                        info.NativeRoutingReason = routing?.Reason ?? "station API is unavailable";
+                    }
+                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = row.Output, Castle = castle, Entity = row.Entity.ToEntity(), Facing = row.Building.Rotation * 90f };
                     list.Add(info);
                 }
             }
+            if (logistics != null) InitializeDefaults(logistics);
         }
+
+        public void InitializeDefaults(Engine.Persistence.IslandState state) =>
+            Engine.Lists.DefaultBelt.Initialize(state.Graph, _nodes.Values.Select(n => n.Info));
 
         /// <summary>
         /// Register the actor's bag for one action. It gets a throwaway id, is never on a plot, so it
@@ -160,6 +174,26 @@ namespace Satisvampory.World
         public int FreeSpace(EngineId id, ItemId item) =>
             TryRef(id, InvPart.Main, out var r) ? _inv.FreeSpace(r, item.Guid) : 0;
 
+        /// <summary>Native item/category acceptance for the panel, independent of furniture names and free slots.</summary>
+        public InventoryAcceptance DescribeAcceptance(EngineId id) =>
+            TryRef(id, InvPart.Main, out var r) ? _inv.DescribeAcceptance(r)
+                : new InventoryAcceptance(default, "container inventory is unavailable");
+
+        /// <summary>Live queue and reservation protection. Unknown reservations require retaining every input item.</summary>
+        public Progenitor.Stations.StationDemand StationDemand(EngineId id) =>
+            _stations != null && _nodes.TryGetValue(id, out var n) && n.Info.Kind == NodeKind.Station
+                ? _stations.Demand(n.Entity)
+                : new Progenitor.Stations.StationDemand(Progenitor.Stations.StationKind.None,
+                    Array.Empty<Progenitor.Stations.StationQueuedCraft>(), true, "station is unavailable");
+
+        public StationInputState StationInputs(EngineId id)
+        {
+            var demand = StationDemand(id);
+            // Demand is known only for an empty workstation queue or idle refinement with no current recipe.
+            return demand.IsKnown && demand.Queue.Count == 0
+                ? StationInputState.Idle : StationInputState.Unknown;
+        }
+
         public bool IsRaided(PlotId plot) => _castles.TryGetValue(plot, out var c) && c.Raided;
 
         /// <summary>
@@ -181,6 +215,8 @@ namespace Satisvampory.World
         }
 
         /// <summary>The placed entity behind a container id, for nameplate writes.</summary>
+        public float FacingOf(EngineId id) => _nodes.TryGetValue(id, out var n) ? n.Facing : 0;
+
         public Unity.Entities.Entity EntityOf(EngineId id) => _nodes.TryGetValue(id, out var n) ? n.Entity : Unity.Entities.Entity.Null;
 
         /// <summary>The game's own switch, for refinement stations.</summary>
@@ -206,11 +242,21 @@ namespace Satisvampory.World
         public int Transfer(EngineId from, InvPart fromPart, EngineId to, ItemId item, int amount)
         {
             if (amount <= 0 || !TryRef(from, fromPart, out var a) || !TryRef(to, InvPart.Main, out var b)) return 0;
+            // Re-read native ownership at the mutation boundary, including callers outside ConveyorTick (heart feed).
+            if (NativeRoutingSuspends(from) || NativeRoutingSuspends(to)) return 0;
+            if (_nodes.TryGetValue(from, out var source)
+                && (fromPart == InvPart.Main || source.Info.Role == StationRole.Workstation)
+                && (source.Info.Role == StationRole.Workstation || source.Info.Role == StationRole.Refinement)
+                && !StationDemand(from).IsKnown) return 0;
             var slots = fromPart == InvPart.Main && _nodes.TryGetValue(from, out var n) ? n.SourceSlots : InventorySlotFilter.All;
             var r = _inv.Transfer(a, b, item.Guid, amount, slots);
             if (r.Done == 0) NoteFailure($"transfer {item.Guid} x{amount}: {r.Outcome} {r.Reason}");
             return r.Ok ? r.Done : 0;
         }
+
+        bool NativeRoutingSuspends(EngineId id) => _nodes.TryGetValue(id, out var node)
+            && node.Info.Kind == NodeKind.Station
+            && (_stations == null || _stations.RedistributionOwnership(node.Entity).SuspendAutomation);
 
         /// <summary>A few failed moves per minute go to the log so a list that never moves can be explained.</summary>
         public static System.Action<string>? FailureLog { get; set; }
@@ -245,7 +291,7 @@ namespace Satisvampory.World
         {
             r = default;
             if (!_nodes.TryGetValue(id, out var n)) return false;
-            r = part == InvPart.Output && n.Info.Kind == NodeKind.Station ? n.Output : n.Main;
+            r = part == InvPart.Output && n.Info.Kind == NodeKind.Station && n.Info.Role != StationRole.Workstation ? n.Output : n.Main;
             return !r.IsNone;
         }
 
@@ -266,6 +312,9 @@ namespace Satisvampory.World
         static string Pretty(string? prefab)
         {
             if (string.IsNullOrEmpty(prefab)) return "Container";
+            if (prefab == "TM_ResearchStation_T01") return "Research Desk";
+            if (prefab == "TM_ResearchStation_T02") return "Study";
+            if (prefab == "TM_ResearchStation_T03") return "Athenaeum";
             var p = prefab!;
             var cut = p.IndexOf('_');
             if (cut > 0 && cut <= 4) p = p.Substring(cut + 1);

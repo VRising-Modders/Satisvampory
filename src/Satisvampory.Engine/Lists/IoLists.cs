@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,10 +22,15 @@ namespace Satisvampory.Engine.Lists
         public HashSet<ItemId> ExcludeItems { get; } = new();
         public HashSet<string> ExcludeCategories { get; } = new();
 
-        public bool IsAnything => Items.Count == 0 && Categories.Count == 0 && ExcludeItems.Count == 0 && ExcludeCategories.Count == 0;
+        internal Func<ItemId, ItemCatalog, bool>? Predicate { get; init; }
+        public static ItemFilter Both(ItemFilter a, ItemFilter b) => new() { Predicate = (i, c) => a.Allows(i, c) && b.Allows(i, c) };
+        public static ItemFilter Any(IEnumerable<ItemFilter> filters) { var all = filters.ToArray(); return new() { Predicate = (i, c) => all.Any(f => f.Allows(i, c)) }; }
+
+        public bool IsAnything => Predicate == null && Items.Count == 0 && Categories.Count == 0 && ExcludeItems.Count == 0 && ExcludeCategories.Count == 0;
 
         public bool Allows(ItemId item, ItemCatalog catalog)
         {
+            if (Predicate != null && !Predicate(item, catalog)) return false;
             if (ExcludeItems.Contains(item)) return false;
             if (ExcludeCategories.Any(g => catalog.InCategory(item, g))) return false;
             if (Items.Count == 0 && Categories.Count == 0) return true;
@@ -42,6 +47,15 @@ namespace Satisvampory.Engine.Lists
         public ItemFilter Filter { get; init; } = new();
         /// <summary>Creation order across the whole graph; the newest edge of a loop is the one that closes it.</summary>
         public long Sequence { get; init; }
+        public long BeltOrder { get; set; }
+        // Migration-only restriction: null means all counterparts; empty means none.
+        public HashSet<ContainerId>? BeltPeers { get; init; }
+        public bool CounterpartOnly { get; init; }
+        public ListEntry Copy(BeltId? belt = null) => new() { Kind = Kind, Container = Container, Belt = belt ?? Belt,
+            Filter = CloneFilter(Filter), Sequence = Sequence, BeltOrder = BeltOrder,
+            BeltPeers = BeltPeers == null ? null : new(BeltPeers), CounterpartOnly = CounterpartOnly };
+        static ItemFilter CloneFilter(ItemFilter f) { var n = new ItemFilter(); n.Items.UnionWith(f.Items); n.Categories.UnionWith(f.Categories);
+            n.ExcludeItems.UnionWith(f.ExcludeItems); n.ExcludeCategories.UnionWith(f.ExcludeCategories); return n; }
 
         public static ListEntry Of(ContainerId id, long seq = 0) => new() { Kind = EntryKind.Container, Container = id, Sequence = seq };
         public static ListEntry OfBelt(BeltId belt, long seq = 0) => new() { Kind = EntryKind.Belt, Belt = belt, Sequence = seq };
@@ -63,6 +77,8 @@ namespace Satisvampory.Engine.Lists
     /// <summary>The input and output lists of one container or station.</summary>
     public sealed class IoLists
     {
+        /// <summary>Preserve an intentionally empty setup rather than reapplying new-container defaults.</summary>
+        public bool KeepEmpty { get; set; }
         public List<ListEntry> Input { get; } = new();
         public List<ListEntry> Output { get; } = new();
         public PullOrder PullOrder { get; set; } = PullOrder.ListOrder;
@@ -87,7 +103,9 @@ namespace Satisvampory.Engine.Lists
 
         /// <summary>Unique on the island, compared after <see cref="NameFold"/>. Change it with <see cref="BeltOps.Rename"/>.</summary>
         public string Name { get; internal set; }
-        public List<ContainerId> Members { get; } = new();
+        internal LogisticsGraph? Graph { get; set; }
+        /// <summary>Compatibility snapshot only. Change connections with BeltOps, never this list.</summary>
+        public List<ContainerId> Members => Graph?.Members(Id).ToList() ?? new();
     }
 
     /// <summary>A directed edge after lists and groups are expanded.</summary>
@@ -126,22 +144,82 @@ namespace Satisvampory.Engine.Lists
         {
             var g = FindBelt(name);
             if (g != null) return g;
-            g = new Belt(BeltId.New(), name.Trim());
+            g = new Belt(BeltId.New(), name.Trim()) { Graph = this };
             Belts[g.Id] = g;
             return g;
         }
 
-        /// <summary>Members by folded group name, for Mass Deposit targets and scripts (which name groups).</summary>
-        public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> BeltMembers() =>
-            Belts.Values.ToDictionary(g => NameFold.Fold(g.Name), g => (IReadOnlyList<ContainerId>)g.Members);
+        public IEnumerable<(ContainerId Owner, ListEntry Entry)> Connections(BeltId belt, bool output) =>
+            UnorderedConnections(belt, output)
+                .OrderBy(p => p.Entry.BeltOrder == 0 ? p.Entry.Sequence : p.Entry.BeltOrder);
 
-        /// <summary>Containers an entry stands for (a group expands to its members in order).</summary>
-        public IEnumerable<ContainerId> Expand(ListEntry e) => e.Kind switch
+        IEnumerable<(ContainerId Owner, ListEntry Entry)> UnorderedConnections(BeltId belt, bool output)
         {
-            EntryKind.Container => new[] { e.Container },
-            EntryKind.Belt => Belts.TryGetValue(e.Belt, out var g) ? g.Members : Enumerable.Empty<ContainerId>(),
-            _ => Enumerable.Empty<ContainerId>(),
-        };
+            foreach (var pair in Lists)
+                foreach (var entry in output ? pair.Value.Output : pair.Value.Input)
+                    if (entry.Kind == EntryKind.Belt && entry.Belt == belt)
+                        yield return (pair.Key, entry);
+        }
+
+        // A pairwise check must only visit the other endpoint, not sort the entire belt.
+        IEnumerable<ListEntry> Counterparts(ListEntry entry, ContainerId owner, bool output, ContainerId other)
+        {
+            if (!Belts.ContainsKey(entry.Belt) || !Lists.TryGetValue(other, out var lists)
+                || (entry.BeltPeers != null && !entry.BeltPeers.Contains(other))) yield break;
+            foreach (var candidate in output ? lists.Input : lists.Output)
+                if (candidate.Kind == EntryKind.Belt && candidate.Belt == entry.Belt
+                    && (candidate.BeltPeers == null || candidate.BeltPeers.Contains(owner)))
+                    yield return candidate;
+        }
+
+        long CounterpartSequence(ListEntry entry, bool output, ContainerId other)
+        {
+            long sequence = long.MinValue;
+            if (Lists.TryGetValue(other, out var lists))
+                foreach (var candidate in output ? lists.Input : lists.Output)
+                    if (candidate.Kind == EntryKind.Belt && candidate.Belt == entry.Belt)
+                        sequence = Math.Max(sequence, candidate.Sequence);
+            return sequence;
+        }
+
+        public IEnumerable<ContainerId> Suppliers(BeltId belt) => Connections(belt, true).Select(p => p.Owner).Distinct();
+        public IEnumerable<ContainerId> Receivers(BeltId belt) => Connections(belt, false).Select(p => p.Owner).Distinct();
+        public IEnumerable<ContainerId> Members(BeltId belt) => Suppliers(belt).Concat(Receivers(belt)).Distinct();
+        public IReadOnlyDictionary<string, IReadOnlyList<ContainerId>> BeltMembers() =>
+            Belts.Values.ToDictionary(g => NameFold.Fold(g.Name), g => (IReadOnlyList<ContainerId>)Members(g.Id).ToList());
+
+        /// <summary>Expand an Input by default. Output callers must pass output: true.
+        /// Supply owner for migration peer restrictions.</summary>
+        public IEnumerable<ContainerId> Expand(ListEntry e, bool output = false, ContainerId? owner = null)
+        {
+            if (e.Kind == EntryKind.Container) return new[] { e.Container };
+            if (e.Kind != EntryKind.Belt || !Belts.ContainsKey(e.Belt)) return Enumerable.Empty<ContainerId>();
+            // Old callers can omit direction/owner when passing the actual stored entry.
+            if (owner == null)
+                foreach (var p in Lists)
+                    if (p.Value.Input.Contains(e) || p.Value.Output.Contains(e))
+                    { owner = p.Key; output = p.Value.Output.Contains(e); break; }
+            var self = owner;
+            return Connections(e.Belt, !output)
+                .Where(p => (e.BeltPeers == null || e.BeltPeers.Contains(p.Owner))
+                    && (p.Entry.BeltPeers == null || self == null || p.Entry.BeltPeers.Contains(self.Value)))
+                .Select(p => p.Owner).Distinct();
+        }
+
+        /// <summary>Both the supplier's Output filter and receiver's Input filter must allow an item.</summary>
+        public bool Allows(ListEntry entry, ContainerId owner, bool output, ContainerId other, ItemId item, ItemCatalog catalog)
+        {
+            if (!entry.Filter.Allows(item, catalog)) return false;
+            if (entry.Kind == EntryKind.Container) return entry.Container == other;
+            if (entry.Kind != EntryKind.Belt) return false;
+            foreach (var counterpart in Counterparts(entry, owner, output, other))
+                if (counterpart.Filter.Allows(item, catalog)) return true;
+            return false;
+        }
+
+        ItemFilter ConnectionFilter(ListEntry e, ContainerId owner, bool output, ContainerId other) =>
+            e.Kind != EntryKind.Belt ? e.Filter : ItemFilter.Both(e.Filter,
+                ItemFilter.Any(Counterparts(e, owner, output, other).Select(p => p.Filter)));
 
         /// <summary>
         /// Every container-to-container edge. An output entry on A naming B and an input entry on
@@ -162,11 +240,25 @@ namespace Satisvampory.Engine.Lists
             foreach (var (owner, lists) in Lists)
             {
                 foreach (var e in lists.Output)
-                    foreach (var to in Expand(e))
-                        Add(new Edge(owner, to, e.Filter, owner, true, e.Sequence));
-                foreach (var e in lists.Input)
-                    foreach (var from in Expand(e))
-                        Add(new Edge(from, owner, e.Filter, owner, false, e.Sequence));
+                {
+                    // Normal belt Output advertises stock; receiver Input drives demand.
+                    // Migrated Output definitions retain their original edge ownership.
+                    if (e.CounterpartOnly) continue;
+                    foreach (var to in Expand(e, true, owner))
+                    {
+                        var demand = e.Kind == EntryKind.Belt && e.BeltPeers == null;
+                        var sequence = demand ? Math.Max(e.Sequence, CounterpartSequence(e, true, to)) : e.Sequence;
+                        Add(new Edge(owner, to, ConnectionFilter(e, owner, true, to), demand ? to : owner, !demand, sequence));
+                    }
+                }
+                foreach (var e in lists.Input.Where(e => !e.CounterpartOnly))
+                    foreach (var from in Expand(e, false, owner))
+                    {
+                        var sequence = e.Kind == EntryKind.Belt && e.BeltPeers == null
+                            ? Math.Max(e.Sequence, CounterpartSequence(e, false, from))
+                            : e.Sequence;
+                        Add(new Edge(from, owner, ConnectionFilter(e, owner, false, from), owner, false, sequence));
+                    }
             }
             return order.Select(k => byPair[k]).ToList();
         }
@@ -178,6 +270,7 @@ namespace Satisvampory.Engine.Lists
         public int Forget(ContainerId id, IDictionary<ContainerId, int>? byContainer = null)
         {
             var removed = 0;
+            if (Lists.TryGetValue(id, out var own)) removed += own.Input.Concat(own.Output).Count(e => e.Kind == EntryKind.Belt);
             Lists.Remove(id);
             foreach (var (owner, l) in Lists)
             {
@@ -186,7 +279,8 @@ namespace Satisvampory.Engine.Lists
                 if (n > 0 && byContainer != null) byContainer[owner] = (byContainer.TryGetValue(owner, out var had) ? had : 0) + n;
                 removed += n;
             }
-            foreach (var g in Belts.Values) removed += g.Members.RemoveAll(m => m == id);
+            foreach (var l in Lists.Values)
+                foreach (var e in l.Input.Concat(l.Output)) e.BeltPeers?.Remove(id);
             return removed;
         }
 
@@ -197,7 +291,7 @@ namespace Satisvampory.Engine.Lists
             foreach (var l in Lists.Values)
                 foreach (var e in l.Input.Concat(l.Output))
                     if (e.Kind == EntryKind.Container && e.Container is { } c) set.Add(c);
-            foreach (var g in Belts.Values) set.UnionWith(g.Members);
+            foreach (var g in Belts.Values) set.UnionWith(Members(g.Id));
             return set;
         }
     }

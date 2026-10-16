@@ -27,7 +27,7 @@ namespace Satisvampory.Client
                 "Castle settings, Mass Deposit, belts and categories, the island inventory and Find live here. Hover a word with a small ⓘ to read what it means."),
             (ListsTip, "Input and Output",
                 "Input is where this pulls from; Output is where it sends to. Add chests or belts, drag to reorder. Stations pull only whole crafts."),
-            (DepositTip, "Deposit settings",
+            (DepositTip, "Accepts",
                 "These decide where Mass Deposit puts things: what this chest takes, its priority and its bans. The chest's name never matters."),
             (MassDepositTip, "Mass Deposit",
                 "Stash sends each item to the chest whose deposit settings rate it highest. Overrides and rules here change that for the whole island; Try it shows what would happen without moving anything."),

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -160,8 +160,7 @@ namespace Satisvampory.Engine.Import
                 var existed = graph.FindBelt(name) != null;
                 var group = graph.BeltOrCreate(name);
                 if (!existed) report.GroupsCreated++;
-                foreach (var s in senders)
-                    if (!group.Members.Contains(s.Id)) group.Members.Add(s.Id);
+                report.EntriesCreated += BeltOps.AddMembers(graph, group.Id, senders.Select(s => s.Id), output: true);
 
                 foreach (var r in receivers)
                 {

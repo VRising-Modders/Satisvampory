@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System.Collections.Generic;
 using Progenitor.Networking;
 
@@ -151,6 +151,9 @@ namespace Satisvampory.Net
         [Field(4)] public List<string> UsedBy = new();
         /// <summary>Plot labels the belt spans.</summary>
         [Field(5)] public List<string> Plots = new();
+        [Field(6)] public List<RowMsg> Suppliers = new();
+        [Field(7)] public List<RowMsg> Receivers = new();
+        [Field(8)] public bool BuiltIn;
     }
 
     [ModMessage("sv.category")]
@@ -176,6 +179,8 @@ namespace Satisvampory.Net
         /// <summary>Add by name preview: the belt it is for, and what would be added.</summary>
         [Field(4)] public string PreviewFor = "";
         [Field(5)] public List<string> Preview = new();
+        [Field(6)] public int PreviewDirection;
+        [Field(7)] public string PreviewText = "";
     }
 
     [ModMessage("sv.belts.get")]
@@ -200,6 +205,9 @@ namespace Satisvampory.Net
         [Field(7)] public int PickIndex;
         [Field(8)] public int PickGeneration;
         [Field(9)] public int PickType;
+        /// <summary>0 supplier (Output), 1 receiver (Input).</summary>
+        [Field(10)] public int Direction;
+        [Field(11)] public string MemberId = "";
     }
 
     // ---------------- Inventory ----------------
@@ -291,6 +299,9 @@ namespace Satisvampory.Net
     public sealed class FindReq
     {
         [Field(1)] public string Text = "";
+        [Field(2)] public bool IncludeClanPlots;
+        [Field(3)] public bool PartialMatch = true;
+        [Field(4)] public int Kind;
     }
 
     [ModMessage("sv.found")]
@@ -300,6 +311,7 @@ namespace Satisvampory.Net
         [Field(2)] public long Total;
         [Field(3)] public List<EvalRowMsg> Chests = new();
         [Field(4)] public int Item;
+        [Field(5)] public int MatchRank;
     }
 
     [ModMessage("sv.find.reply")]
@@ -309,6 +321,30 @@ namespace Satisvampory.Net
         [Field(2)] public List<EvalRowMsg> ChestsByName = new();
         [Field(3)] public List<string> Categories = new();
         [Field(4)] public bool Ambiguous;
+    }
+
+    [ModMessage("sv.find.preview")]
+    public sealed class PreviewReq
+    {
+        [Field(1)] public string ContainerId = "";
+        [Field(2)] public bool IncludeClanPlots;
+    }
+
+    [ModMessage("sv.find.preview.reply")]
+    public sealed class PreviewReply
+    {
+        [Field(1)] public string Token = "";
+        [Field(2)] public float X;
+        [Field(3)] public float Y;
+        [Field(4)] public float Z;
+        [Field(5)] public float Yaw;
+        [Field(6)] public int FloorHeight = -1;
+    }
+
+    [ModMessage("sv.find.preview.end")]
+    public sealed class EndPreviewReq
+    {
+        [Field(1)] public string Token = "";
     }
 
     [ModMessage("sv.pull")]

@@ -51,6 +51,7 @@ namespace Satisvampory.Server
             public long StockAt;
             public DepositContext Deposit = null!;
             public CastleRules Rules = null!;
+            public Engine.Lists.LogisticsGraph Graph = null!;
             public List<PgId> Candidates = new();
             /// <summary>Per item: the spend order and reserve, computed once per cache life.</summary>
             public Dictionary<int, MaterialAnswer?> Answers = new();
@@ -150,10 +151,14 @@ namespace Satisvampory.Server
                 island.Answers[item] = answer = _half.MaterialPolicy.Sources(use, serverAllows: true, playerAllows: true, island.Deposit, island.Rules, new ItemId(item));
             if (answer is not { } a) return null;
             var station = context.Station;
-            var order = a.SpendOrder.Select(id => new PgId(id.Value)).Where(id => !id.Equals(station)).ToList();
+            var benchCraft = context.Operation == MaterialOperation.Craft && !station.IsNone;
+            var spend = benchCraft
+                ? Engine.World.MaterialPolicy.ForInput(island.Graph, new Engine.Model.ContainerId(station.Value), a.SpendOrder, new ItemId(item), island.Deposit.Catalog)
+                : a.SpendOrder;
+            var order = spend.Select(id => new PgId(id.Value)).Where(id => !id.Equals(station)).ToList();
             // A governed item with no sources counts as zero in the game's check and would refuse the
             // whole operation; when the island holds none, leave that item to the game's own rules.
-            if (order.Count == 0) return null;
+            if (order.Count == 0 && !benchCraft) return null;
             return new ItemSources(order, a.PoolReserve);
         }
 
@@ -206,11 +211,11 @@ namespace Satisvampory.Server
             // The island's shape is cached; the counts are re-read at most once a second (StockMs),
             // one read per chest, and every per-item ranking then runs from memory.
             var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);
-            var belts = island.State.Graph.BeltMembers();
             // Only the island's shape depends on the castles' buildings (the ticker invalidates on
             // built or destroyed containers), so the world is built once here over cached rows.
             var live = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true);
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, cachedRows: true, logistics: island.State);
+            var belts = island.State.Graph.BeltMembers();
             DepositContext ReadStock() =>
                 new(catalog, new SnapshotView(live), island.Scope, ProgenitorWorld.PlotOf(island.Standing))
                 {
@@ -222,7 +227,7 @@ namespace Satisvampory.Server
                 .Where(c => c.Deposit.Special is SpecialKind.None or SpecialKind.Overflow or SpecialKind.Spoils)
                 .Select(c => new PgId(c.Id.Value))
                 .ToList();
-            return new Resolved { ReadStock = ReadStock, StockAt = Environment.TickCount64, Deposit = deposit, Rules = island.State.Rules, Candidates = candidates };
+            return new Resolved { ReadStock = ReadStock, StockAt = Environment.TickCount64, Deposit = deposit, Rules = island.State.Rules, Graph = island.State.Graph, Candidates = candidates };
         }
     }
 }

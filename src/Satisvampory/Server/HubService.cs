@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,6 +30,7 @@ namespace Satisvampory.Server
     {
         readonly SatisContext _ctx;
         readonly ServerHalf _half;
+        readonly Dictionary<Entity, (string Token, IDisposable Lease)> _previews = new();
 
         internal HubService(SatisContext ctx, ServerHalf half)
         {
@@ -54,6 +55,13 @@ namespace Satisvampory.Server
             AttachLiveInventory();
             r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => SetRule(s, q)));
             r.Handle<FindReq, FindReply>((u, q, i) => With(u, s => Find(s, q)));
+            r.Handle<PreviewReq, PreviewReply>((u, q, i) => With(u, s => BeginPreview(s, q)));
+            r.Handle<EndPreviewReq, ViewSaved>((u, q, i) =>
+            {
+                if (_previews.TryGetValue(u, out var current) && current.Token == q.Token)
+                { current.Lease.Dispose(); _previews.Remove(u); }
+                return new ViewSaved { Ok = true };
+            });
             r.Handle<PullReq, TextReply>((u, q, i) => With(u, s => Pull(s, q)));
             r.Handle<StorageCountReq, StorageCountReply>((u, q, i) => With(u, s => StorageCount(s, q)),
                 new Progenitor.Networking.RequestOptions { Burst = 20, PerSecond = 10 });
@@ -81,7 +89,7 @@ namespace Satisvampory.Server
             var relation = _ctx.Castles.RelationTo(userEntity, island.Standing);
             var catalog = _half.Catalog.Current.WithEdits(island.State.Categories);
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
-                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null)
+                id => island.State.Deposit.TryGetValue(id, out var d) ? d : null, logistics: island.State)
             {
                 TableRecipesOn = id => island.State.TableRecipesOn.TryGetValue(id, out var on) ? on : null,
             };
@@ -391,20 +399,21 @@ namespace Satisvampory.Server
             var msg = new BeltsMsg { CanEdit = s.Role != ActorRole.Guest };
             foreach (var b in graph.Belts.Values.OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase))
             {
-                var bm = new BeltMsg { Id = b.Id.Value.ToString("N"), Name = b.Name };
-                foreach (var m in b.Members)
+                var bm = new BeltMsg { Id = b.Id.Value.ToString("N"), Name = b.Name, BuiltIn = b.Id == DefaultBelt.Id };
+                foreach (var output in new[] { true, false })
+                foreach (var member in output ? graph.Suppliers(b.Id) : graph.Receivers(b.Id))
                 {
-                    var c = s.World.Find(m);
+                    var c = s.World.Find(member);
                     var row = new RowMsg
                     {
-                        ContainerId = m.Value.ToString("N"),
-                        Name = c?.DisplayName ?? "(gone)",
+                        ContainerId = member.Value.ToString("N"), Name = c?.DisplayName ?? "(gone)",
                         Where = c == null ? "" : Label(s.Island, c.Plot),
-                        // At a glance: what it holds most.
-                        Status = c == null ? "" : string.Join(", ", s.World.Contents(m).OrderByDescending(x => x.Amount).Take(2).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
+                        Status = c == null ? "Gone" : !s.Island.Scope.Contains(c.Plot) ? "Out of scope" :
+                            string.Join(", ", s.World.Contents(member).OrderByDescending(x => x.Amount).Take(2).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
                     };
-                    if (TargetResolver.Words(_ctx, m, out var ni, out var ng, out var nt)) { row.PickIndex = ni; row.PickGeneration = ng; row.PickType = nt; }
-                    bm.Members.Add(row);
+                    if (TargetResolver.Words(_ctx, member, out var ni, out var ng, out var nt)) { row.PickIndex = ni; row.PickGeneration = ng; row.PickType = nt; }
+                    (output ? bm.Suppliers : bm.Receivers).Add(row);
+                    if (!bm.Members.Any(m => m.ContainerId == row.ContainerId)) bm.Members.Add(row);
                     if (row.Where.Length > 0 && !bm.Plots.Contains(row.Where)) bm.Plots.Add(row.Where);
                 }
                 foreach (var u in BeltOps.Usages(graph, b.Id, refs))
@@ -442,6 +451,8 @@ namespace Satisvampory.Server
             BeltId Id() => Guid.TryParse(q.BeltId, out var g) && graph.Belts.ContainsKey(new BeltId(g))
                 ? new BeltId(g) : throw new RequestRefusedException("That belt no longer exists.");
 
+            if (q.Direction is not (0 or 1)) throw new RequestRefusedException("Unknown direction.");
+            var output = q.Direction == 0;
             switch (q.Op)
             {
                 case 0: Must(s.Edits.CreateBelt(s.Role, q.Name, out _)); break;
@@ -451,30 +462,41 @@ namespace Satisvampory.Server
                 {
                     var matches = BeltOps.MatchByName(s.World, s.Island.Scope, q.Text).Select(c => c.Id).ToList();
                     if (matches.Count == 0) throw new RequestRefusedException($"No chest on the island is named with \"{q.Text}\".");
-                    Must(s.Edits.AddBeltMembers(s.Role, Id(), matches));
+                    Must(s.Edits.AddBeltMembers(s.Role, Id(), matches, output));
                     break;
                 }
                 case 4:
                 {
-                    var belt = graph.Belts[Id()];
-                    if (q.Index < 0 || q.Index >= belt.Members.Count) throw new RequestRefusedException("That member is gone; the belt changed.");
-                    belt.Members.RemoveAt(q.Index);
+                    var id = Id();
+                    var members = (output ? graph.Suppliers(id) : graph.Receivers(id)).ToList();
+                    if (q.Index < 0 || q.Index >= members.Count || (q.MemberId.Length > 0 && q.MemberId != members[q.Index].Value.ToString("N")))
+                        throw new RequestRefusedException("That member is gone; the belt changed.");
+                    BeltOps.Remove(graph, id, members[q.Index], output);
+                    s.Island.State.Touched.Add(members[q.Index]);
                     break;
                 }
                 case 5:
-                    if (!BeltOps.Move(graph, Id(), q.Index, q.To)) throw new RequestRefusedException("That member is gone; the belt changed.");
+                {
+                    var id = Id();
+                    var members = (output ? graph.Suppliers(id) : graph.Receivers(id)).ToList();
+                    if (q.MemberId.Length > 0 && (q.Index < 0 || q.Index >= members.Count || q.MemberId != members[q.Index].Value.ToString("N")))
+                        throw new RequestRefusedException("The belt changed; refresh and try again.");
+                    if (!BeltOps.Move(graph, id, q.Index, q.To, output)) throw new RequestRefusedException("That member is gone; the belt changed.");
+                    foreach (var member in members) s.Island.State.Touched.Add(member);
                     break;
+                }
                 case 7:
                 {
                     var picked = TargetResolver.Resolve(_ctx, q.PickIndex, q.PickGeneration, q.PickType, out var why)
                         ?? throw new RequestRefusedException(why);
                     if (s.World.Find(picked) == null) throw new RequestRefusedException("That is not on this island.");
-                    Must(s.Edits.AddBeltMembers(s.Role, Id(), new[] { picked }));
+                    Must(s.Edits.AddBeltMembers(s.Role, Id(), new[] { picked }, output));
                     break;
                 }
                 case 6:
                 {
-                    var r = BeltOps.Duplicate(graph, Id(), q.Name, out _);
+                    var r = BeltOps.Duplicate(graph, Id(), q.Name, out var copy);
+                    if (copy != null) foreach (var member in graph.Members(copy.Id)) s.Island.State.Touched.Add(member);
                     if (!r.Ok) throw new RequestRefusedException(r.Error);
                     break;
                 }
@@ -495,6 +517,8 @@ namespace Satisvampory.Server
                     var matches = BeltOps.MatchByName(s.World, s.Island.Scope, q.Text).ToList();
                     var preview = Belts(s);
                     preview.PreviewFor = q.BeltId;
+                    preview.PreviewDirection = q.Direction;
+                    preview.PreviewText = q.Text;
                     preview.Preview.AddRange(matches.Take(30).Select(c => $"{c.DisplayName} · {Label(s.Island, c.Plot)}"));
                     if (matches.Count > 30) preview.Preview.Add($"… and {matches.Count - 30} more");
                     return preview;
@@ -715,27 +739,60 @@ namespace Satisvampory.Server
 
         FindReply Find(Session s, FindReq q)
         {
-            var r = Engine.Ui.Find.Run(s.World, s.Catalog, s.Island.Scope, s.Standing, p => Label(s.Island, p), q.Text ?? "");
+            var castles = q.IncludeClanPlots
+                ? _ctx.Castles.All().Where(c => c.Enabled && !c.Raided && _ctx.Castles.RelationTo(s.UserEntity, c) is CastleRelation.Owner or CastleRelation.ClanMember).ToList()
+                : new List<ICastleHandle> { s.Island.Standing };
+            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, castles, _ => null);
+            var scope = castles.Select(ProgenitorWorld.PlotOf).ToList();
+            string PlotLabel(PlotId plot) => castles.Where(c => ProgenitorWorld.PlotOf(c) == plot).Select(c => Labels.Name(_ctx.Save, c)).FirstOrDefault() ?? plot.ToString();
+            var r = Engine.Ui.Find.Run(world, s.Catalog, scope, s.Standing, PlotLabel, q.Text ?? "", q.PartialMatch, q.Kind, _half.Catalog.Findable);
             var reply = new FindReply { Ambiguous = r.Ambiguous };
             reply.Categories.AddRange(r.Categories);
-            int LevelOf(PlotId plot) => s.Island.Castles.FirstOrDefault(c => ProgenitorWorld.PlotOf(c) == plot)?.Level ?? 0;
-            foreach (var it in r.Items.Take(25))
-                reply.Items.Add(new FoundMsg
-                {
-                    Item = it.Item.Guid,
-                    Name = it.Name,
-                    Total = it.Total,
-                    Chests = it.Chests.Take(40).Select(c => WithWords(new EvalRowMsg { Name = c.Name, Where = c.PlotLabel, Amount = c.Count, Level = LevelOf(c.Plot) }, c.Id)).ToList(),
-                });
-            reply.ChestsByName.AddRange(r.ChestsByName.Take(20).Select(c => WithWords(new EvalRowMsg
+            EvalRowMsg Row(FoundChest c)
             {
-                Name = c.Name,
-                Where = c.PlotLabel,
-                Amount = c.Count,
-                Level = LevelOf(c.Plot),
-                Holds = string.Join(", ", s.World.Contents(c.Id).OrderByDescending(x => x.Amount).Take(3).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
-            }, c.Id)));
+                var row = WithWords(new EvalRowMsg
+            {
+                ContainerId = c.Id.Value.ToString("N"), Name = c.Name, Where = c.PlotLabel + (c.Here ? " (here)" : ""), Amount = c.Count,
+                Why = c.Produces ? c.Count > 0 ? "Stores and makes" : "Can make" : "Stores",
+                Level = castles.FirstOrDefault(x => ProgenitorWorld.PlotOf(x) == c.Plot)?.Level ?? 0,
+                Holds = string.Join(", ", world.Contents(c.Id).OrderByDescending(x => x.Amount).Take(3).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
+            }, c.Id);
+                if (_ctx.Castles.TryGetBuildingPosition(world.EntityOf(c.Id), out var position))
+                {
+                    row.Yaw = world.FacingOf(c.Id) + 180f;
+                    row.HasPosition = true; row.X = position.X; row.Y = position.Y; row.Z = position.Z;
+                }
+                return row;
+            }
+            foreach (var it in r.Items.Take(25))
+                reply.Items.Add(new FoundMsg { Item = it.Item.Guid, Name = it.Name, Total = it.Total,
+                    MatchRank = it.MatchRank, Chests = it.Chests.Take(40).Select(Row).ToList() });
+            reply.ChestsByName.AddRange(r.ChestsByName.Take(40).Select(Row));
             return reply;
+        }
+
+        PreviewReply BeginPreview(Session s, PreviewReq q)
+        {
+            if (!Guid.TryParse(q.ContainerId, out var guid)) throw new RequestRefusedException("Choose a chest or station first.");
+            var castles = q.IncludeClanPlots
+                ? _ctx.Castles.All().Where(c => c.Enabled && !c.Raided && _ctx.Castles.RelationTo(s.UserEntity, c) is CastleRelation.Owner or CastleRelation.ClanMember).ToList()
+                : new List<ICastleHandle> { s.Island.Standing };
+            var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, castles, _ => null);
+            var id = new ContainerId(guid);
+            if (world.Find(id) == null) throw new RequestRefusedException("That location is no longer accessible.");
+            var entity = world.EntityOf(id);
+            if (!_ctx.Castles.TryGetBuildingPosition(entity, out var point)) throw new RequestRefusedException("That location is unavailable.");
+            if (_previews.Remove(s.UserEntity, out var previous)) previous.Lease.Dispose();
+            var token = Guid.NewGuid().ToString("N");
+            var lease = _ctx.Camera.Observe(s.UserEntity, entity, 9);
+            _previews[s.UserEntity] = (token, lease);
+            MainThread.PostDelayed(9.1, () =>
+            {
+                if (_previews.TryGetValue(s.UserEntity, out var active) && active.Token == token)
+                { active.Lease.Dispose(); _previews.Remove(s.UserEntity); }
+            }, _ctx.Owner);
+            return new PreviewReply { Token = token, X = point.X, Y = point.Y, Z = point.Z,
+                Yaw = world.FacingOf(id) + 180, FloorHeight = _ctx.Castles.BuildingFloorHeight(entity) };
         }
 
         TextReply Pull(Session s, PullReq q)

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Linq;
 using Satisvampory.Engine.Deposit;
@@ -20,7 +20,7 @@ namespace Satisvampory.Engine.Tests
             var g = state.Graph;
             var (a, b, c) = (ContainerId.New(), ContainerId.New(), ContainerId.New());
             var belt = g.BeltOrCreate("Ore in");
-            belt.Members.AddRange(new[] { b, c });
+            BeltOps.AddMembers(state.Graph, belt.Id, new[] { b, c });
             var filtered = ListEntry.Of(b, g.NextSequence());
             filtered.Filter.Categories.Add("ore");
             filtered.Filter.ExcludeItems.Add(CopperOre);
@@ -44,11 +44,11 @@ namespace Satisvampory.Engine.Tests
             var json = SaveCodec.ToJson(SaveCodec.Capture(state, g.Sequence));
             var back = SaveCodec.Restore(SaveCodec.FromJson(json), out var seq);
 
-            Assert.Equal(3, seq);
+            Assert.Equal(g.Sequence, seq);
             Assert.True(back.Graph.NextSequence() > 3);
             var belt2 = back.Graph.FindBelt("ore in")!;
             Assert.Equal(belt.Id, belt2.Id);
-            Assert.Equal(new[] { b, c }, belt2.Members);
+            Assert.Equal(new[] { b, c }, back.Graph.Suppliers(belt2.Id));
             var la = back.Graph.Lists[a];
             Assert.Equal(PullOrder.ReverseMassDeposit, la.PullOrder);
             Assert.Equal(EntryKind.Belt, la.Input.Single().Kind);

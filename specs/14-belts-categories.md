@@ -19,7 +19,7 @@ The UI always says "Belt" or "Category", never just "group". Both words are expl
 - **Belts and categories** row on the Castle settings page.
 - **Manage belts…** / **Manage categories…** at the bottom of every picker and list editor.
 - A list row that is a belt has an **Edit belt** action that opens the screen on it.
-- A container's Deposit settings show the belts it is on as chips, with **+** to add it to one and **×** to remove it. Clicking a chip opens that belt.
+- Input and Output offer **Manage belts**; Accepts never edits membership, and legacy Accepts membership requests are refused.
 - From the Mass Deposit screen: any belt or category named in a row or rule.
 - From the Inventory page (`15-inventory.md`): any category.
 
@@ -55,7 +55,7 @@ Left list: every belt on the island, with its member count and the plot labels i
 Right panel for the selected belt:
 
 - **Name**, renamed in place. Unique among belts on the island, compared case-insensitively. No quotes.
-- **Members** are an ordered list. Order matters for "Respect list order" pulls and for "Fill in order" sends.
+- **Suppliers** and **Receivers** show every connected chest/station, its plot label, direction and status. Adding/removing a member updates its Output/Input connection. Members cannot exist without a direction. Suppliers and receivers reorder independently for list-order routing; both endpoint filters apply.
   - Drag to reorder, or use the up and down buttons. Remove with ✕.
   - Each row shows the member's icon, name, plot label, distance, what it holds at a glance, and **Locate**.
 - **Add…** opens the picker (`02-io-lists.md`, "Pickers"). It allows multi-select.
@@ -63,8 +63,8 @@ Right panel for the selected belt:
 - **Add by name…** adds every container on the island whose name contains the text as whole words. For example, `ore` adds "Ore", "Ore 2" and "Copper ore", but not "Core". It shows the matches before adding. Hearts are never offered.
 - **Used by** lists every list entry, Mass Deposit override, and Advanced rule line that refers to this belt. Each one jumps to where it is used.
 - **Locate all** pings every member for ten seconds.
-- **Duplicate** copies the belt under a new name.
-- **Delete** asks first, listing what uses the belt.
+- **Duplicate** copies a custom belt and its directed connections, filters and direction-specific order. Default Belt cannot be duplicated.
+- **Delete** asks first, listing what uses a custom belt. Default Belt cannot be renamed or deleted; remove its connections instead.
   - The belt is removed from every list that used it, and those lists show what was removed.
   - Mass Deposit overrides naming it are removed.
   - Advanced rule lines naming it are not edited. The script fails its check and keeps running on its last good version until a player fixes it.

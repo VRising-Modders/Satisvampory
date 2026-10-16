@@ -13,7 +13,7 @@ The wording below is used for tooltips, the glossary page, and tips. Keep it to 
 | **Input** | Where this chest or station pulls items from. |
 | **Output** | Where this chest or station sends items to. |
 | **Mass Deposit** | Where each item belongs, decided by each chest's deposit settings (what it takes, at what priority), never by its name. Quick stash, tidy and servant loot use it. "Push: Mass Deposit" in an Output sends items home every tick; "Pull: reverse Mass Deposit" in an Input takes them from wherever they are stored worst. |
-| **Deposit settings** | A chest's gear: what it takes (anything, only what's listed, nothing), its priority, its bans. |
+| **Accepts** | What automation may put here. Manual deposits ignore these rules; game restrictions always apply. |
 | **Island** | All the castles whose chests you can use from where you stand. It follows castle share and clan share. |
 | **Castle share** | Your own castles act as one: craft at one, use chests at another. |
 | **Clan share** | Every castle of every clan member taking part acts as one. |

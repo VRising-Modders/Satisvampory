@@ -18,7 +18,7 @@ namespace Satisvampory.Engine.Tests
 
         public ContainerInfo Chest(PlotId plot, string name, int capacity = 1000, NodeKind kind = NodeKind.Chest)
         {
-            var c = new ContainerInfo(ContainerId.New(), plot, kind, name) { FurnitureName = "Large Chest" };
+            var c = new ContainerInfo(ContainerId.New(), plot, kind, name) { FurnitureName = "Large Chest", NativeRoutingKnown = true };
             _all.Add(c);
             _capacity[c.Id] = capacity;
             return c;
@@ -62,6 +62,10 @@ namespace Satisvampory.Engine.Tests
         public bool IsRaided(PlotId plot) => Raided.Contains(plot);
 
         public Dictionary<ContainerId, List<Stations.Recipe>> StationRecipes { get; } = new();
+
+        public Dictionary<ContainerId, Stations.StationInputState> InputStates { get; } = new();
+        public Stations.StationInputState StationInputs(ContainerId station) =>
+            InputStates.TryGetValue(station, out var state) ? state : Stations.StationInputState.Unknown;
 
 
         public int Destroy(ContainerId from, ItemId item, int amount)

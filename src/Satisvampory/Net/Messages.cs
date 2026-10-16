@@ -111,6 +111,7 @@ namespace Satisvampory.Net
         /// <summary>Links another container set up that reach this one (spec 02, "set on A"): into this one, and out of it.</summary>
         [Field(19)] public List<string> InputFromOthers = new();
         [Field(20)] public List<string> OutputFromOthers = new();
+        [Field(21)] public string NativeRestriction = "";
     }
 
     [ModMessage("sv.recipe")]
@@ -226,6 +227,12 @@ namespace Satisvampory.Net
         /// <summary>Find: the plot's heart level, and what a chest found by name holds.</summary>
         [Field(8)] public int Level;
         [Field(9)] public string Holds = "";
+        [Field(10)] public string ContainerId = "";
+        [Field(11)] public bool HasPosition;
+        [Field(12)] public float X;
+        [Field(13)] public float Y;
+        [Field(14)] public float Z;
+        [Field(15)] public float Yaw;
     }
 
     [ModMessage("sv.tryit.reply")]

@@ -37,7 +37,7 @@ namespace Satisvampory
             _ctx.Track(new OnDispose(() => _admin.Run = null));
             _ctx.Track(new OnDispose(() => _admin.Request = null));
             Client.Help.Attach(_ctx, _player);
-            var panels = new Client.Panels(_ctx);
+            var panels = new Client.Panels(_ctx, _player);
             panels.Attach();
             var hub = new Client.Hub(_ctx, _player);
             hub.Attach(_keys);

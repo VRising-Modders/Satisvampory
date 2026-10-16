@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+﻿// SPDX-License-Identifier: AGPL-3.0-only
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -159,7 +159,7 @@ namespace Satisvampory.Engine.Player
             foreach (var (id, lists) in graph.Lists)
                 if (lists.Input.Count > 0 || lists.Output.Count > 0) set.Add(id);
             foreach (var g in graph.Belts.Values)
-                foreach (var m in g.Members) set.Add(m);
+                foreach (var m in graph.Members(g.Id)) set.Add(m);
             return set;
         }
 

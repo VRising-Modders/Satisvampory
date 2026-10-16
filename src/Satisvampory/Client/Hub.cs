@@ -278,7 +278,7 @@ namespace Satisvampory.Client
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
                 p.Footer = $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · {UiApi.FrameworkFooter}";
-                _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" });
+                _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" }, new UiTabsOptions());
                 _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
@@ -1086,23 +1086,22 @@ namespace Satisvampory.Client
         {
             _findText = _tabs.Add(FindTab, p.SearchInput("Search items, chests or stations", ""));
             Track(_findText.OnChanged(_ => QueueFind()));
-            Track(_findText.OnSubmitted(_ => RunFind()));
+            Track(_findText.ActionButton("Find", _ => RunFind()));
             p.BeginInline();
-            var scope = FindControl(p.Dropdown("Scope", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
+            var scope = FindControl(p.CompactDropdown("Scope", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
             Track(scope.OnChanged(value => { _findClan = value == "clan"; RunFind(); }));
-            var matching = FindControl(p.Dropdown("Match", new[] { "partial", "exact" }, "partial", new[] { "Partial name", "Full name" }));
+            var matching = FindControl(p.CompactDropdown("Match", new[] { "partial", "exact" }, "partial", new[] { "Partial name", "Full name" }));
             Track(matching.OnChanged(value => { _findPartial = value == "partial"; RunFind(); }));
-            var kind = FindControl(p.Dropdown("Show", new[] { "0", "1", "2" }, "0", new[] { "All results", "Containers only", "Items only" }));
+            var kind = FindControl(p.CompactDropdown("Show", new[] { "0", "1", "2" }, "0", new[] { "All results", "Containers only", "Items only" }));
             Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); RunFind(); }));
             p.EndInline();
-            Track(FindControl(p.Button("Find")).OnClick(RunFind));
             _findResult = FindControl(p.Label("Search, choose a match, then choose its location."));
             _findMatches = FindControl(p.DataTable("find.matches", new[]
             {
                 new UiTableColumn("name", "Matches — best first") { Hideable = false },
                 new UiTableColumn("kind", "Type") { Width = 210 },
                 new UiTableColumn("amount", "Stored", UiTableColumnKind.Number) { Width = 130 },
-            }, new UiDataTableOptions { VisibleRows = 10, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
+            }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
             Track(_findMatches.OnSelectionChanged(ids => SelectFindMatch(ids.FirstOrDefault())));
             Track(FindControl(p.Button("Back to matches"), true).OnClick(() => { _findMatches.SetSelected(Array.Empty<string>()); ShowFindStage(false); }));
             _findTable = FindControl(p.DataTable("find", new[]
@@ -1111,7 +1110,7 @@ namespace Satisvampory.Client
                 new UiTableColumn("plot", "Plot") { Width = 320 },
                 new UiTableColumn("count", "Stored", UiTableColumnKind.Number) { Format = "#,0", Width = 130 },
                 new UiTableColumn("holds", "Details") { Width = 380 },
-            }, new UiDataTableOptions { VisibleRows = 10, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
+            }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
             Track(_findTable.OnSelectionChanged(_ =>
             {
                 if (_player.AutoPinFind && SelectedFindLocation()?.HasPosition == true) Locate();
@@ -1189,7 +1188,7 @@ namespace Satisvampory.Client
             {
                 var c = r.ChestsByName[i];
                 matches.Add((Engine.Ui.Find.MatchRank(c.Name, _findText.Value ?? ""), c.Amount, c.Name,
-                    new UiTableRow("place:" + i).Text("name", c.Name).Text("kind", "Chest / station").Number("amount", c.Amount)));
+                    new UiTableRow("place:" + i) { BuildingPrefab = c.BuildingPrefab }.Text("name", c.Name).Text("kind", "Chest / station").Number("amount", c.Amount)));
             }
             _findMatches.SetRows(matches.OrderBy(x => x.Rank).ThenByDescending(x => x.Stock > 0).ThenBy(x => x.Name).Take(suggestions ? 6 : 65).Select(x => x.Row));
             _findResult.Text = matches.Count == 0 ? "No matches in the selected plots." : suggestions ? "Suggestions: choose one, or press Enter to show all matches." : "Choose a match, then a chest or station.";
@@ -1211,7 +1210,7 @@ namespace Satisvampory.Client
                     _findRows.Add(_lastFind.ChestsByName[index]);
             }
             if (id != null) ShowFindStage(true);
-            _findTable.SetRows(_findRows.Select((c, i) => new UiTableRow(i.ToString())
+            _findTable.SetRows(_findRows.Select((c, i) => new UiTableRow(i.ToString()) { BuildingPrefab = c.BuildingPrefab }
                 .Text("chest", c.Name).Text("plot", c.Where).Number("count", c.Amount)
                 .Text("holds", c.Why + (string.IsNullOrEmpty(c.Holds) ? "" : " · " + c.Holds))));
             // A single result is unambiguous; multiple locations wait for the player's choice.
@@ -1251,7 +1250,7 @@ namespace Satisvampory.Client
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
                     _ctx.Track(_previewPanel);
                     _previewPanel.Label("Right-drag to rotate. Escape returns. Ends after 5 seconds.");
-                    Track(_previewPanel.Button("Return (Esc)").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
+                    Track(_previewPanel.Button("Return").Centered().KeyHint("Esc").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                 }
                 UiApi.Hide(Panel);
                 UiApi.Show(_previewPanel);

@@ -120,11 +120,11 @@ namespace Satisvampory
             }
             var text = (NoticeCode)n.Code switch
             {
-                NoticeCode.NotAvailableYet => "Satisvampory: that needs Progenitor's inventory API, which this build does not have yet.",
-                NoticeCode.Refused => "Satisvampory: not here. Stand on one of your or your clan's castles.",
+                NoticeCode.NotAvailableYet => "That needs Progenitor's inventory API, which this build does not have yet.",
+                NoticeCode.Refused => "Not here. Stand on one of your or your clan's castles.",
                 NoticeCode.Stashed => $"Stashed {n.A} stacks into {n.B} chests.",
                 NoticeCode.Tidied => $"Tidied {n.A} items across {n.B} chests.",
-                NoticeCode.NotNow => "Satisvampory: " + Server.ServerActions.Words((StateRefusal)n.A),
+                NoticeCode.NotNow => Server.ServerActions.Words((StateRefusal)n.A),
                 _ => null,
             };
             if (text == null) return;

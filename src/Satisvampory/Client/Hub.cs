@@ -264,7 +264,7 @@ namespace Satisvampory.Client
                 else
                 {
                     _ctx.Log.LogInfo($"Satisvampory: {typeof(TReq).Name} -> {r.Status} {r.Reason} {r.NotSent}");
-                    _ctx.Hud.Notify(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : "Satisvampory: " + r.Status, kind: UiNoticeKind.Warning, seconds: 6);
+                    _ctx.Hud.Notify(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : r.Status.ToString(), kind: UiNoticeKind.Warning, seconds: 6);
                 }
             });
 

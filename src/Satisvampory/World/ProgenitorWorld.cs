@@ -127,6 +127,12 @@ namespace Satisvampory.World
                 state.DefaultBeltMigrated = true;
             }
             Engine.Lists.DefaultBelt.Initialize(state.Graph, infos);
+            if (state.DefaultOutputsDue)
+            {
+                foreach (var id in Engine.Lists.DefaultBelt.RemoveDefaultStationOutputs(state.Graph, infos)) state.Touched.Add(id);
+                state.DefaultOutputsDue = false;
+                state.DefaultBeltMigrated = true; // so the ticker saves the island
+            }
         }
 
         /// <summary>

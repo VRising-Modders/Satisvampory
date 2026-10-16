@@ -74,4 +74,18 @@ public class FindTests
         Assert.Empty(result.Items);
         Assert.True(catalog.TryResolveItem("Castle Wall", out _));
     }
+
+    [Fact]
+    public void Items_the_client_matched_by_game_name_are_found()
+    {
+        // The server knows vanilla items only by prefab name; "Blood Merlot" is the game's name.
+        var w = new FakeWorld();
+        var home = new PlotId(1);
+        var chest = w.Chest(home, "Potions");
+        w.Put(chest, IronIngot, 5);
+        var none = Find.Run(w, Catalog(), new[] { home }, home, _ => "Home", "blood merlot");
+        Assert.Empty(none.Items);
+        var found = Find.Run(w, Catalog(), new[] { home }, home, _ => "Home", "blood merlot", displayMatches: new[] { IronIngot });
+        Assert.Equal(5, found.Items.Single(i => i.Item == IronIngot).Total);
+    }
 }

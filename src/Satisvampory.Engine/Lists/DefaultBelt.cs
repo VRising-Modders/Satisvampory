@@ -32,11 +32,30 @@ namespace Satisvampory.Engine.Lists
                     lists.Output.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
                 else if (c.Kind == NodeKind.Station && c.Role is StationRole.None or StationRole.Refinement or StationRole.Workstation)
                 {
+                    // Input only: a station sends nothing out until the player sets an Output.
                     lists.Input.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
                     lists.PullOrder = PullOrder.ReverseMassDeposit;
-                    lists.Output.Add(ListEntry.MassDeposit(graph.NextSequence()));
                 }
             }
+        }
+
+        /// <summary>
+        /// Save version 4: stations used to get "Push: Mass Deposit" as a default Output, which took
+        /// products out (a prison cell's Blood Merlot) though the player set no Output. Remove it
+        /// where the station's lists are still exactly that default. Returns what changed.
+        /// </summary>
+        public static List<ContainerId> RemoveDefaultStationOutputs(LogisticsGraph graph, IEnumerable<ContainerInfo> containers)
+        {
+            var changed = new List<ContainerId>();
+            foreach (var c in containers)
+            {
+                if (c.Kind != NodeKind.Station || !graph.Lists.TryGetValue(c.Id, out var lists)) continue;
+                if (lists.Input.Count != 1 || !IsEntry(lists.Input[0])) continue;
+                if (lists.Output.Count != 1 || lists.Output[0].Kind != EntryKind.MassDeposit || !lists.Output[0].Filter.IsAnything) continue;
+                lists.Output.Clear();
+                changed.Add(c.Id);
+            }
+            return changed;
         }
 
         /// <summary>

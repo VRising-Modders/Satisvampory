@@ -218,7 +218,10 @@ namespace Satisvampory.Engine.Ui
         /// Chest names are searched too. Nothing is guessed: a partial match on several items is
         /// returned as an ambiguous list.
         /// </summary>
-        public static FindResult Run(IWorldView world, ItemCatalog catalog, IReadOnlyList<PlotId> island, PlotId standing, Func<PlotId, string> plotLabel, string query, bool partialMatch = true, int kind = 0, Func<ItemId, bool>? includeItem = null)
+        /// <param name="displayMatches">Items the client matched by their game display name, best first;
+        /// they come after the server's own name matches.</param>
+        public static FindResult Run(IWorldView world, ItemCatalog catalog, IReadOnlyList<PlotId> island, PlotId standing, Func<PlotId, string> plotLabel, string query, bool partialMatch = true, int kind = 0, Func<ItemId, bool>? includeItem = null,
+            IReadOnlyList<ItemId>? displayMatches = null)
         {
             var text = NameFold.Fold(query);
             if (text == "atheneum") text = "athenaeum";
@@ -238,6 +241,12 @@ namespace Satisvampory.Engine.Ui
                 {
                     items.AddRange(catalog.AllItems.Where(i => (includeItem == null || includeItem(i)) && MatchRank(catalog.NameOf(i), text) < (partialMatch ? 4 : 1))
                         .OrderBy(i => MatchRank(catalog.NameOf(i), text)).ThenBy(catalog.NameOf, StringComparer.OrdinalIgnoreCase).Take(MaxItems));
+                    ambiguous = items.Count > 1;
+                }
+                if (categories.Count == 0 && displayMatches != null)
+                {
+                    foreach (var extra in displayMatches)
+                        if (!items.Contains(extra) && items.Count < MaxItems) items.Add(extra);
                     ambiguous = items.Count > 1;
                 }
             }
@@ -260,7 +269,9 @@ namespace Satisvampory.Engine.Ui
                     .OrderBy(f => f.Here ? 0 : 1).ThenBy(f => f.Count > 0 ? 0 : 1)
                     .ThenBy(f => f.PlotLabel, StringComparer.OrdinalIgnoreCase).ThenByDescending(f => f.Count)
                     .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
-                result.Items.Add(new FoundItem { Item = item, Name = catalog.NameOf(item), MatchRank = MatchRank(catalog.NameOf(item), text), Total = found.Sum(f => (long)f.Count), Chests = found });
+                var rank = MatchRank(catalog.NameOf(item), text);
+                if (displayMatches != null && displayMatches.Contains(item)) rank = Math.Min(rank, 1); // matched by its game name
+                result.Items.Add(new FoundItem { Item = item, Name = catalog.NameOf(item), MatchRank = rank, Total = found.Sum(f => (long)f.Count), Chests = found });
             }
             result.Items.Sort((a, b) => { int rank = a.MatchRank.CompareTo(b.MatchRank); return rank != 0 ? rank : b.Total != a.Total ? b.Total.CompareTo(a.Total) : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name); });
             if (text.Length > 0 && kind != 2)

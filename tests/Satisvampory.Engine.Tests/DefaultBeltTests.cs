@@ -38,6 +38,37 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void Stations_send_nothing_out_until_the_player_sets_an_output()
+        {
+            var station = Furnace();
+            Initialize();
+            Assert.Single(state.Graph.For(station.Id).Input);
+            Assert.Empty(state.Graph.For(station.Id).Output);
+        }
+
+        [Fact]
+        public void Version_4_removes_only_untouched_default_station_outputs()
+        {
+            var untouched = Furnace();
+            var edited = world.Chest(home, "Smithy", kind: NodeKind.Station);
+            edited.Role = StationRole.Workstation;
+            foreach (var s in new[] { untouched, edited })
+            {
+                var l = state.Graph.For(s.Id);
+                l.Input.Add(ListEntry.OfBelt(DefaultBelt.Id, state.Graph.NextSequence()));
+                l.Output.Add(ListEntry.MassDeposit(state.Graph.NextSequence()));
+            }
+            var target = world.Chest(home, "Ingots");
+            state.Graph.For(edited.Id).Output.Add(new ListEntry { Kind = EntryKind.Container, Container = target.Id, Sequence = state.Graph.NextSequence() });
+
+            var changed = DefaultBelt.RemoveDefaultStationOutputs(state.Graph, world.ContainersOn(home));
+            Assert.Equal(new[] { untouched.Id }, changed);
+            Assert.Empty(state.Graph.For(untouched.Id).Output);
+            Assert.Equal(2, state.Graph.For(edited.Id).Output.Count);
+            Assert.True(SaveCodec.Restore(new IslandSave { Version = 3 }, out _).DefaultOutputsDue);
+        }
+
+        [Fact]
         public void Containers_from_before_the_default_belt_join_it_once()
         {
             // Lists that existed before the Default Belt: a chest with only a deposit setting, a

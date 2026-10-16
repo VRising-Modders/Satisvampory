@@ -303,6 +303,8 @@ namespace Satisvampory.Net
         [Field(2)] public bool IncludeClanPlots;
         [Field(3)] public bool PartialMatch = true;
         [Field(4)] public int Kind;
+        /// <summary>Items whose game display name (known only on the client) matches the text, best first.</summary>
+        [Field(5)] public List<int> ClientItems = new();
     }
 
     [ModMessage("sv.found")]

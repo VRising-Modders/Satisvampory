@@ -1143,7 +1143,11 @@ namespace Satisvampory.Client
             var sequence = ++_findSequence;
             var text = (_findText.Value ?? "").Trim();
             if (text.Length == 0) { DrawFind(new FindReply()); return; }
-            Send<FindReq, FindReply>(new FindReq { Text = text, IncludeClanPlots = _findClan, PartialMatch = _findPartial, Kind = _findKind }, r =>
+            Send<FindReq, FindReply>(new FindReq
+            {
+                Text = text, IncludeClanPlots = _findClan, PartialMatch = _findPartial, Kind = _findKind,
+                ClientItems = _findKind == 1 ? new List<int>() : ClientItems.Matching(_ctx, text, _findPartial),
+            }, r =>
             {
                 if (sequence == _findSequence) DrawFind(r, suggestions);
             });

@@ -744,7 +744,8 @@ namespace Satisvampory.Server
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, castles, _ => null);
             var scope = castles.Select(ProgenitorWorld.PlotOf).ToList();
             string PlotLabel(PlotId plot) => castles.Where(c => ProgenitorWorld.PlotOf(c) == plot).Select(c => Labels.Name(_ctx.Save, c)).FirstOrDefault() ?? plot.ToString();
-            var r = Engine.Ui.Find.Run(world, s.Catalog, scope, s.Standing, PlotLabel, q.Text ?? "", q.PartialMatch, q.Kind, _half.Catalog.Findable);
+            var r = Engine.Ui.Find.Run(world, s.Catalog, scope, s.Standing, PlotLabel, q.Text ?? "", q.PartialMatch, q.Kind, _half.Catalog.Findable,
+                q.ClientItems?.Select(g => new ItemId(g)).ToList());
             var reply = new FindReply { Ambiguous = r.Ambiguous };
             reply.Categories.AddRange(r.Categories);
             EvalRowMsg Row(FoundChest c)

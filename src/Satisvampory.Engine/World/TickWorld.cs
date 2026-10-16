@@ -25,8 +25,13 @@ namespace Satisvampory.Engine.World
                 _contents[(id, part)] = value = _live.Contents(id, part).ToArray();
             return value;
         }
-        public int Count(ContainerId id, ItemId item, InvPart part = InvPart.Main) =>
-            Contents(id, part).Where(s => s.Item == item).Sum(s => s.Amount);
+        public int Count(ContainerId id, ItemId item, InvPart part = InvPart.Main)
+        {
+            var n = 0;
+            foreach (var s in Contents(id, part))
+                if (s.Item == item) n += s.Amount;
+            return n;
+        }
         public int FreeSpace(ContainerId id, ItemId item)
         {
             if (!_space.TryGetValue(id, out var items)) _space[id] = items = new();

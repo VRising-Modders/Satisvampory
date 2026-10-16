@@ -217,9 +217,18 @@ namespace Satisvampory.Engine.Lists
             return false;
         }
 
-        ItemFilter ConnectionFilter(ListEntry e, ContainerId owner, bool output, ContainerId other) =>
-            e.Kind != EntryKind.Belt ? e.Filter : ItemFilter.Both(e.Filter,
-                ItemFilter.Any(Counterparts(e, owner, output, other).Select(p => p.Filter)));
+        ItemFilter ConnectionFilter(ListEntry e, ContainerId owner, bool output, ContainerId other)
+        {
+            if (e.Kind != EntryKind.Belt) return e.Filter;
+            // A belt with no filters on either side (the Default Belt, typically) is every
+            // supplier times every receiver; composing new filters for each pair was most of a
+            // large island's tick. Reuse the entry's own filter when nothing narrows it.
+            var counterparts = Counterparts(e, owner, output, other).Select(p => p.Filter).ToList();
+            if (counterparts.Count > 0 && counterparts.Any(f => f.IsAnything))
+                return e.Filter;
+            if (e.Filter.IsAnything && counterparts.Count == 1) return counterparts[0];
+            return ItemFilter.Both(e.Filter, ItemFilter.Any(counterparts));
+        }
 
         /// <summary>
         /// Every container-to-container edge. An output entry on A naming B and an input entry on

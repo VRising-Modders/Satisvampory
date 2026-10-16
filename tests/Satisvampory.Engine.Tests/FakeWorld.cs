@@ -11,6 +11,7 @@ namespace Satisvampory.Engine.Tests
     sealed class FakeWorld : IWorld
     {
         readonly List<ContainerInfo> _all = new();
+        readonly Dictionary<ContainerId, ContainerInfo> _byId = new();
         readonly Dictionary<(ContainerId, InvPart), Dictionary<ItemId, int>> _inv = new();
         readonly Dictionary<ContainerId, int> _capacity = new();
         readonly Dictionary<ContainerId, HashSet<ItemId>> _refuses = new();
@@ -20,6 +21,7 @@ namespace Satisvampory.Engine.Tests
         {
             var c = new ContainerInfo(ContainerId.New(), plot, kind, name) { FurnitureName = "Large Chest", NativeRoutingKnown = true };
             _all.Add(c);
+            _byId[c.Id] = c;
             _capacity[c.Id] = capacity;
             return c;
         }
@@ -45,7 +47,7 @@ namespace Satisvampory.Engine.Tests
 
         public IReadOnlyList<ContainerInfo> ContainersOn(PlotId plot) => _all.Where(c => c.Plot == plot).ToList();
 
-        public ContainerInfo? Find(ContainerId id) => _all.FirstOrDefault(c => c.Id == id);
+        public ContainerInfo? Find(ContainerId id) => _byId.TryGetValue(id, out var c) ? c : null;
 
         public IReadOnlyList<ItemStack> Contents(ContainerId id, InvPart part = InvPart.Main) =>
             Inv(id, part).Where(kv => kv.Value > 0).Select(kv => new ItemStack(kv.Key, kv.Value)).ToList();

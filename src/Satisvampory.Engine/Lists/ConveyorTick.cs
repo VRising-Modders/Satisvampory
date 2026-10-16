@@ -62,6 +62,22 @@ namespace Satisvampory.Engine.Lists
     public sealed class ConveyorTick
     {
         readonly DepositContext _ctx;
+
+        // Per tick: an item's reverse Mass Deposit order and a station's sources for an item. The
+        // ranking walks every holder on the island; with a large Default Belt it was asked for per
+        // station, item and feeding round. Moves within the tick can make the order slightly stale,
+        // which only changes which chest is tried first: Transfer moves what is really there.
+        readonly Dictionary<ItemId, (List<ContainerId> Order, Dictionary<ContainerId, int> Rank)> _reverse = new();
+        readonly Dictionary<(ContainerId Station, ItemId Item), List<ContainerId>> _sourcesFor = new();
+
+        (List<ContainerId> Order, Dictionary<ContainerId, int> Rank) Reverse(ItemId item)
+        {
+            if (_reverse.TryGetValue(item, out var hit)) return hit;
+            var order = DepositPlanner.ReverseOrder(_ctx, item);
+            var rank = new Dictionary<ContainerId, int>(order.Count);
+            for (int i = 0; i < order.Count; i++) rank.TryAdd(order[i], i);
+            return _reverse[item] = (order, rank);
+        }
         readonly LogisticsGraph _graph;
         readonly CastleRules _rules;
         readonly TickState _state;
@@ -203,16 +219,23 @@ namespace Satisvampory.Engine.Lists
             var held = _world.Contents(station.Id);
             List<ContainerId> SourcesFor(ItemId item)
             {
+                if (_sourcesFor.TryGetValue((station.Id, item), out var cached)) return cached;
+                return _sourcesFor[(station.Id, item)] = ComputeSourcesFor(item);
+            }
+
+            List<ContainerId> ComputeSourcesFor(ItemId item)
+            {
                 var list = new List<ContainerId>(sources);
+                var seen = new HashSet<ContainerId>(list);
                 var massSources = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit && e.Filter.Allows(item, Catalog))
-                    ? DepositPlanner.ReverseOrder(_ctx, item).ToHashSet() : new HashSet<ContainerId>();
+                    ? Reverse(item).Order.ToHashSet() : new HashSet<ContainerId>();
                 if (massSources.Count > 0)
-                    foreach (var id in DepositPlanner.ReverseOrder(_ctx, item))
-                        if (!list.Contains(id)) list.Add(id);
+                    foreach (var id in Reverse(item).Order)
+                        if (seen.Add(id)) list.Add(id);
                 if (lists.PullOrder == PullOrder.ReverseMassDeposit)
                 {
-                    var reverse = DepositPlanner.ReverseOrder(_ctx, item);
-                    list = list.OrderBy(id => { var i = reverse.IndexOf(id); return i < 0 ? int.MaxValue : i; }).ToList();
+                    var rank = Reverse(item).Rank;
+                    list = list.OrderBy(id => rank.TryGetValue(id, out var i) ? i : int.MaxValue).ToList();
                 }
                 return list.Where(id => _inScope.Contains(id) && id != station.Id)
                     .Where(id => _world.Find(id) is { } c && c.Kind is NodeKind.Chest or NodeKind.Station
@@ -235,11 +258,14 @@ namespace Satisvampory.Engine.Lists
                 return;
             }
 
+            // Nothing moves while the planner asks, so each item's availability is summed once per plan.
+            var available = new Dictionary<ItemId, int>();
             int Available(ItemId item)
             {
+                if (available.TryGetValue(item, out var known)) return known;
                 var inSources = SourcesFor(item).Sum(id => SourceCount(id, item));
                 var aboveReserve = IslandTotal(item) - _rules.Reserve(item, Catalog);
-                return (int)Math.Max(0, Math.Min(inSources, aboveReserve));
+                return available[item] = (int)Math.Max(0, Math.Min(inSources, aboveReserve));
             }
 
             var plan = StationPlanner.Plan(recipes, held, Available, crafts);

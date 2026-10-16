@@ -60,7 +60,17 @@ namespace Satisvampory.Client
             _player.Changed += Refresh;
             _ctx.Track(new OnDispose(() => _player.Changed -= Refresh));
             tabs.SelectionChanged += SelectTab;
-            tabs.PanelChanged += e =>
+            tabs.PanelChanged += OnPanelChanged;
+            // The handle can outlive this plugin inside Progenitor; leaving these subscribed would keep
+            // the unloaded plugin alive and block Core hot swaps.
+            _ctx.Track(new OnDispose(() =>
+            {
+                tabs.SelectionChanged -= SelectTab;
+                tabs.PanelChanged -= OnPanelChanged;
+                if (_nativeTabs == tabs) _nativeTabs = null;
+            }));
+
+            void OnPanelChanged(VanillaPanelEvent e)
             {
                 if (e.Change == VanillaPanelChange.Closed)
                 {
@@ -78,7 +88,7 @@ namespace Satisvampory.Client
                 _state = null;
                 _openVersion++;
                 HideAll();
-            };
+            }
         }
 
         internal void Mount(IUiPanel panel) => _nativeTabs?.Mount(panel);

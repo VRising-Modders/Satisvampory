@@ -22,4 +22,4 @@ Send mechanics: write the heart's mission record and the servant's on-mission st
 
 ## Throne targeting
 
-Under sharing, a seated player can choose which island plot's servants this throne sends: a **Castle** dropdown added to the throne panel, "This castle" by default. Selecting a plot swaps the servant list, and the vanilla map click sends those.
+A throne lists and sends only its own castle's servants, as in vanilla, even under sharing (decided 2026-10-16: servants are not merged across an island's castles).

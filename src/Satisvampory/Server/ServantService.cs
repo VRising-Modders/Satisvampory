@@ -17,10 +17,10 @@ namespace Satisvampory.Server
 {
     /// <summary>
     /// Servants (spec 08) over Progenitor's ctx.Servants: returning loot goes home by Mass
-    /// Deposit, repeat hunts resend healthy survivors, clan members get a notice, owners keep a
-    /// hunt log, and a throne can show every castle on the player's island.
+    /// Deposit, repeat hunts resend healthy survivors, clan members get a notice, and owners keep a
+    /// hunt log. Thrones list only their own castle's servants (vanilla).
     /// </summary>
-    internal sealed class ServantService : IServantListProvider
+    internal sealed class ServantService
     {
         const int LogHours = 72;
         const int LogMax = 200;
@@ -37,7 +37,6 @@ namespace Satisvampory.Server
         internal void Attach()
         {
             _ctx.Events.On<ServantsReturned>(OnReturned);
-            _ctx.Track(_ctx.Servants.RegisterListProvider(this));
             _ctx.Requests.Handle<GetHuntLogReq, HuntLogReply>((u, q, i) => HuntLog(u));
             _ctx.Track(new OnDispose(() => _stopped = true));
             Progenitor.Dev.MainThread.PostDelayed(SentPollSeconds, PollSent, _ctx.Owner);
@@ -344,30 +343,6 @@ namespace Satisvampory.Server
         }
 
         // ---------------- throne targeting ----------------
-
-        /// <summary>
-        /// Which castles' servants a throne shows to this player: every castle on their island when
-        /// they are a member of the castle's clan and sharing joins more than one castle; otherwise
-        /// vanilla. This is the authorization boundary for cross-castle sends.
-        /// </summary>
-        public IReadOnlyList<CastleId>? HeartsFor(ServantListRequest request)
-        {
-            try
-            {
-                var userEntity = request.User.ToEntity();
-                var user = _ctx.World!.EntityManager.GetComponentData<User>(userEntity);
-                var island = ServerActions.Resolve(_ctx, _half, userEntity, user);
-                if (island == null || island.Castles.Count <= 1) return null;
-                if (island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return null;
-                if (ProgenitorWorld.PlotOf(island.Standing).Value != (ulong)(uint)request.Territory) return null;
-                return island.Castles.Where(c => !c.Raided).Select(c => c.Heart).ToList();
-            }
-            catch (Exception e)
-            {
-                _ctx.Log.LogError("Satisvampory: throne list failed: " + e.Message);
-                return null;
-            }
-        }
     }
 
     internal sealed class HuntLogEntry

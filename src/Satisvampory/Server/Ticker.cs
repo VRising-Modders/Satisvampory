@@ -267,7 +267,7 @@ namespace Satisvampory.Server
                 h.Add(m.StructureRevision);
                 h.Add(m.Raided);
             }
-            return h.ToHashCode() | ((long)members.Count << 32);
+            return (uint)h.ToHashCode() | ((long)members.Count << 32);
         }
 
         /// <summary>

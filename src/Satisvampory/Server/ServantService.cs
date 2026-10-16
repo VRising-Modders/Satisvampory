@@ -280,7 +280,13 @@ namespace Satisvampory.Server
                 Belts = state.Graph.BeltMembers(),
             };
             var states = servants.Where(s => !s.Inventory.IsNone).Select(s => new EngineServant(world.AddBag(s.Inventory), true, s.Injured)).ToList();
-            return Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states).Sum(m => m.Amount);
+            var moved = Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states).Sum(m => m.Amount);
+            var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+            if (left.Count > 0)
+                _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
+                    + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))
+                    + $"; {states.Count} servant(s), {world.ContainersOn(home.Standing).Count(c => c.Deposit.Special == SpecialKind.Spoils)} spoils chest(s)");
+            return moved;
         }
 
         /// <summary>Online users of the castle's clan, or its owner when clanless.</summary>

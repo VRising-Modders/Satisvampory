@@ -47,6 +47,12 @@ namespace Satisvampory.Client
         {
             Tabs(VanillaUiSite.ContainerPanel, new[] { "Inventory", "Input", "Output", "Accepts" });
             Tabs(VanillaUiSite.StationPanel, new[] { "Production", "Input", "Output" });
+            // Unit stations (tomb, vermin nest, Nether Gate) have no tab row, so no Input/Output tabs:
+            // they get edge buttons, shown only on those windows.
+            Site(VanillaUiSite.StationPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this station's materials come from", () => Open(_input),
+                kind => kind == VanillaPanelKind.UnitStation);
+            Site(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: where this station's products go", () => Open(_output),
+                kind => kind == VanillaPanelKind.UnitStation);
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: only items you send out of the heart", () => Open(_output));
         }
@@ -93,9 +99,11 @@ namespace Satisvampory.Client
 
         internal void Mount(IUiPanel panel) => _nativeTabs?.Mount(panel);
 
-        void Site(VanillaUiSite site, VanillaPanelAnchor anchor, string caption, string tip, Action onClick)
+        void Site(VanillaUiSite site, VanillaPanelAnchor anchor, string caption, string tip, Action onClick,
+            Func<VanillaPanelKind, bool>? showFor = null)
         {
             var handle = UiApi.AttachToVanilla(site, anchor, _ctx.Owner, _ctx.Guid);
+            if (showFor != null) handle.Visible = false;
             _ctx.Track(handle);
             var button = handle.Button(caption);
             _ctx.Track(button.OnClick(onClick));
@@ -108,6 +116,11 @@ namespace Satisvampory.Client
                     _openVersion++;
                     HideAll();
                     return;
+                }
+                if (showFor != null)
+                {
+                    handle.Visible = showFor(e.Target.Kind);
+                    if (!handle.Visible) return;
                 }
                 if (!e.Target.HasNetworkId) return;
                 var changed = !_hasTarget || e.Target.NetworkIdIndex != _target.NetworkIdIndex || e.Target.NetworkIdGeneration != _target.NetworkIdGeneration;

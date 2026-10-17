@@ -255,6 +255,7 @@ namespace Satisvampory.Client
                 {
                     _nodeKind = kind;
                     _panel = UiApi.Panel(Title, Owner.Ctx.Owner, Owner.Ctx.Guid).GameWindow();
+                    _panel.Footer = Hub.VersionFooter;
                     _panel.CaptureMode = UiCaptureMode.WhenHovered;
                     Owner.Ctx.Track(_panel);
                     if (NavigationTab >= 0) Owner.Mount(_panel);

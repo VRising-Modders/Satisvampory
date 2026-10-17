@@ -123,6 +123,7 @@ namespace Satisvampory.Client
             if (_storageMenu == null)
             {
                 var p = _storageMenu = UiApi.Panel("Storage", _ctx.Owner, _ctx.Guid);
+                p.Footer = VersionFooter;
                 p.GameWindow();
                 p.CaptureMode = UiCaptureMode.WhenHovered;
                 _ctx.Track(p);
@@ -347,6 +348,9 @@ namespace Satisvampory.Client
             }
         }
 
+        /// <summary>Every Satisvampory window says which Satisvampory and Progenitor it is.</summary>
+        internal static string VersionFooter => $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · {UiApi.FrameworkFooter}";
+
         IUiPanel Panel
         {
             get
@@ -356,7 +360,7 @@ namespace Satisvampory.Client
                 p.GameWindow(1440);
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
-                p.Footer = $"Satisvampory {MyPluginInfo.PLUGIN_VERSION} · {UiApi.FrameworkFooter}";
+                p.Footer = VersionFooter;
                 _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" }, new UiTabsOptions());
                 _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
                 BuildCastle(p);
@@ -1445,6 +1449,7 @@ namespace Satisvampory.Client
                 if (_previewPanel == null)
                 {
                     _previewPanel = UiApi.Panel("Object preview", _ctx.Owner, "sv.find.preview");
+                    _previewPanel.Footer = VersionFooter;
                     _previewPanel.GameWindow(640);
                     UiApi.TopPanel(_previewPanel);
                     // At the left edge at its own width; the object stays dead center, clear of it on any screen

@@ -319,11 +319,11 @@ namespace Satisvampory.Client
             _header = panel.Label("");
             // One Add menu: the chest/belt list, or clicking chests in the world.
             panel.BeginInline();
-            _add = panel.CompactDropdown("Add", new[] { "list", "pick" }, "", new[] { "Chests or belts…", "Pick in world" });
+            _add = panel.CompactDropdown("Add", new[] { "", "list", "pick" }, "", new[] { "Choose…", "Chests or belts…", "Pick in world" });
             panel.EndInline();
             ctx.Track(_add.OnChanged(v =>
             {
-                if (_redrawing) return;
+                if (_redrawing || v.Length == 0) return;
                 _redrawing = true;
                 try { _add.Value = ""; }
                 finally { _redrawing = false; }

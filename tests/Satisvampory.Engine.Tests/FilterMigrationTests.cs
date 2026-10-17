@@ -59,6 +59,8 @@ namespace Satisvampory.Engine.Tests
             Tick();
             Assert.Equal(0, _w.Count(furnace.Id, IronOre));
             furnace.Deposit.BannedItems.Clear();
+            // "Only listed" with nothing listed (imported stations) does not starve it.
+            furnace.Deposit.Takes = Takes.OnlyListed;
             Tick();
             Assert.True(_w.Count(furnace.Id, IronOre) > 0);
         }

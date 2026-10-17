@@ -359,8 +359,9 @@ namespace Satisvampory.Engine.Lists
             var available = new Dictionary<ItemId, int>();
             int Available(ItemId item)
             {
-                // A station takes only what its Accepts allow (a furnace listed for iron takes no copper).
-                if (!DepositScore.Takes(station, item, Catalog)) return 0;
+                // A station takes only what its Accepts allow (a furnace listed for iron takes no copper). An empty
+                // Accepts list (as imported 1.x stations have) narrows nothing: its recipes decide.
+                if (Narrows(station.Deposit) && !DepositScore.Takes(station, item, Catalog)) return 0;
                 if (available.TryGetValue(item, out var known)) return known;
                 var inSources = PullFrom(item).Sum(id => SourceCount(id, item));
                 var aboveReserve = IslandTotal(item) - _rules.Reserve(item, Catalog);
@@ -446,6 +447,9 @@ namespace Satisvampory.Engine.Lists
                 else _report.Diag(id, "sink-full");
             }
         }
+
+        static bool Narrows(DepositOptions d) =>
+            d.ItemPriority.Count > 0 || d.CategoryPriority.Count > 0 || d.BannedItems.Count > 0 || d.BannedCategories.Count > 0;
 
         void ReturnLeftovers(ContainerInfo station, IReadOnlyDictionary<ItemId, int> leftovers,
             Func<ItemId, HashSet<ContainerId>> sourcesFor, double now)

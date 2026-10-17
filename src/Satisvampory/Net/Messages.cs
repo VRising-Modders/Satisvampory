@@ -50,6 +50,11 @@ namespace Satisvampory.Net
         [Field(10)] public int PickIndex;
         [Field(11)] public int PickGeneration;
         [Field(12)] public int PickType;
+        /// <summary>"Storage", "Refining", "Belt", "Mass Deposit"...: the Type column.</summary>
+        [Field(13)] public string Type = "";
+        [Field(14)] public int BuildingPrefab;
+        /// <summary>Added by Satisvampory (the Default Belt Input, a factory's products-to-storage Output), not by a player.</summary>
+        [Field(15)] public bool Auto;
     }
 
     [ModMessage("sv.priority")]

@@ -401,7 +401,7 @@ namespace Satisvampory.Server
         RowMsg Row(Session s, ListEntry e, ListSide side, Engine.Lists.TickReport? report)
         {
             var graph = s.Island.State.Graph;
-            var row = new RowMsg { Kind = e.Kind switch { EntryKind.Belt => 1, EntryKind.MassDeposit => 2, _ => 0 }, FilterSpec = FromFilter(e.Filter) };
+            var row = new RowMsg { Kind = e.Kind switch { EntryKind.Belt => 1, EntryKind.MassDeposit => 2, _ => 0 }, FilterSpec = FromFilter(e.Filter), Auto = e.Auto };
             row.Filter = e.Filter.IsAnything ? (side == ListSide.Input ? "anything" : "anything it accepts") : "filter: " + Describe(s.Catalog, e.Filter);
 
             IEnumerable<EngineId> ends;
@@ -413,6 +413,8 @@ namespace Satisvampory.Server
                     row.ContainerId = e.Container.Value.ToString("N");
                     row.Name = t?.DisplayName ?? "(gone)";
                     row.Where = t == null ? "" : PlotLabel(s.Island, t.Plot);
+                    row.Type = HubService.TypeOf(t);
+                    row.BuildingPrefab = t?.BuildingPrefab ?? 0;
                     ends = new[] { e.Container };
                     break;
                 }
@@ -421,6 +423,7 @@ namespace Satisvampory.Server
                     graph.Belts.TryGetValue(e.Belt, out var b);
                     row.BeltId = e.Belt.Value.ToString("N");
                     row.Name = b?.Name ?? "(deleted belt)";
+                    row.Type = "Belt";
                     var members = graph.Expand(e, side == ListSide.Output, s.Container.Id).ToList();
                     var plots = members.Select(m => s.World.Find(m)?.Plot).Where(p => p != null).Select(p => PlotLabel(s.Island, p!.Value)).Distinct().ToList();
                     row.Where = $"{members.Count} " + (side == ListSide.Input ? "suppliers" : "receivers")
@@ -430,6 +433,7 @@ namespace Satisvampory.Server
                 }
                 default:
                     row.Name = side == ListSide.Output ? "Push: Mass Deposit" : "Pull: reverse Mass Deposit";
+                    row.Type = "Mass Deposit";
                     row.Where = side == ListSide.Output ? "each item to the chest that rates it highest" : "whole island · worst-stored first";
                     ends = Array.Empty<EngineId>();
                     break;

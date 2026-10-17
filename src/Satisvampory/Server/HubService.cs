@@ -778,7 +778,7 @@ namespace Satisvampory.Server
         }
 
         /// <summary>What a place is, in words the player knows from the game.</summary>
-        static string TypeOf(ContainerInfo? c) => c == null ? "" : c.Kind switch
+        internal static string TypeOf(ContainerInfo? c) => c == null ? "" : c.Kind switch
         {
             NodeKind.Heart => "Castle heart",
             NodeKind.Chest => "Storage",

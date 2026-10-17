@@ -1226,8 +1226,14 @@ namespace Satisvampory.Client
             // The game's own map marker gives the route and compass guide.
             Progenitor.Ui.WorldMap.SetMarker(x, z);
             var at = name.LastIndexOf(" (", StringComparison.Ordinal);
-            var chestName = at > 0 ? name.Substring(0, at) : name;
-            _findChest = chest.ToString("N");
+            FindContainer(chest.ToString("N"), at > 0 ? name.Substring(0, at) : name);
+            return true;
+        }
+
+        /// <summary>Find on one chest or station: searched by name over the clan's plots, its location chosen.</summary>
+        internal void FindContainer(string containerId, string chestName)
+        {
+            _findChest = containerId;
             OpenTab(FindTab);
             Progenitor.Dev.MainThread.PostDelayed(0.15, () =>
             {
@@ -1237,7 +1243,6 @@ namespace Satisvampory.Client
                 _findScope.Value = "clan";
                 RunFind();
             }, _ctx.Owner);
-            return true;
         }
 
         /// <summary>A chest a chat link asked Find for: chosen as soon as the search answers.</summary>

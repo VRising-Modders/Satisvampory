@@ -138,6 +138,9 @@ namespace Satisvampory.Client
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
 
+        /// <summary>Open the hub's Find on one chest or station (id, name).</summary>
+        internal Action<string, string>? FindContainer { get; set; }
+
         /// <summary>Show a container in the Object preview; the action runs when the preview closes.</summary>
         internal Action<string, Action>? PreviewContainer { get; set; }
 
@@ -298,7 +301,7 @@ namespace Satisvampory.Client
         readonly int _side;
         IUiLabel _header = null!;
         IUiDropdown _order = null!;
-        IUiOrderedList _list = null!;
+        IUiDataTable _list = null!;
         IUiLabel _loop = null!;
         IUiDropdown _loopMode = null!;
         bool _redrawing;
@@ -331,13 +334,39 @@ namespace Satisvampory.Client
                 else if (v == "pick") PickInWorld();
             }));
 
-            _list = panel.OrderedList("rows", Array.Empty<UiListItem>(), new UiOrderedListOptions
+            // The connections as a table: a few blank rows even when empty, the row's own buttons at its end.
+            _list = panel.DataTable("rows", new[]
             {
+                new UiTableColumn("name", _side == 0 ? "Pulls from" : "Sends to") { Hideable = false },
+                new UiTableColumn("type", "Type") { Width = 170 },
+                new UiTableColumn("where", "Where") { Width = 300 },
+                new UiTableColumn("status", "Status") { Width = 170 },
+                new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 4 },
+            }, new UiDataTableOptions
+            {
+                VisibleRows = 8, MinRows = 6, Selectable = false, ColumnChooser = false, TotalRow = false, Sort = Array.Empty<UiTableSortKey>(),
                 EmptyText = _side == 0 ? "No sources yet: Add a chest or belt." : "No destinations yet: Add a chest, belt or Mass Deposit.",
             });
-            ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));
-            ctx.Track(_list.OnReorder(m => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = m.From, To = m.To })));
-            ctx.Track(_list.OnRemove(item => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = int.Parse(item.Id) })));
+            ctx.Track(_list.OnRowAction((rowId, action) =>
+            {
+                var rows = Owner.State == null ? null : _side == 0 ? Owner.State.Input : Owner.State.Output;
+                if (rows == null || !int.TryParse(rowId, out var i) || i < 0 || i >= rows.Count) return;
+                switch (action)
+                {
+                    case "find":
+                        if (rows[i].ContainerId.Length > 0) Owner.FindContainer?.Invoke(rows[i].ContainerId, rows[i].Name);
+                        break;
+                    case "up":
+                        if (i > 0) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i - 1 });
+                        break;
+                    case "down":
+                        if (i < rows.Count - 1) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i + 1 });
+                        break;
+                    case "remove":
+                        Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = i });
+                        break;
+                }
+            }));
 
             // How the list is worked through: a setting under it.
             _order = _side == 0
@@ -378,12 +407,15 @@ namespace Satisvampory.Client
                 _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "");
                 _order.Value = (_side == 0 ? s.PullOrder : s.SendOrder).ToString();
                 var rows = _side == 0 ? s.Input : s.Output;
-                _list.SetItems(rows.Select((r, i) => new UiListItem(i.ToString(), r.Name)
-                {
-                    Badge = r.Kind switch { 1 => "Belt", 2 => _side == 0 ? "Pull" : "Push", _ => "Chest" },
-                    Note = r.Where + (string.IsNullOrEmpty(r.Status) ? "" : " · " + r.Status),
-                    Removable = s.CanEdit,
-                }));
+                _list.SetRows(rows.Select((r, i) => new UiTableRow(i.ToString()) { BuildingPrefab = r.BuildingPrefab }
+                    .Text("name", r.Auto ? r.Name + " (automatic)" : r.Name)
+                    .Text("type", r.Type)
+                    .Text("where", r.Where)
+                    .Text("status", r.Status)
+                    .Action("find", UiRowActionIcon.Locate, "Find this chest or station", r.ContainerId.Length > 0)
+                    .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && i > 0)
+                    .Action("down", UiRowActionIcon.Down, "Later in the list", s.CanEdit && i < rows.Count - 1)
+                    .Action("remove", UiRowActionIcon.Remove, "Remove", s.CanEdit)));
                 var others = _side == 0 ? s.InputFromOthers : s.OutputFromOthers;
                 _others.Text = others.Count == 0 ? "" : (_side == 0 ? "Also pulled in by other lists:\n  " : "Also taken by other lists:\n  ") + string.Join("\n  ", others.Take(12));
                 _others.Visible = others.Count > 0;
@@ -425,6 +457,7 @@ namespace Satisvampory.Client
                 });
             }, () => Show(), new UiWorldPickOptions
             {
+                CloseGameWindows = true, // the open container and character panels would hide the world
                 // Pick several in one go; Esc ends it and brings the list back.
                 Repeat = true,
                 Prompt = _side == 0 ? "Interact with containers or stations to pull from. Esc when done." : "Interact with containers or stations to send to. Esc when done.",

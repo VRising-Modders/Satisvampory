@@ -338,9 +338,7 @@ namespace Satisvampory.Client
             _list = panel.DataTable("rows", new[]
             {
                 new UiTableColumn("name", _side == 0 ? "Pulls from" : "Sends to") { Hideable = false },
-                new UiTableColumn("type", "Type") { Width = 170 },
-                new UiTableColumn("where", "Where") { Width = 300 },
-                new UiTableColumn("status", "Status") { Width = 170 },
+                new UiTableColumn("details", "Details") { Width = 280 },
                 new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 4 },
             }, new UiDataTableOptions
             {
@@ -355,6 +353,7 @@ namespace Satisvampory.Client
                 {
                     case "find":
                         if (rows[i].ContainerId.Length > 0) Owner.FindContainer?.Invoke(rows[i].ContainerId, rows[i].Name);
+                        else if (rows[i].Kind == 1) Owner.OpenHub?.Invoke(Hub.BeltsTab);
                         break;
                     case "up":
                         if (i > 0) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i - 1 });
@@ -409,10 +408,10 @@ namespace Satisvampory.Client
                 var rows = _side == 0 ? s.Input : s.Output;
                 _list.SetRows(rows.Select((r, i) => new UiTableRow(i.ToString()) { BuildingPrefab = r.BuildingPrefab }
                     .Text("name", r.Auto ? r.Name + " (automatic)" : r.Name)
-                    .Text("type", r.Type)
-                    .Text("where", r.Where)
-                    .Text("status", r.Status)
-                    .Action("find", UiRowActionIcon.Locate, "Find this chest or station", r.ContainerId.Length > 0)
+                    .Text("details", string.Join(" · ", new[] { r.Type, r.Where, r.Status }.Where(x => !string.IsNullOrEmpty(x))))
+                    .Action("find", UiRowActionIcon.Locate,
+                        r.ContainerId.Length > 0 ? "Find this chest or station" : r.Kind == 1 ? "Open this belt in Belts" : "Mass Deposit has no place to find",
+                        r.ContainerId.Length > 0 || r.Kind == 1)
                     .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && i > 0)
                     .Action("down", UiRowActionIcon.Down, "Later in the list", s.CanEdit && i < rows.Count - 1)
                     .Action("remove", UiRowActionIcon.Remove, "Remove", s.CanEdit)));

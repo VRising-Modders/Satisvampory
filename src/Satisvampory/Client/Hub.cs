@@ -1057,6 +1057,7 @@ namespace Satisvampory.Client
         IUiDataTable _findMatches = null!;
         IUiDataTable _findTable = null!;
         bool _findClan, _findPartial = true;
+        IUiDropdown _findScope = null!;
         int _findKind;
         IUiLocatePing? _findPin;
         readonly List<EvalRowMsg> _findRows = new();
@@ -1093,7 +1094,7 @@ namespace Satisvampory.Client
             Track(_findText.OnChanged(_ => QueueFind()));
             Track(_findText.ActionButton("Find", _ => RunFind()));
             p.BeginInline();
-            var scope = FindControl(p.CompactDropdown("Scope", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
+            var scope = _findScope = FindControl(p.CompactDropdown("Scope", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
             Track(scope.OnChanged(value => { _findClan = value == "clan"; RunFind(); }));
             var matching = FindControl(p.CompactDropdown("Match", new[] { "partial", "exact" }, "partial", new[] { "Partial name", "Full name" }));
             Track(matching.OnChanged(value => { _findPartial = value == "partial"; RunFind(); }));
@@ -1155,6 +1156,12 @@ namespace Satisvampory.Client
             }, r =>
             {
                 if (sequence == _findSequence) DrawFind(r, suggestions);
+                if (sequence == _findSequence && _findChest is { } wanted)
+                {
+                    _findChest = null;
+                    var index = r.ChestsByName.FindIndex(c => c.ContainerId == wanted);
+                    if (index >= 0) { _findMatches.SetSelected(new[] { "place:" + index }); SelectFindMatch("place:" + index); }
+                }
             });
         }
 
@@ -1165,13 +1172,15 @@ namespace Satisvampory.Client
         }
 
         /// <summary>
-        /// A destination chest in a deposit or hunt line: pin it on the map like Find does. The payload is the
-        /// server's "x,y,z"; anything that is not three sane numbers is ignored.
+        /// A destination chest in a deposit or hunt line: open Find on that chest (its contents, preview and pin) and
+        /// mark it on the map. The payload is the server's "id;x,y,z"; anything malformed is ignored.
         /// </summary>
         bool OnChestLink(Progenitor.Chat.ChatLinkClick click)
         {
             if (!click.IsFromServer || click.LinkType != "chest") return false;
-            var parts = click.Payload.Split(',');
+            var halves = click.Payload.Split(';');
+            if (halves.Length != 2 || !Guid.TryParseExact(halves[0], "N", out var chest)) return false;
+            var parts = halves[1].Split(',');
             var c = System.Globalization.CultureInfo.InvariantCulture;
             if (parts.Length != 3
                 || !float.TryParse(parts[0], System.Globalization.NumberStyles.Float, c, out var x)
@@ -1180,13 +1189,25 @@ namespace Satisvampory.Client
                 || !float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z)
                 || Math.Abs(x) > 10000 || Math.Abs(y) > 1000 || Math.Abs(z) > 10000) return false;
             var name = click.Text.Length > 80 ? click.Text.Substring(0, 80) : click.Text;
-            // The game's own map marker gives the route and compass guide; the pin marks the chest itself.
+            // The game's own map marker gives the route and compass guide.
             Progenitor.Ui.WorldMap.SetMarker(x, z);
-            _findPin?.Dispose();
-            _findPin = _ctx.Hud.Locate(new Unity.Mathematics.float3(x, y, z), name, 60, arrivalDistance: 3, showOnMaps: true);
-            _ctx.Hud.Notify("Marked " + name + " on your map.");
+            var at = name.LastIndexOf(" (", StringComparison.Ordinal);
+            var chestName = at > 0 ? name.Substring(0, at) : name;
+            _findChest = chest.ToString("N");
+            OpenTab(FindTab);
+            Progenitor.Dev.MainThread.PostDelayed(0.15, () =>
+            {
+                if (_panel == null || !_panel.Visible) return;
+                _findText.Value = chestName;
+                _findClan = true; // the chest may be on another plot of the island
+                _findScope.Value = "clan";
+                RunFind();
+            }, _ctx.Owner);
             return true;
         }
+
+        /// <summary>A chest a chat link asked Find for: chosen as soon as the search answers.</summary>
+        string? _findChest;
 
         /// <summary>An item link anywhere in chat: show where that item is stored (Find).</summary>
         bool OnItemLink(Progenitor.Chat.ChatLinkClick click)
@@ -1289,7 +1310,7 @@ namespace Satisvampory.Client
                 _previewToken = reply.Token;
                 if (_previewPanel == null)
                 {
-                    _previewPanel = UiApi.Panel("Room preview", _ctx.Owner, "sv.find.preview");
+                    _previewPanel = UiApi.Panel("Object preview", _ctx.Owner, "sv.find.preview");
                     _previewPanel.GameWindow(640);
                     UiApi.TopPanel(_previewPanel);
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
@@ -1300,7 +1321,7 @@ namespace Satisvampory.Client
                     {
                         new UiTableColumn("item", "Holds") { Hideable = false },
                         new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Format = "#,0", Width = 160 },
-                    }, new UiDataTableOptions { VisibleRows = 8, Selectable = false, TotalRow = false, EmptyText = "Empty." });
+                    }, new UiDataTableOptions { VisibleRows = 8, Selectable = false, TotalRow = false, ColumnChooser = false, EmptyText = "Empty." });
                     Track(_previewPanel.Button("Return").Centered().KeyHint("Esc").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                 }
                 _previewTitle.Text = reply.Name;
@@ -1321,7 +1342,7 @@ namespace Satisvampory.Client
                     catch (Exception e)
                     {
                         EndFindPreview();
-                        _ctx.Hud.Notify("Unable to preview this room: " + e.Message);
+                        _ctx.Hud.Notify("Unable to preview this: " + e.Message);
                     }
                 }, _ctx.Owner);
             });

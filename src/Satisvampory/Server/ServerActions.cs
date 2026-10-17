@@ -168,8 +168,8 @@ namespace Satisvampory.Server
         internal const string LinkOwner = "satisvampory";
 
         /// <summary>
-        /// A destination chest as a chat link ("Storage (Plot 1)"): a click pins it on the player's map. The payload is
-        /// its position, which the client checks before using.
+        /// A destination chest as a chat link ("Storage (Plot 1)"): a click opens Find on it. The payload is its id and
+        /// position ("id;x,y,z"), which the client checks before using.
         /// </summary>
         internal static Func<ContainerId, string> ChestLinks(SatisContext ctx, ProgenitorWorld world, Func<PlotId, string> plotName) => id =>
         {
@@ -177,7 +177,7 @@ namespace Satisvampory.Server
             if (c == null) return id.ToString();
             var text = $"{c.DisplayName} ({plotName(c.Plot)})";
             if (!ctx.Castles.TryGetBuildingPosition(world.EntityOf(id), out var p)) return text;
-            try { return Progenitor.Chat.ChatLinks.ModLink(LinkOwner, "chest", FormattableString.Invariant($"{p.X:0.##},{p.Y:0.##},{p.Z:0.##}"), text); }
+            try { return Progenitor.Chat.ChatLinks.ModLink(LinkOwner, "chest", id.Value.ToString("N") + ";" + FormattableString.Invariant($"{p.X:0.##},{p.Y:0.##},{p.Z:0.##}"), text); }
             catch (ArgumentException) { return text; }
         };
 

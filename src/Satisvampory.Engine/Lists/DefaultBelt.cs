@@ -87,9 +87,12 @@ namespace Satisvampory.Engine.Lists
             return changed;
         }
 
-        /// <summary>A station that keeps refining while a recipe is on (furnace, sawmill, Fabricator), not the prison.</summary>
+        /// <summary>
+        /// A station that keeps working on its own (furnace, sawmill, Fabricator, the Devourer), not the prison:
+        /// its products go to storage by default.
+        /// </summary>
         public static bool IsFactory(ContainerInfo c) =>
-            c.Kind == NodeKind.Station && c.Role == StationRole.Refinement
+            c.Kind == NodeKind.Station && c.Role is StationRole.Refinement or StationRole.Devourer
             && c.FurnitureName.IndexOf("Prison", StringComparison.OrdinalIgnoreCase) < 0;
 
         static ListEntry AutoOutput(LogisticsGraph graph) =>

@@ -95,8 +95,9 @@ namespace Satisvampory.Engine.Persistence
         /// 6: coffins and unit stations, once taken for chests, give back what was put in them.
         /// 7: link filters become the receiving container's Accepts (FilterMigration).
         /// 8: stations recognized by their prefab (Blood Homogenizer...) give back what deposits put in them.
-        /// 9: factories with no Output send their products to storage by Mass Deposit (DefaultBelt.AddFactoryOutputs).</summary>
-        public const int CurrentVersion = 9;
+        /// 9: factories with no Output send their products to storage by Mass Deposit (DefaultBelt.AddFactoryOutputs).
+        /// 10: the same for Devourers.</summary>
+        public const int CurrentVersion = 10;
 
         // Missing versions in typed store reads are legacy; Capture explicitly writes the current version.
         public int Version { get; set; } = 1;
@@ -252,7 +253,7 @@ namespace Satisvampory.Engine.Persistence
                 throw new InvalidOperationException($"Save version {save.Version} is newer than this build ({IslandSave.CurrentVersion})");
             Normalize(save);
             nextSequence = save.NextSequence;
-            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3, DefaultOutputsDue = save.Version < 4, AutoInputsDue = save.Version < 5, MisfiledStationsDue = save.Version < 6, FiltersDue = save.Version < 7, MisfiledStations2Due = save.Version < 8, FactoryOutputsDue = save.Version < 9 };
+            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3, DefaultOutputsDue = save.Version < 4, AutoInputsDue = save.Version < 5, MisfiledStationsDue = save.Version < 6, FiltersDue = save.Version < 7, MisfiledStations2Due = save.Version < 8, FactoryOutputsDue = save.Version < 10 };
             state.Graph.Sequence = save.NextSequence;
 
             foreach (var b in save.Belts.Where(b => b != null))

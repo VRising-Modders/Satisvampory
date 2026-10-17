@@ -143,14 +143,19 @@ namespace Satisvampory.Server
         };
 
         /// <summary>One log line per item and destination, so a deposit can be traced afterwards.</summary>
-        static void LogMoves(SatisContext ctx, ServerHalf half, string action, User user, IWorld world, ItemCatalog catalog, ActionResult r)
+        static void LogMoves(SatisContext ctx, ServerHalf half, string action, User user, IWorld world, ItemCatalog catalog, ActionResult r) =>
+            LogMoves(ctx, half, user.PlatformId, $"{action} by {user.CharacterName}", world, catalog,
+                r.Moves.Select(m => (m.To, m.Item, m.Amount)), r.Left, "the bag");
+
+        internal static void LogMoves(SatisContext ctx, ServerHalf half, ulong owner, string what, IWorld world, ItemCatalog catalog,
+            IEnumerable<(ContainerId To, ItemId Item, int Amount)> moves, IReadOnlyDictionary<ItemId, int> left, string leftIn)
         {
-            if (!half.PlayerFor(user.PlatformId).LogMyDeposits) return;
+            if (!half.PlayerFor(owner).LogMyDeposits) return;
             string Where(ContainerId id) { var c = world.Find(id); return c == null ? id.ToString() : $"{c.DisplayName} [{id}] on plot {c.Plot}"; }
-            foreach (var g in r.Moves.GroupBy(m => (m.Item, m.To)))
-                ctx.Log.LogInfo($"Satisvampory: {action} by {user.CharacterName}: {g.Sum(m => m.Amount)} x {catalog.NameOf(g.Key.Item)} -> {Where(g.Key.To)}");
-            foreach (var (item, left) in r.Left)
-                ctx.Log.LogInfo($"Satisvampory: {action} by {user.CharacterName}: {left} x {catalog.NameOf(item)} left in the bag (no room)");
+            foreach (var g in moves.GroupBy(m => (m.Item, m.To)))
+                ctx.Log.LogInfo($"Satisvampory: {what}: {g.Sum(m => m.Amount)} x {catalog.NameOf(g.Key.Item)} -> {Where(g.Key.To)}");
+            foreach (var kv in left)
+                ctx.Log.LogInfo($"Satisvampory: {what}: {kv.Value} x {catalog.NameOf(kv.Key)} left in {leftIn} (no room)");
         }
 
         internal static NoticePacket Run(SatisContext ctx, ServerHalf half, Entity userEntity, User user, ActionKind kind)

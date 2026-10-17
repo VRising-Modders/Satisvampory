@@ -279,8 +279,11 @@ namespace Satisvampory.Server
                 Belts = state.Graph.BeltMembers(),
             };
             var states = servants.Where(s => !s.Inventory.IsNone).Select(s => new EngineServant(world.AddBag(s.Inventory), true, s.Injured)).ToList();
-            var moved = Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states).Sum(m => m.Amount);
+            var moves = Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states);
+            var moved = moves.Sum(m => m.Amount);
             var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+            ServerActions.LogMoves(_ctx, _half, castle.Owner.PlatformId, $"servant loot on plot {castle.Territory.Index}", world, home.Catalog,
+                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags");
             if (left.Count > 0)
                 _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))

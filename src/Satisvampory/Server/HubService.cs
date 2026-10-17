@@ -761,6 +761,7 @@ namespace Satisvampory.Server
                 Level = castles.FirstOrDefault(x => ProgenitorWorld.PlotOf(x) == c.Plot)?.Level ?? 0,
                 Holds = string.Join(", ", world.Contents(c.Id).OrderByDescending(x => x.Amount).Take(3).Select(x => $"{s.Catalog.NameOf(x.Item)} {x.Amount:N0}")),
                 BuildingPrefab = world.Find(c.Id)?.BuildingPrefab ?? 0,
+                Type = TypeOf(world.Find(c.Id)),
             }, c.Id);
                 if (_ctx.Castles.TryGetBuildingPosition(world.EntityOf(c.Id), out var position))
                 {
@@ -775,6 +776,24 @@ namespace Satisvampory.Server
             reply.ChestsByName.AddRange(r.ChestsByName.Take(40).Select(Row));
             return reply;
         }
+
+        /// <summary>What a place is, in words the player knows from the game.</summary>
+        static string TypeOf(ContainerInfo? c) => c == null ? "" : c.Kind switch
+        {
+            NodeKind.Heart => "Castle heart",
+            NodeKind.Chest => "Storage",
+            _ => c.Role switch
+            {
+                StationRole.Workstation => "Crafting",
+                StationRole.Refinement => "Refining",
+                StationRole.UnitSpawner => "Unit station",
+                StationRole.Brazier => "Brazier",
+                StationRole.Stable => "Stable",
+                StationRole.Devourer => "Devourer",
+                StationRole.Coffin => "Coffin",
+                _ => "Station",
+            },
+        };
 
         PreviewReply BeginPreview(Session s, PreviewReq q)
         {

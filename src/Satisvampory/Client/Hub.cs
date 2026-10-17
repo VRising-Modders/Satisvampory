@@ -1140,7 +1140,8 @@ namespace Satisvampory.Client
             _findTable = FindControl(p.DataTable("find", new[]
             {
                 new UiTableColumn("chest", "Chest or station") { Hideable = false },
-                new UiTableColumn("plot", "Plot") { Width = 320 },
+                new UiTableColumn("type", "Type") { Width = 190 },
+                new UiTableColumn("plot", "Plot") { Width = 260 },
                 new UiTableColumn("count", "Stored", UiTableColumnKind.Number) { Format = "#,0", Width = 130 },
                 new UiTableColumn("holds", "Details") { Width = 380 },
             }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, ColumnChooser = false, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
@@ -1287,7 +1288,7 @@ namespace Satisvampory.Client
             {
                 var c = r.ChestsByName[i];
                 matches.Add((Engine.Ui.Find.MatchRank(c.Name, _findText.Value ?? ""), c.Amount, c.Name,
-                    new UiTableRow("place:" + i) { BuildingPrefab = c.BuildingPrefab }.Text("name", c.Name).Text("kind", "Chest / station").Number("amount", c.Amount)));
+                    new UiTableRow("place:" + i) { BuildingPrefab = c.BuildingPrefab }.Text("name", c.Name).Text("kind", string.IsNullOrEmpty(c.Type) ? "Chest / station" : c.Type).Number("amount", c.Amount)));
             }
             _findMatches.SetRows(matches.OrderBy(x => x.Rank).ThenByDescending(x => x.Stock > 0).ThenBy(x => x.Name).Take(suggestions ? 6 : 65).Select(x => x.Row));
             _findResult.Text = matches.Count == 0 ? "No matches in the selected plots." : suggestions ? "Suggestions: choose one, or press Enter to show all matches." : "Choose a match, then a chest or station.";
@@ -1310,7 +1311,7 @@ namespace Satisvampory.Client
             }
             if (id != null) ShowFindStage(true);
             _findTable.SetRows(_findRows.Select((c, i) => new UiTableRow(i.ToString()) { BuildingPrefab = c.BuildingPrefab }
-                .Text("chest", c.Name).Text("plot", c.Where).Number("count", c.Amount)
+                .Text("chest", c.Name).Text("type", c.Type).Text("plot", c.Where).Number("count", c.Amount)
                 .Text("holds", c.Why + (string.IsNullOrEmpty(c.Holds) ? "" : " · " + c.Holds))));
             // A single result is unambiguous; multiple locations wait for the player's choice.
             if (id != null && _findRows.Count == 1) _findTable.SetSelected(new[] { "0" });

@@ -242,6 +242,8 @@ namespace Satisvampory.Net
         [Field(15)] public float Yaw;
         /// <summary>Find: the chest's or station's building prefab, for its icon; 0 when unknown.</summary>
         [Field(16)] public int BuildingPrefab;
+        /// <summary>"Storage", "Crafting", "Refining", "Unit station", "Brazier", "Castle heart"...: what the place is.</summary>
+        [Field(17)] public string Type = "";
     }
 
     [ModMessage("sv.tryit.reply")]

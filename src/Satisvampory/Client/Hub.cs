@@ -1180,9 +1180,11 @@ namespace Satisvampory.Client
                 || !float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z)
                 || Math.Abs(x) > 10000 || Math.Abs(y) > 1000 || Math.Abs(z) > 10000) return false;
             var name = click.Text.Length > 80 ? click.Text.Substring(0, 80) : click.Text;
+            // The game's own map marker gives the route and compass guide; the pin marks the chest itself.
+            Progenitor.Ui.WorldMap.SetMarker(x, z);
             _findPin?.Dispose();
             _findPin = _ctx.Hud.Locate(new Unity.Mathematics.float3(x, y, z), name, 60, arrivalDistance: 3, showOnMaps: true);
-            _ctx.Hud.Notify("Pinned " + name + ".");
+            _ctx.Hud.Notify("Marked " + name + " on your map.");
             return true;
         }
 

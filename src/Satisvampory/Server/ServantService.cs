@@ -305,7 +305,7 @@ namespace Satisvampory.Server
             detail = ServerActions.LootLines(moves.Select(m => (m.Item, m.Amount)).Concat(left.Select(kv => (kv.Key, kv.Value))));
             var plotNames = ServerActions.PlotNames(_ctx.Save, members);
             detail.AddRange(ServerActions.MoveLines(world, home.Catalog, plotNames,
-                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags", ServerActions.ChestLinks(_ctx, world, plotNames)).Select(l => "stored: " + l));
+                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags", ServerActions.ChestLinks(_ctx, world, plotNames)).Select(IntoLine));
             if (left.Count > 0)
                 _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))
@@ -356,10 +356,26 @@ namespace Satisvampory.Server
         readonly Dictionary<int, string> _missionNames = new();
 
         /// <summary>A mission as a <c>[mission:guid]</c> token: chat and Satisvampory's client print the game's name.</summary>
+        /// <summary>A mission as "Fishing Lake (Farbane)": the game's name by token, then its region from the prefab.</summary>
         string Mission(int guid, string prefab)
         {
             _missionNames[guid] = ProgenitorWorld.PrettyMission(prefab);
-            return _ctx.Servants.MissionToken(guid);
+            var region = Region(prefab);
+            return _ctx.Servants.MissionToken(guid) + (region.Length > 0 ? $" ({region})" : "");
+        }
+
+        /// <summary>"ServantMission_Silverlight_Brighthaven_Harbor" → "Silverlight": the prefab's region word.</summary>
+        static string Region(string prefab)
+        {
+            var parts = (prefab ?? "").Split('_', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length >= 3 && parts[0].Equals("ServantMission", StringComparison.OrdinalIgnoreCase) ? parts[1] : "";
+        }
+
+        /// <summary>"20 [Iron Ore] → Metal1 (Plot 6)" reads as "into Metal1 (Plot 6): 20 [Iron Ore]" under a hunt.</summary>
+        static string IntoLine(string line)
+        {
+            var at = line.LastIndexOf(" → ", StringComparison.Ordinal);
+            return at < 0 ? line : $"into {line.Substring(at + 3)}: {line.Substring(0, at)}";
         }
 
         static readonly System.Text.RegularExpressions.Regex MissionTokens = new(@"\[mission:(-?\d+)\]");
@@ -509,7 +525,8 @@ namespace Satisvampory.Server
         {
             var body = lines.Skip(1).Select(l => l.Trim()).Where(l => !l.StartsWith("loot stashed")).Concat(detail).ToList();
             if (body.Count == 0) body.Add("no loot to stash");
-            ServerActions.Report(_ctx, _half, lines[0], body, ClanOnlineAccounts(castle), ForLog);
+            // After the game's own "returned" and "Hunt in … started" lines, so this hunt's block reads as one piece.
+            ServerActions.Report(_ctx, _half, lines[0], body, ClanOnlineAccounts(castle), ForLog, delaySeconds: 1.5f);
         }
 
         List<(Entity User, ulong Account)> ClanOnlineAccounts(ICastleHandle castle)

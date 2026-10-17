@@ -208,7 +208,7 @@ namespace Satisvampory.Server
 
         /// <summary>The breakdown to the server log and, for players who keep "Log my deposits" on, to their chat.</summary>
         internal static void Report(SatisContext ctx, ServerHalf half, string header, List<string> lines, IEnumerable<(Entity User, ulong Account)> readers,
-            Func<string, string>? forLog = null)
+            Func<string, string>? forLog = null, float delaySeconds = 0.1f)
         {
             if (lines.Count == 0) return;
             var catalog = half.Catalog.Current;
@@ -217,7 +217,7 @@ namespace Satisvampory.Server
             if (to.Count == 0) return;
             // Sent a moment later, from the main thread: lines sent from inside a game event handler
             // (a hunt's return) were lost, all but the last.
-            Progenitor.Dev.MainThread.PostDelayed(0.1, () =>
+            Progenitor.Dev.MainThread.PostDelayed(delaySeconds, () =>
             {
                 foreach (var user in to)
                 {

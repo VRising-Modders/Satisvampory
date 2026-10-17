@@ -149,16 +149,38 @@ namespace Satisvampory.Server
         internal static List<string> MoveLines(IWorld world, ItemCatalog catalog, Func<PlotId, string> plotName,
             IEnumerable<(ContainerId To, ItemId Item, int Amount)> moves, IReadOnlyDictionary<ItemId, int> left, string leftIn)
         {
+            // Items go as chat item links, which a Progenitor client shows by the game's own name.
+            // A chat line takes at most eight, so a chest that got more gets more lines.
             var lines = new List<string>();
             foreach (var g in moves.GroupBy(m => m.To))
             {
                 var c = world.Find(g.Key);
-                var items = string.Join(", ", g.GroupBy(m => m.Item).Select(x => $"{x.Sum(m => m.Amount):N0} {catalog.NameOf(x.Key)}"));
-                lines.Add(c == null ? $"{items} → {g.Key}" : $"{items} → {c.DisplayName} ({plotName(c.Plot)})");
+                var where = c == null ? g.Key.ToString() : $"{c.DisplayName} ({plotName(c.Plot)})";
+                foreach (var chunk in Chunks(g.GroupBy(m => m.Item).Select(x => $"{x.Sum(m => m.Amount):N0} {ItemLink(x.Key)}")))
+                    lines.Add($"{string.Join(", ", chunk)} → {where}");
             }
-            if (left.Count > 0)
-                lines.Add($"no room, left in {leftIn}: " + string.Join(", ", left.Select(kv => $"{kv.Value:N0} {catalog.NameOf(kv.Key)}")));
+            foreach (var chunk in Chunks(left.Select(kv => $"{kv.Value:N0} {ItemLink(kv.Key)}")))
+                lines.Add($"no room, left in {leftIn}: " + string.Join(", ", chunk));
             return lines;
+        }
+
+        static string ItemLink(ItemId item) => "[item:" + item.Guid.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
+
+        static readonly System.Text.RegularExpressions.Regex ItemLinks = new(@"\[item:(-?\d+)\]");
+
+        /// <summary>The server log has no client to draw item links: it gets the catalog's names.</summary>
+        static string Plain(string line, ItemCatalog catalog) =>
+            ItemLinks.Replace(line, m => catalog.NameOf(new ItemId(int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))));
+
+        static IEnumerable<List<string>> Chunks(IEnumerable<string> parts)
+        {
+            var chunk = new List<string>();
+            foreach (var p in parts)
+            {
+                chunk.Add(p);
+                if (chunk.Count == 8) { yield return chunk; chunk = new List<string>(); }
+            }
+            if (chunk.Count > 0) yield return chunk;
         }
 
         /// <summary>Plot names as the Castle page shows them.</summary>
@@ -169,7 +191,8 @@ namespace Satisvampory.Server
         internal static void Report(SatisContext ctx, ServerHalf half, string header, List<string> lines, IEnumerable<(Entity User, ulong Account)> readers)
         {
             if (lines.Count == 0) return;
-            ctx.Log.LogInfo($"Satisvampory: {header} | " + string.Join(" | ", lines));
+            var catalog = half.Catalog.Current;
+            ctx.Log.LogInfo($"Satisvampory: {header} | " + string.Join(" | ", lines.Select(l => Plain(l, catalog))));
             foreach (var (user, account) in readers)
             {
                 if (!half.PlayerFor(account).LogMyDeposits) continue;

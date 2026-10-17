@@ -109,7 +109,7 @@ namespace Satisvampory.Server
                 var lootStacks = e.TotalLoot.Count;
                 var trip = CountTrip(e.Territory, e.MissionGuid);
                 var detail = new List<string>();
-                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome) + (s.CapForcedFailure ? " (the repeat-hunt cap)" : "")))} back from {Mission(e.MissionGuid, e.MissionName)}{After(e.LengthSeconds)}{TripText(trip)}"
+                lines.Add(ReturnHeader(plot, e.Servants, Mission(e.MissionGuid, e.MissionName) + After(e.LengthSeconds) + TripText(trip))
                     + (lootStacks > 0 ? $" with {lootStacks} kinds of loot" : ""));
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
@@ -276,6 +276,21 @@ namespace Satisvampory.Server
             Log(castle.Owner.PlatformId, text, plot);
             ChatReport(castle, lines, detail);
         }
+
+        /// <summary>"A and B back from X" for the ones that came home, then "· C was killed" for any that died.</summary>
+        static string ReturnHeader(string plot, IReadOnlyList<ReturnedServant> servants, string hunt)
+        {
+            var home = servants.Where(s => s.Outcome != ServantOutcome.Dead).Select(s => s.Name + Outcome(s.Outcome)).ToList();
+            var dead = servants.Where(s => s.Outcome == ServantOutcome.Dead).ToList();
+            var cap = dead.Any(s => s.CapForcedFailure) ? " (the repeat-hunt cap)" : "";
+            var text = home.Count > 0 ? $"{plot}: {Names(home)} back from {hunt}" : $"{plot}: hunt in {hunt}";
+            if (dead.Count > 0) text += $" · {Names(dead.Select(s => s.Name).ToList())} {(dead.Count == 1 ? "was" : "were")} killed{cap}";
+            return text;
+        }
+
+        /// <summary>"A", "A and B", "A, B and C".</summary>
+        static string Names(IReadOnlyList<string> names) =>
+            names.Count <= 1 ? string.Join("", names) : string.Join(", ", names.Take(names.Count - 1)) + " and " + names[names.Count - 1];
 
         static string Outcome(ServantOutcome o) => o switch
         {

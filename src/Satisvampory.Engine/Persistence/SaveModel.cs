@@ -421,7 +421,7 @@ namespace Satisvampory.Engine.Persistence
             switch (d.Kind)
             {
                 case "massDeposit":
-                    return new ListEntry { Kind = EntryKind.MassDeposit, Filter = filter, Sequence = d.Sequence };
+                    return new ListEntry { Kind = EntryKind.MassDeposit, Filter = filter, Sequence = d.Sequence, Auto = d.Auto };
                 case "belt":
                     return Guid.TryParse(d.Belt, out var b) ? new ListEntry { Kind = EntryKind.Belt, Belt = new BeltId(b), Filter = filter, Sequence = d.Sequence, BeltOrder = d.BeltOrder, CounterpartOnly = d.CounterpartOnly, Auto = d.Auto, BeltPeers = d.BeltPeers == null ? null : new HashSet<ContainerId>(d.BeltPeers.Select(ParseId).Where(x => x != null).Select(x => x!.Value)) } : null;
                 default:

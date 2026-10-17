@@ -59,7 +59,11 @@ namespace Satisvampory.Server
             r.Handle<EndPreviewReq, ViewSaved>((u, q, i) =>
             {
                 if (_previews.TryGetValue(u, out var current) && current.Token == q.Token)
-                { current.Lease.Dispose(); _previews.Remove(u); }
+                {
+                    // Keep open: the lease runs until Return/Esc ends it, its own ten-minute cap, or the player leaves.
+                    if (q.Hold && current.Lease is Progenitor.Cameras.PluginCamera.CameraObservation held) return new ViewSaved { Ok = held.Hold() };
+                    current.Lease.Dispose(); _previews.Remove(u);
+                }
                 return new ViewSaved { Ok = true };
             });
             r.Handle<PullReq, TextReply>((u, q, i) => With(u, s => Pull(s, q)));
@@ -789,7 +793,8 @@ namespace Satisvampory.Server
             _previews[s.UserEntity] = (token, lease);
             MainThread.PostDelayed(9.1, () =>
             {
-                if (_previews.TryGetValue(s.UserEntity, out var active) && active.Token == token)
+                if (_previews.TryGetValue(s.UserEntity, out var active) && active.Token == token
+                    && !(active.Lease is Progenitor.Cameras.PluginCamera.CameraObservation { IsHeld: true }))
                 { active.Lease.Dispose(); _previews.Remove(s.UserEntity); }
             }, _ctx.Owner);
             var reply = new PreviewReply { Token = token, X = point.X, Y = point.Y, Z = point.Z,

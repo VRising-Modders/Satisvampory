@@ -352,6 +352,8 @@ namespace Satisvampory.Net
     public sealed class EndPreviewReq
     {
         [Field(1)] public string Token = "";
+        /// <summary>Keep the preview's view of the room open (Keep open) instead of ending it.</summary>
+        [Field(2)] public bool Hold;
     }
 
     [ModMessage("sv.pull")]

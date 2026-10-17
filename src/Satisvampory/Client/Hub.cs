@@ -1295,6 +1295,19 @@ namespace Satisvampory.Client
         int _previewSequence;
         string _previewToken = "";
 
+        IUiLabel _previewHint = null!;
+        IUiButton _previewKeep = null!;
+
+        /// <summary>Keep the preview up until Return or Esc (the camera here, the room's streaming on the server).</summary>
+        void KeepPreview()
+        {
+            if (_preview == null || !_preview.Active || _previewToken.Length == 0) return;
+            if (!_preview.Hold()) return;
+            Send<EndPreviewReq, ViewSaved>(new EndPreviewReq { Token = _previewToken, Hold = true }, _ => { });
+            _previewHint.Text = "Right-drag to rotate. Kept open: Return or Escape closes it.";
+            _previewKeep.Visible = false;
+        }
+
         void EndFindPreview()
         {
             var token = _previewToken; _previewToken = "";
@@ -1324,16 +1337,22 @@ namespace Satisvampory.Client
                     UiApi.TopPanel(_previewPanel);
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
                     _ctx.Track(_previewPanel);
-                    _previewPanel.Label("Right-drag to rotate. Escape returns. Ends after 5 seconds.");
+                    _previewHint = _previewPanel.Label("");
                     _previewTitle = _previewPanel.Label("");
                     _previewContents = _previewPanel.DataTable("preview.contents", new[]
                     {
                         new UiTableColumn("item", "Holds") { Hideable = false },
                         new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Format = "#,0", Width = 160 },
                     }, new UiDataTableOptions { VisibleRows = 8, Selectable = false, TotalRow = false, ColumnChooser = false, EmptyText = "Empty." });
-                    Track(_previewPanel.Button("Return").Centered().KeyHint("Esc").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
+                    _previewPanel.BeginInline();
+                    _previewKeep = _previewPanel.Button("Keep open");
+                    Track(_previewKeep.OnClick(KeepPreview));
+                    Track(_previewPanel.Button("Return").KeyHint("Esc").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
+                    _previewPanel.EndInline();
                 }
                 _previewTitle.Text = reply.Name;
+                _previewHint.Text = "Right-drag to rotate. Escape returns. Ends after 5 seconds unless you keep it open.";
+                _previewKeep.Visible = true;
                 _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }
                     .Text("item", ClientItems.NameOf(_ctx, item) ?? "Item " + item)
                     .Number("amount", i < reply.Amounts.Count ? reply.Amounts[i] : 0)));

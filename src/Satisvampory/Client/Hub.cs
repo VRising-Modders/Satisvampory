@@ -1128,15 +1128,20 @@ namespace Satisvampory.Client
             }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, ColumnChooser = false, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
             Track(_findTable.OnSelectionChanged(_ =>
             {
+                UpdateFindActions();
                 if (_player.AutoPinFind && SelectedFindLocation()?.HasPosition == true) Locate();
             }));
             p.BeginInline();
-            Track(FindControl(p.Button("View Object"), true).OnClick(PreviewFind));
-            Track(FindControl(p.Button("Pin location"), true).OnClick(Locate));
+            _findView = FindControl(p.Button("View Object"), true);
+            Track(_findView.OnClick(PreviewFind));
+            _findPinButton = FindControl(p.Button("Pin location"), true);
+            Track(_findPinButton.OnClick(Locate));
             p.EndInline();
             p.BeginInline();
             _pullAmount = FindControl(p.Input("Take amount (blank: one stack)", ""), true);
-            Track(FindControl(p.Button("Take"), true).OnClick(() =>
+            _findTake = FindControl(p.Button("Take"), true);
+            UpdateFindActions();
+            Track(_findTake.OnClick(() =>
             {
                 if (_findItem == 0) { _ctx.Hud.Notify("Choose an item first."); return; }
                 int.TryParse(_pullAmount.Value, out var n);
@@ -1253,6 +1258,7 @@ namespace Satisvampory.Client
             _lastFind = r; _findItem = 0; _findRows.Clear();
             ShowFindStage(false);
             _findTable.SetRows(Array.Empty<UiTableRow>());
+            UpdateFindActions();
             var matches = new List<(int Rank, long Stock, string Name, UiTableRow Row)>();
             foreach (var item in r.Items)
             {
@@ -1290,6 +1296,20 @@ namespace Satisvampory.Client
                 .Text("holds", c.Why + (string.IsNullOrEmpty(c.Holds) ? "" : " · " + c.Holds))));
             // A single result is unambiguous; multiple locations wait for the player's choice.
             if (id != null && _findRows.Count == 1) _findTable.SetSelected(new[] { "0" });
+            UpdateFindActions();
+        }
+
+        IUiButton _findView = null!, _findPinButton = null!, _findTake = null!;
+
+        /// <summary>The location actions stay grayed until a chest or station is chosen (Take also needs an item).</summary>
+        void UpdateFindActions()
+        {
+            if (_findView == null) return;
+            var chosen = SelectedFindLocation();
+            _findView.Interactable = chosen?.HasPosition == true;
+            _findPinButton.Interactable = chosen?.HasPosition == true;
+            _findTake.Interactable = chosen != null && _findItem != 0;
+            _pullAmount.Interactable = chosen != null && _findItem != 0;
         }
 
         int _previewSequence;

@@ -142,6 +142,17 @@ namespace Satisvampory.Server
             _ => "Not now.",
         };
 
+        /// <summary>One log line per item and destination, so a deposit can be traced afterwards.</summary>
+        static void LogMoves(SatisContext ctx, ServerHalf half, string action, User user, IWorld world, ItemCatalog catalog, ActionResult r)
+        {
+            if (!half.PlayerFor(user.PlatformId).LogMyDeposits) return;
+            string Where(ContainerId id) { var c = world.Find(id); return c == null ? id.ToString() : $"{c.DisplayName} [{id}] on plot {c.Plot}"; }
+            foreach (var g in r.Moves.GroupBy(m => (m.Item, m.To)))
+                ctx.Log.LogInfo($"Satisvampory: {action} by {user.CharacterName}: {g.Sum(m => m.Amount)} x {catalog.NameOf(g.Key.Item)} -> {Where(g.Key.To)}");
+            foreach (var (item, left) in r.Left)
+                ctx.Log.LogInfo($"Satisvampory: {action} by {user.CharacterName}: {left} x {catalog.NameOf(item)} left in the bag (no room)");
+        }
+
         internal static NoticePacket Run(SatisContext ctx, ServerHalf half, Entity userEntity, User user, ActionKind kind)
         {
             var gate = StateGate(ctx, userEntity);
@@ -168,6 +179,7 @@ namespace Satisvampory.Server
                 {
                     if (island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return Notice(NoticeCode.Refused);
                     var r = PlayerActions.Tidy(world, deposit, island.State.Graph);
+                    LogMoves(ctx, half, "Tidy", user, world, deposit.Catalog, r);
                     return Notice(NoticeCode.Tidied, r.Items, r.Containers(byDestination: true));
                 }
                 case ActionKind.Stash:
@@ -181,6 +193,7 @@ namespace Satisvampory.Server
                         .Select(s => new ItemStack(new ItemId(s.Item), s.Amount))
                         .ToList();
                     var r = PlayerActions.Stash(world, deposit, bagId, stashable);
+                    LogMoves(ctx, half, "Stash", user, world, deposit.Catalog, r);
                     return Notice(NoticeCode.Stashed, r.Moves.Count, r.Containers(byDestination: true));
                 }
                 default:

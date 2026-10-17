@@ -43,6 +43,7 @@ namespace Satisvampory.Config
             c.Flag(ctx, 9, "TidyConfirm", d.TidyConfirm, "Tidy needs a second press", "Press the tidy key twice within three seconds.");
             // Bits 10-12 were the heart top-up switches, now server settings (admin only).
             c.Flag(ctx, 14, "RepeatMyHunts", d.RepeatMyHunts, "Repeat my servants' hunts", "When a hunt from one of my castles comes back, send the servants out on it again (if the server allows repeat hunts).");
+            c.Flag(ctx, 15, "LogMyDeposits", d.LogMyDeposits, "Log my deposits", "The server log lists each item my stash or tidy moves and the chest it went to.");
             c.Flag(ctx, 13, "ShowTermHints", d.ShowTermHints, "Show term hints (ⓘ)", "Small markers that explain Belt, Category and the rest.");
             var redistribution = ctx.Bind(Section, "ShowRedistribution", false, "Show the game redistribution tab beside Production, Input and Output.");
             redistribution.SettingChanged += (_, _) => c.Changed?.Invoke();
@@ -81,6 +82,7 @@ namespace Satisvampory.Config
                 ServantLootStash = On(8),
                 TidyConfirm = On(9),
                 RepeatMyHunts = On(14),
+                LogMyDeposits = On(15),
                 ShowTermHints = On(13),
             };
         }

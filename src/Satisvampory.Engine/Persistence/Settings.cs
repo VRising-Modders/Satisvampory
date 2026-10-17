@@ -16,6 +16,8 @@ namespace Satisvampory.Engine.Persistence
         public bool TakePartInClanShare { get; set; } = true;
         /// <summary>My servants go back out on the same hunt (when the server allows repeat hunts).</summary>
         public bool RepeatMyHunts { get; set; } = true;
+        /// <summary>The server log lists what my stash and tidy moved, item by item and chest by chest.</summary>
+        public bool LogMyDeposits { get; set; } = true;
         public bool ShowTermHints { get; set; } = true;
     }
 

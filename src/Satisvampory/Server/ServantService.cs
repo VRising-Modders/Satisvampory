@@ -108,7 +108,7 @@ namespace Satisvampory.Server
                 var lootStacks = e.TotalLoot.Count;
                 var trip = CountTrip(e.Territory, e.MissionGuid);
                 var detail = new List<string>();
-                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {e.MissionName}{TripText(trip)}"
+                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {ProgenitorWorld.PrettyMission(e.MissionName)}{TripText(trip)}"
                     + (lootStacks > 0 ? $" with {lootStacks} kinds of loot" : ""));
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
@@ -223,7 +223,7 @@ namespace Satisvampory.Server
             var plot = Labels.Name(_ctx.Save, castle);
             var trip = CountTrip(hunt.Territory, hunt.MissionGuid);
             var detail = new List<string>();
-            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {hunt.MissionName}{TripText(trip)} while the server was not watching" };
+            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {ProgenitorWorld.PrettyMission(hunt.MissionName)}{TripText(trip)} while the server was not watching" };
             var alive = servants.Where(s => s.State != Progenitor.Servants.ServantState.Dead).ToList();
             if (server.AllowServantLootStash && owner.ServantLootStash && alive.Any(s => s.ItemStacks > 0))
             {
@@ -288,8 +288,10 @@ namespace Satisvampory.Server
             var moves = Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states);
             var moved = moves.Sum(m => m.Amount);
             var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
-            detail = ServerActions.MoveLines(world, home.Catalog, ServerActions.PlotNames(_ctx.Save, members),
-                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags");
+            // What came home first, then where it went ("stored in" sets it apart from a quick stash).
+            detail = ServerActions.LootLines(moves.Select(m => (m.Item, m.Amount)).Concat(left.Select(kv => (kv.Key, kv.Value))));
+            detail.AddRange(ServerActions.MoveLines(world, home.Catalog, ServerActions.PlotNames(_ctx.Save, members),
+                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags").Select(l => "stored: " + l));
             if (left.Count > 0)
                 _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))

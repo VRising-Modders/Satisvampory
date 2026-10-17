@@ -193,12 +193,31 @@ namespace Satisvampory.Server
             if (lines.Count == 0) return;
             var catalog = half.Catalog.Current;
             ctx.Log.LogInfo($"Satisvampory: {header} | " + string.Join(" | ", lines.Select(l => Plain(l, catalog))));
-            foreach (var (user, account) in readers)
+            var to = readers.Where(r => half.PlayerFor(r.Account).LogMyDeposits).Select(r => r.User).ToList();
+            if (to.Count == 0) return;
+            // Sent a moment later, from the main thread: lines sent from inside a game event handler
+            // (a hunt's return) were lost, all but the last.
+            Progenitor.Dev.MainThread.PostDelayed(0.1, () =>
             {
-                if (!half.PlayerFor(account).LogMyDeposits) continue;
-                ctx.Chat.SendTo(user, header);
-                foreach (var line in lines) ctx.Chat.SendTo(user, "  " + line, prefix: false);
+                foreach (var user in to)
+                {
+                    ctx.Chat.SendTo(user, header);
+                    foreach (var line in lines) ctx.Chat.SendTo(user, "  " + line, prefix: false);
+                }
+            }, ctx.Owner);
+        }
+
+        /// <summary>Everything a hunt brought home, as item links, eight to a line: "Loot: 38 [Fish Oil], 16 [...]".</summary>
+        internal static List<string> LootLines(IEnumerable<(ItemId Item, int Amount)> loot)
+        {
+            var lines = new List<string>();
+            var first = true;
+            foreach (var chunk in Chunks(loot.GroupBy(x => x.Item).Select(g => $"{g.Sum(x => x.Amount):N0} {ItemLink(g.Key)}")))
+            {
+                lines.Add((first ? "Loot: " : "      ") + string.Join(", ", chunk));
+                first = false;
             }
+            return lines;
         }
 
         static void ReportAction(SatisContext ctx, ServerHalf half, string verb, Entity userEntity, User user, IWorld world, ItemCatalog catalog, Island island, ActionResult r)

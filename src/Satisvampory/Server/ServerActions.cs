@@ -150,18 +150,26 @@ namespace Satisvampory.Server
             IEnumerable<(ContainerId To, ItemId Item, int Amount)> moves, IReadOnlyDictionary<ItemId, int> left, string leftIn,
             Func<ContainerId, string>? chestLink = null)
         {
-            // Items go as chat item links, which a Progenitor client shows by the game's own name.
-            // A chat line takes at most eight, so a chest that got more gets more lines.
-            var lines = new List<string>();
-            foreach (var g in moves.GroupBy(m => m.To))
+            // One line per item, so a line never mixes unrelated things: "42 [Oil] → Storage (Plot 1)", and when it
+            // was split, "45 [Blood Essence] → Storage (Plot 1) ×40, Blood Essence S5R5 (Plot 6) ×5". Items go as chat
+            // item links (the game's own name); chests as links that open Find.
+            string Where(ContainerId id)
             {
-                var c = world.Find(g.Key);
-                var where = chestLink?.Invoke(g.Key) ?? (c == null ? g.Key.ToString() : $"{c.DisplayName} ({plotName(c.Plot)})");
-                foreach (var chunk in Chunks(g.GroupBy(m => m.Item).Select(x => $"{x.Sum(m => m.Amount):N0} {ItemLink(x.Key)}")))
-                    lines.Add($"{string.Join(", ", chunk)} → {where}");
+                var c = world.Find(id);
+                return chestLink?.Invoke(id) ?? (c == null ? id.ToString() : $"{c.DisplayName} ({plotName(c.Plot)})");
             }
-            foreach (var chunk in Chunks(left.Select(kv => $"{kv.Value:N0} {ItemLink(kv.Key)}")))
-                lines.Add($"no room, left in {leftIn}: " + string.Join(", ", chunk));
+            var lines = new List<string>();
+            foreach (var g in moves.GroupBy(m => m.Item).OrderByDescending(g => g.Sum(m => m.Amount)))
+            {
+                var dests = g.GroupBy(m => m.To).Select(d => (Id: d.Key, Amount: d.Sum(m => m.Amount))).OrderByDescending(d => d.Amount).ToList();
+                var head = $"{g.Sum(m => m.Amount):N0} {ItemLink(g.Key)} → ";
+                if (dests.Count == 1) { lines.Add(head + Where(dests[0].Id)); continue; }
+                // A chat line holds eight links: the item and up to six chests, the rest counted.
+                var shown = string.Join(", ", dests.Take(6).Select(d => $"{Where(d.Id)} ×{d.Amount:N0}"));
+                lines.Add(head + shown + (dests.Count > 6 ? $", {dests.Count - 6} more chests" : ""));
+            }
+            foreach (var (item, amount) in left)
+                lines.Add($"{amount:N0} {ItemLink(item)} → no room, left in {leftIn}");
             return lines;
         }
 

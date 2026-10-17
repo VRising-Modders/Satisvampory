@@ -305,11 +305,10 @@ namespace Satisvampory.Server
             var moves = Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states);
             var moved = moves.Sum(m => m.Amount);
             var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
-            // What came home first, then where it went ("stored in" sets it apart from a quick stash).
-            detail = ServerActions.LootLines(moves.Select(m => (m.Item, m.Amount)).Concat(left.Select(kv => (kv.Key, kv.Value))));
+            // One line per item: what came home and where it went.
             var plotNames = ServerActions.PlotNames(_ctx.Save, members);
-            detail.AddRange(ServerActions.MoveLines(world, home.Catalog, plotNames,
-                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags", ServerActions.ChestLinks(_ctx, world, plotNames)).Select(IntoLine));
+            detail = ServerActions.MoveLines(world, home.Catalog, plotNames,
+                moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags", ServerActions.ChestLinks(_ctx, world, plotNames));
             if (left.Count > 0)
                 _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))

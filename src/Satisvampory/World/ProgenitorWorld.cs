@@ -163,6 +163,12 @@ namespace Satisvampory.World
                 state.FiltersDue = false;
                 state.DefaultBeltMigrated = true;
             }
+            if (state.FactoryOutputsDue)
+            {
+                foreach (var id in Engine.Lists.DefaultBelt.AddFactoryOutputs(state.Graph, infos)) state.Touched.Add(id);
+                state.FactoryOutputsDue = false;
+                state.DefaultBeltMigrated = true;
+            }
             if (state.MisfiledStations2Due)
             {
                 // Stations the game does not report as such (the Blood Homogenizer) counted as chests too.

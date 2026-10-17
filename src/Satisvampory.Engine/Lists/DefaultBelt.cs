@@ -32,8 +32,10 @@ namespace Satisvampory.Engine.Lists
                     lists.Output.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
                 else if (c.Kind == NodeKind.Station && c.Role is StationRole.None or StationRole.Refinement or StationRole.Workstation)
                 {
-                    // Input only: a station sends nothing out until the player sets an Output.
                     lists.Input.Add(AutoInput(graph));
+                    // A factory (it runs while a recipe is on) sends its products to storage by Mass Deposit;
+                    // a queue station or the prison keeps them until the player takes them or sets an Output.
+                    if (IsFactory(c)) lists.Output.Add(AutoOutput(graph));
                     lists.PullOrder = PullOrder.ReverseMassDeposit;
                 }
             }
@@ -81,6 +83,30 @@ namespace Satisvampory.Engine.Lists
                     lists.PullOrder = PullOrder.ReverseMassDeposit;
                     changed.Add(c.Id);
                 }
+            }
+            return changed;
+        }
+
+        /// <summary>A station that keeps refining while a recipe is on (furnace, sawmill, Fabricator), not the prison.</summary>
+        public static bool IsFactory(ContainerInfo c) =>
+            c.Kind == NodeKind.Station && c.Role == StationRole.Refinement
+            && c.FurnitureName.IndexOf("Prison", StringComparison.OrdinalIgnoreCase) < 0;
+
+        static ListEntry AutoOutput(LogisticsGraph graph) =>
+            new() { Kind = EntryKind.MassDeposit, Sequence = graph.NextSequence(), Auto = true };
+
+        /// <summary>
+        /// Save version 9: factories whose Output is empty get the default products-to-storage Output (version 4
+        /// had taken it off every station). An Output the player set stays as it is. Returns what changed.
+        /// </summary>
+        public static List<ContainerId> AddFactoryOutputs(LogisticsGraph graph, IEnumerable<ContainerInfo> containers)
+        {
+            var changed = new List<ContainerId>();
+            foreach (var c in containers)
+            {
+                if (!IsFactory(c) || !graph.Lists.TryGetValue(c.Id, out var lists) || lists.Output.Count > 0) continue;
+                lists.Output.Add(AutoOutput(graph));
+                changed.Add(c.Id);
             }
             return changed;
         }

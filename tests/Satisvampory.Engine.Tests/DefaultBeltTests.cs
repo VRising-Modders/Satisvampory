@@ -38,12 +38,21 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
-        public void Stations_send_nothing_out_until_the_player_sets_an_output()
+        public void Factories_send_products_to_storage_and_queue_stations_and_the_prison_keep_theirs()
         {
-            var station = Furnace();
+            var furnace = Furnace();
+            var bench = world.Chest(home, "Bench", kind: NodeKind.Station); bench.Role = StationRole.Workstation;
+            var prison = world.Chest(home, "Cell", kind: NodeKind.Station); prison.Role = StationRole.Refinement; prison.FurnitureName = "Prison Cell";
             Initialize();
-            Assert.Single(state.Graph.For(station.Id).Input);
-            Assert.Empty(state.Graph.For(station.Id).Output);
+            Assert.Equal(EntryKind.MassDeposit, Assert.Single(state.Graph.For(furnace.Id).Output).Kind);
+            Assert.Empty(state.Graph.For(bench.Id).Output);
+            Assert.Empty(state.Graph.For(prison.Id).Output);
+            // Version 9 gives existing factories the default, leaving an Output the player set.
+            state.Graph.For(furnace.Id).Output.Clear();
+            var chosen = Furnace();
+            state.Graph.For(chosen.Id).Output.Add(ListEntry.Of(bench.Id, state.Graph.NextSequence()));
+            Assert.Equal(new[] { furnace.Id }, DefaultBelt.AddFactoryOutputs(state.Graph, world.ContainersOn(home)));
+            Assert.Equal(EntryKind.Container, Assert.Single(state.Graph.For(chosen.Id).Output).Kind);
         }
 
         [Fact]

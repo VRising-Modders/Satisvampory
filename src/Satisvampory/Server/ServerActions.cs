@@ -250,6 +250,7 @@ namespace Satisvampory.Server
 
         internal static NoticePacket Run(SatisContext ctx, ServerHalf half, Entity userEntity, User user, ActionKind kind)
         {
+            half.Catalog.Refresh(ctx); // cheap when unchanged; an action right after load must not see an empty catalog
             var gate = StateGate(ctx, userEntity);
             if (gate != StateRefusal.None) return Notice(NoticeCode.NotNow, (int)gate);
             var server = half.Config.Snapshot();

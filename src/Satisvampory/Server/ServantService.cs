@@ -288,6 +288,7 @@ namespace Satisvampory.Server
         int StashLoot(ICastleHandle castle, IEnumerable<(Progenitor.Inventory.InventoryRef Inventory, bool Injured)> servants, Engine.Persistence.ServerSettings server,
             out List<string> detail)
         {
+            _half.Catalog.Refresh(_ctx); // cheap when unchanged; never stash against an empty catalog
             var all = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             var (key, members) = _half.Ticker!.IslandOf(castle, all, Ticker.Sharing(server));
             var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, cachedRows: true));
@@ -359,8 +360,11 @@ namespace Satisvampory.Server
         /// <summary>A mission as "Fishing Lake (Farbane)": the game's name by token, then its region from the prefab.</summary>
         string Mission(int guid, string prefab)
         {
-            _missionNames[guid] = ProgenitorWorld.PrettyMission(prefab);
             var region = Region(prefab);
+            // The log's stand-in for the token: the place alone, since the region follows it.
+            var pretty = ProgenitorWorld.PrettyMission(prefab);
+            var paren = pretty.IndexOf(" (", StringComparison.Ordinal);
+            _missionNames[guid] = paren > 0 ? pretty.Substring(0, paren) : pretty;
             return _ctx.Servants.MissionToken(guid) + (region.Length > 0 ? $" ({region})" : "");
         }
 

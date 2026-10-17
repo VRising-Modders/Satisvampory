@@ -63,6 +63,10 @@ namespace Satisvampory.Server
             _ctx.Requests.Handle<AdminReq, Net.TextReply>((u, q, i) => AdminActions.Run(_ctx, this, u, q));
             Ticker = new Ticker(_ctx, this);
             Ticker.Attach();
+            // The catalog first: a stash, a hunt return or a report right after load used an empty one
+            // (no homes for anything, ids for names) until the first tick filled it.
+            try { Catalog.Refresh(_ctx); }
+            catch (System.Exception e) { _ctx.Log.LogWarning("Satisvampory: item catalog not ready at load: " + e.Message); }
             new PanelService(_ctx, this).Attach();
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();

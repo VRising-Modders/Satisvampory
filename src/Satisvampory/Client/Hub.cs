@@ -1393,8 +1393,9 @@ namespace Satisvampory.Client
                     _previewPanel = UiApi.Panel("Object preview", _ctx.Owner, "sv.find.preview");
                     _previewPanel.GameWindow(640);
                     UiApi.TopPanel(_previewPanel);
-                    // At the left edge, with the camera framing the object right of center: never hiding what it shows.
-                    _previewPanel.Dock(UiDock.Left, new UiDockOptions { WidthFraction = 0.3f });
+                    // At the left edge at its own width; the object stays dead center, clear of it on any screen
+                    // (a framing offset as a share of the width threw it far off center on an ultrawide).
+                    _previewPanel.Dock(UiDock.Left);
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
                     _ctx.Track(_previewPanel);
                     _previewHint = _previewPanel.Label("");
@@ -1426,7 +1427,7 @@ namespace Satisvampory.Client
                         _preview = _ctx.Camera.Preview(new Progenitor.Units.UnitVec3(reply.X, reply.Y + 0.7f, reply.Z), reply.Yaw,
                             new Progenitor.Cameras.CameraPreviewOptions
                             {
-                                Seconds = 5, Ended = _ => EndFindPreview(), CompressedHeight = reply.FloorHeight, ScreenOffset = 0.15f,
+                                Seconds = 5, Ended = _ => EndFindPreview(), CompressedHeight = reply.FloorHeight,
                             });
                         WatchPreview();
                     }

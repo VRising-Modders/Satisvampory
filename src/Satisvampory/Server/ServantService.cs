@@ -113,7 +113,9 @@ namespace Satisvampory.Server
 
                 var alive = e.Servants.Where(s => s.Outcome != ServantOutcome.Dead).ToList();
                 var lootStacks = e.TotalLoot.Count;
-                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {e.MissionName}"
+                var trip = CountTrip(e.Territory, e.MissionGuid);
+                var detail = new List<string>();
+                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {e.MissionName}{TripText(trip)}"
                     + (lootStacks > 0 ? $" with {lootStacks} kinds of loot" : ""));
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
@@ -122,7 +124,7 @@ namespace Satisvampory.Server
                     // by the time a handler runs, and then nothing would move.
                     var home = _ctx.Servants.List(castle.Heart.ToEntity()).ToDictionary(x => x.Servant);
                     var bags = alive.Select(s => (home.TryGetValue(s.Servant, out var info) ? info.Inventory : s.Inventory, s.Outcome == ServantOutcome.Injured)).ToList();
-                    var moved = StashLoot(castle, bags, server);
+                    var moved = StashLoot(castle, bags, server, out detail);
                     if (moved > 0) lines.Add($"  loot stashed ({moved:N0} items)");
                     else _ctx.Log.LogInfo($"Satisvampory: returning servants' loot on {plot} found no home ({bags.Count} servant(s))");
                 }
@@ -134,15 +136,19 @@ namespace Satisvampory.Server
                     alive.Select(s => new EngineServant(default, true, s.Outcome == ServantOutcome.Injured)),
                     new Satisvampory.Engine.Stations.Servants.RepeatRules(server.AllowRepeatHunts, server.RepeatHuntsOnlyWhileClanOnline,
                         castleSettings.RepeatHunts, castle.Raided, clanOnline.Count > 0, owner.RepeatMyHunts));
+                var again = false;
                 if (resend.Count > 0)
                 {
                     var r = _ctx.Servants.Resend(e);
+                    again = r.Ok;
                     lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
                 }
+                EndTrip(e.Territory, e.MissionGuid, again);
 
                 var text = string.Join("\n", lines);
                 foreach (var user in clanOnline) Notify(user, text);
                 Log(castle.Owner.PlatformId, text, plot);
+                ChatReport(castle, lines, detail);
             }
             catch (Exception ex)
             {
@@ -222,15 +228,18 @@ namespace Satisvampory.Server
 
             var owner = _half.PlayerFor(castle.Owner.PlatformId);
             var plot = Labels.Name(_ctx.Save, castle);
-            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {hunt.MissionName} while the server was not watching" };
+            var trip = CountTrip(hunt.Territory, hunt.MissionGuid);
+            var detail = new List<string>();
+            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {hunt.MissionName}{TripText(trip)} while the server was not watching" };
             var alive = servants.Where(s => s.State != Progenitor.Servants.ServantState.Dead).ToList();
             if (server.AllowServantLootStash && owner.ServantLootStash && alive.Any(s => s.ItemStacks > 0))
             {
-                var moved = StashLoot(castle, alive.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server);
+                var moved = StashLoot(castle, alive.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server, out detail);
                 if (moved > 0) lines.Add($"  loot stashed ({moved:N0} items)");
             }
 
             var clanOnline = ClanOnline(castle);
+            var again = false;
             var resend = Satisvampory.Engine.Stations.Servants.Resend(
                 alive.Select(s => new EngineServant(default, true, s.State == Progenitor.Servants.ServantState.Injured)),
                 new Satisvampory.Engine.Stations.Servants.RepeatRules(server.AllowRepeatHunts, server.RepeatHuntsOnlyWhileClanOnline,
@@ -247,13 +256,16 @@ namespace Satisvampory.Server
                     });
                     if (!r.Ok && r.Refusal is ServantSendRefusal.ZoneBusy or ServantSendRefusal.ServantBusy) return; // already back out
                     lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
+                    again = r.Ok;
                 }
             }
+            EndTrip(hunt.Territory, hunt.MissionGuid, again);
 
             var text = string.Join("\n", lines);
             _ctx.Log.LogInfo("Satisvampory: " + text.Replace("\n", " |"));
             foreach (var user in clanOnline) Notify(user, text);
             Log(castle.Owner.PlatformId, text, plot);
+            ChatReport(castle, lines, detail);
         }
 
         static string Outcome(ServantOutcome o) => o switch
@@ -265,9 +277,10 @@ namespace Satisvampory.Server
 
         /// <summary>Loot goes to Mass Deposit homes on the castle's island, its own plot first, then spoils chests.</summary>
         int StashLoot(ICastleHandle castle, List<ReturnedServant> servants, Engine.Persistence.ServerSettings server) =>
-            StashLoot(castle, servants.Select(s => (s.Inventory, s.Outcome == ServantOutcome.Injured)), server);
+            StashLoot(castle, servants.Select(s => (s.Inventory, s.Outcome == ServantOutcome.Injured)), server, out _);
 
-        int StashLoot(ICastleHandle castle, IEnumerable<(Progenitor.Inventory.InventoryRef Inventory, bool Injured)> servants, Engine.Persistence.ServerSettings server)
+        int StashLoot(ICastleHandle castle, IEnumerable<(Progenitor.Inventory.InventoryRef Inventory, bool Injured)> servants, Engine.Persistence.ServerSettings server,
+            out List<string> detail)
         {
             var all = _ctx.Castles.All().Where(c => c.Enabled).ToList();
             var (key, members) = _half.Ticker!.IslandOf(castle, all, Ticker.Sharing(server));
@@ -282,13 +295,58 @@ namespace Satisvampory.Server
             var moves = Satisvampory.Engine.Stations.Servants.StashLoot(world, home, states);
             var moved = moves.Sum(m => m.Amount);
             var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
-            ServerActions.LogMoves(_ctx, _half, castle.Owner.PlatformId, $"servant loot on plot {castle.Territory.Index}", world, home.Catalog,
+            detail = ServerActions.MoveLines(world, home.Catalog, ServerActions.PlotNames(_ctx.Save, members),
                 moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags");
             if (left.Count > 0)
                 _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))
                     + $"; {states.Count} servant(s), {world.ContainersOn(home.Standing).Count(c => c.Deposit.Special == SpecialKind.Spoils)} spoils chest(s)");
             return moved;
+        }
+
+        // ---------------- repeat-hunt trips ----------------
+
+        const string TripsKey = "hunts/trips";
+
+        /// <summary>This return's number in an unbroken run of repeat hunts (1 for the first).</summary>
+        int CountTrip(int territory, int mission)
+        {
+            var trips = _ctx.Save.Get<Dictionary<string, int>>(TripsKey) ?? new();
+            var key = HuntKey(territory, mission);
+            var n = (trips.TryGetValue(key, out var had) ? had : 0) + 1;
+            trips[key] = n;
+            _ctx.Save.Set(TripsKey, trips);
+            return n;
+        }
+
+        /// <summary>A hunt sent out again keeps its count; any other ending starts over next time.</summary>
+        void EndTrip(int territory, int mission, bool sentAgain)
+        {
+            if (sentAgain) return;
+            var trips = _ctx.Save.Get<Dictionary<string, int>>(TripsKey) ?? new();
+            if (trips.Remove(HuntKey(territory, mission))) _ctx.Save.Set(TripsKey, trips);
+        }
+
+        static string TripText(int trip) => trip > 1 ? $" (trip {trip})" : "";
+
+        /// <summary>The return and where its loot went, in chat for clan members who keep "Log my deposits" on.</summary>
+        void ChatReport(ICastleHandle castle, List<string> lines, List<string> detail)
+        {
+            var body = lines.Skip(1).Select(l => l.Trim()).Where(l => !l.StartsWith("loot stashed")).Concat(detail).ToList();
+            if (body.Count == 0) body.Add("no loot to stash");
+            ServerActions.Report(_ctx, _half, lines[0], body, ClanOnlineAccounts(castle));
+        }
+
+        List<(Entity User, ulong Account)> ClanOnlineAccounts(ICastleHandle castle)
+        {
+            var list = new List<(Entity, ulong)>();
+            var clan = _ctx.Clans.Of(castle.Owner.User.ToEntity());
+            if (!clan.IsNone)
+                foreach (var m in _ctx.Clans.Members(clan))
+                    if (m.IsConnected) list.Add((m.User.ToEntity(), m.PlatformId));
+            if (list.Count == 0 && _ctx.Players.TryGetByAccount(castle.Owner.PlatformId, out var p) && p.IsOnline && _ctx.Players.IsFresh(p))
+                list.Add((castle.Owner.User.ToEntity(), castle.Owner.PlatformId));
+            return list;
         }
 
         /// <summary>Online users of the castle's clan, or its owner when clanless.</summary>

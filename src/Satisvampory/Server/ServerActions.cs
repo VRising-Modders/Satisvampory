@@ -142,20 +142,47 @@ namespace Satisvampory.Server
             _ => "Not now.",
         };
 
-        /// <summary>One log line per item and destination, so a deposit can be traced afterwards.</summary>
-        static void LogMoves(SatisContext ctx, ServerHalf half, string action, User user, IWorld world, ItemCatalog catalog, ActionResult r) =>
-            LogMoves(ctx, half, user.PlatformId, $"{action} by {user.CharacterName}", world, catalog,
-                r.Moves.Select(m => (m.To, m.Item, m.Amount)), r.Left, "the bag");
-
-        internal static void LogMoves(SatisContext ctx, ServerHalf half, ulong owner, string what, IWorld world, ItemCatalog catalog,
+        /// <summary>
+        /// Where a stash, tidy or servant loot went, one line per destination chest
+        /// ("20 Copper Ore, 1 Thread Coarse → Metal1 (Plot 6)"), then what found no room.
+        /// </summary>
+        internal static List<string> MoveLines(IWorld world, ItemCatalog catalog, Func<PlotId, string> plotName,
             IEnumerable<(ContainerId To, ItemId Item, int Amount)> moves, IReadOnlyDictionary<ItemId, int> left, string leftIn)
         {
-            if (!half.PlayerFor(owner).LogMyDeposits) return;
-            string Where(ContainerId id) { var c = world.Find(id); return c == null ? id.ToString() : $"{c.DisplayName} [{id}] on plot {c.Plot}"; }
-            foreach (var g in moves.GroupBy(m => (m.Item, m.To)))
-                ctx.Log.LogInfo($"Satisvampory: {what}: {g.Sum(m => m.Amount)} x {catalog.NameOf(g.Key.Item)} -> {Where(g.Key.To)}");
-            foreach (var kv in left)
-                ctx.Log.LogInfo($"Satisvampory: {what}: {kv.Value} x {catalog.NameOf(kv.Key)} left in {leftIn} (no room)");
+            var lines = new List<string>();
+            foreach (var g in moves.GroupBy(m => m.To))
+            {
+                var c = world.Find(g.Key);
+                var items = string.Join(", ", g.GroupBy(m => m.Item).Select(x => $"{x.Sum(m => m.Amount):N0} {catalog.NameOf(x.Key)}"));
+                lines.Add(c == null ? $"{items} → {g.Key}" : $"{items} → {c.DisplayName} ({plotName(c.Plot)})");
+            }
+            if (left.Count > 0)
+                lines.Add($"no room, left in {leftIn}: " + string.Join(", ", left.Select(kv => $"{kv.Value:N0} {catalog.NameOf(kv.Key)}")));
+            return lines;
+        }
+
+        /// <summary>Plot names as the Castle page shows them.</summary>
+        internal static Func<PlotId, string> PlotNames(Progenitor.Persistence.IModStore save, IReadOnlyList<ICastleHandle> castles) =>
+            p => castles.FirstOrDefault(c => ProgenitorWorld.PlotOf(c) == p) is { } c ? Labels.Name(save, c) : "Plot " + p.Value;
+
+        /// <summary>The breakdown to the server log and, for players who keep "Log my deposits" on, to their chat.</summary>
+        internal static void Report(SatisContext ctx, ServerHalf half, string header, List<string> lines, IEnumerable<(Entity User, ulong Account)> readers)
+        {
+            if (lines.Count == 0) return;
+            ctx.Log.LogInfo($"Satisvampory: {header} | " + string.Join(" | ", lines));
+            foreach (var (user, account) in readers)
+            {
+                if (!half.PlayerFor(account).LogMyDeposits) continue;
+                ctx.Chat.SendTo(user, header);
+                foreach (var line in lines) ctx.Chat.SendTo(user, "  " + line, prefix: false);
+            }
+        }
+
+        static void ReportAction(SatisContext ctx, ServerHalf half, string verb, Entity userEntity, User user, IWorld world, ItemCatalog catalog, Island island, ActionResult r)
+        {
+            if (r.Moves.Count == 0 && r.Left.Count == 0) return;
+            var lines = MoveLines(world, catalog, PlotNames(ctx.Save, island.Castles), r.Moves.Select(m => (m.To, m.Item, m.Amount)), r.Left, "your bag");
+            Report(ctx, half, $"{verb} {r.Items:N0} items:", lines, new[] { (userEntity, user.PlatformId) });
         }
 
         internal static NoticePacket Run(SatisContext ctx, ServerHalf half, Entity userEntity, User user, ActionKind kind)
@@ -184,7 +211,7 @@ namespace Satisvampory.Server
                 {
                     if (island.Relation is not (CastleRelation.Owner or CastleRelation.ClanMember)) return Notice(NoticeCode.Refused);
                     var r = PlayerActions.Tidy(world, deposit, island.State.Graph);
-                    LogMoves(ctx, half, "Tidy", user, world, deposit.Catalog, r);
+                    ReportAction(ctx, half, "Tidied", userEntity, user, world, deposit.Catalog, island, r);
                     return Notice(NoticeCode.Tidied, r.Items, r.Containers(byDestination: true));
                 }
                 case ActionKind.Stash:
@@ -198,7 +225,7 @@ namespace Satisvampory.Server
                         .Select(s => new ItemStack(new ItemId(s.Item), s.Amount))
                         .ToList();
                     var r = PlayerActions.Stash(world, deposit, bagId, stashable);
-                    LogMoves(ctx, half, "Stash", user, world, deposit.Catalog, r);
+                    ReportAction(ctx, half, "Stashed", userEntity, user, world, deposit.Catalog, island, r);
                     return Notice(NoticeCode.Stashed, r.Moves.Count, r.Containers(byDestination: true));
                 }
                 default:

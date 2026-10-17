@@ -81,6 +81,18 @@ namespace Satisvampory.Client
             }
         }
 
+        /// <summary>An item's name as the game shows it, or null when the catalog has none.</summary>
+        public static string? NameOf(PluginContext ctx, int guid)
+        {
+            try
+            {
+                foreach (var e in ctx.Items.Catalog())
+                    if (e.PrefabGuid == guid) return string.IsNullOrWhiteSpace(e.DisplayName) ? null : e.DisplayName;
+            }
+            catch (InvalidOperationException) { }
+            return null;
+        }
+
         static Dictionary<string, int>? Map(PluginContext ctx)
         {
             try

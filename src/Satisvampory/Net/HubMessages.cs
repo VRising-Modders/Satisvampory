@@ -342,6 +342,10 @@ namespace Satisvampory.Net
         [Field(4)] public float Z;
         [Field(5)] public float Yaw;
         [Field(6)] public int FloorHeight = -1;
+        /// <summary>What the chest holds (a station: input and output together), item guids and amounts in step.</summary>
+        [Field(7)] public List<int> Items = new();
+        [Field(8)] public List<int> Amounts = new();
+        [Field(9)] public string Name = "";
     }
 
     [ModMessage("sv.find.preview.end")]

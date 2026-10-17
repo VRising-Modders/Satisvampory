@@ -792,8 +792,16 @@ namespace Satisvampory.Server
                 if (_previews.TryGetValue(s.UserEntity, out var active) && active.Token == token)
                 { active.Lease.Dispose(); _previews.Remove(s.UserEntity); }
             }, _ctx.Owner);
-            return new PreviewReply { Token = token, X = point.X, Y = point.Y, Z = point.Z,
-                Yaw = world.FacingOf(id) + 180, FloorHeight = _ctx.Castles.BuildingFloorHeight(entity) };
+            var reply = new PreviewReply { Token = token, X = point.X, Y = point.Y, Z = point.Z,
+                Yaw = world.FacingOf(id) + 180, FloorHeight = _ctx.Castles.BuildingFloorHeight(entity), Name = world.Find(id)!.DisplayName };
+            var held = world.Contents(id).AsEnumerable();
+            if (world.Find(id)!.Kind == NodeKind.Station) held = held.Concat(world.Contents(id, InvPart.Output));
+            foreach (var g in held.GroupBy(x => x.Item).OrderByDescending(g => g.Sum(x => x.Amount)))
+            {
+                reply.Items.Add(g.Key.Guid);
+                reply.Amounts.Add(g.Sum(x => x.Amount));
+            }
+            return reply;
         }
 
         TextReply Pull(Session s, PullReq q)

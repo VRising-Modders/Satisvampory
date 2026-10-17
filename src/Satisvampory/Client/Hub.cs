@@ -1080,6 +1080,8 @@ namespace Satisvampory.Client
             foreach (var handle in _findLocationControls) handle.Visible = locations && _tabs.Selected == FindTab;
         }
         IUiPanel? _previewPanel;
+        IUiLabel _previewTitle = null!;
+        IUiDataTable _previewContents = null!;
         Progenitor.Cameras.PluginCamera.CameraPreview? _preview;
 
         void BuildFind(IUiPanel p)
@@ -1250,8 +1252,18 @@ namespace Satisvampory.Client
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
                     _ctx.Track(_previewPanel);
                     _previewPanel.Label("Right-drag to rotate. Escape returns. Ends after 5 seconds.");
+                    _previewTitle = _previewPanel.Label("");
+                    _previewContents = _previewPanel.DataTable("preview.contents", new[]
+                    {
+                        new UiTableColumn("item", "Holds") { Hideable = false },
+                        new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Format = "#,0", Width = 160 },
+                    }, new UiDataTableOptions { VisibleRows = 8, Selectable = false, TotalRow = false, EmptyText = "Empty." });
                     Track(_previewPanel.Button("Return").Centered().KeyHint("Esc").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                 }
+                _previewTitle.Text = reply.Name;
+                _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }
+                    .Text("item", ClientItems.NameOf(_ctx, item) ?? "Item " + item)
+                    .Number("amount", i < reply.Amounts.Count ? reply.Amounts[i] : 0)));
                 UiApi.Hide(Panel);
                 UiApi.Show(_previewPanel);
                 Progenitor.Dev.MainThread.PostDelayed(0.75, () =>

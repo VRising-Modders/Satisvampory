@@ -51,6 +51,8 @@ namespace Satisvampory.Engine.Model
         UnitSpawner,
         Brazier,
         Stable,
+        /// <summary>Servant and stone coffins: their slots are the servant's, never a deposit home.</summary>
+        Coffin,
     }
 
     /// <summary>Special kinds from spec 09. Set from Deposit options, or imported from 1.x names.</summary>

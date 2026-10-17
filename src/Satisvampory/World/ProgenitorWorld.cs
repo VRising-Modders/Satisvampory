@@ -319,6 +319,7 @@ namespace Satisvampory.World
             if (Has(name, "Devour")) return StationRole.Devourer;
             if (Has(name, "Brazier") || Has(name, "Bonfire")) return StationRole.Brazier;
             if (Has(name, "Stable")) return StationRole.Stable;
+            if (Has(name, "Coffin")) return StationRole.Coffin;
             if (Has(name, "Tomb") || Has(name, "Nest") || Has(name, "Spawner")) return StationRole.UnitSpawner;
             return row.IsRefinement ? StationRole.Refinement : StationRole.Workstation;
         }

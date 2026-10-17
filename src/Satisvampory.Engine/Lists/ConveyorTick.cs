@@ -240,7 +240,7 @@ namespace Satisvampory.Engine.Lists
         {
             var stations = _graph.Lists.Keys
                 .Select(id => _world.Find(id))
-                .Where(c => c != null && c.Kind == NodeKind.Station && _inScope.Contains(c.Id))
+                .Where(c => c != null && c.Kind == NodeKind.Station && c.Role != StationRole.Coffin && _inScope.Contains(c.Id))
                 .Select(c => c!)
                 .ToList();
 
@@ -482,14 +482,18 @@ namespace Satisvampory.Engine.Lists
             var outgoing = loop.Edges.ToLookup(e => e.From);
             // Follow connection order rather than random container ids. This lets the same
             // ring settle consistently regardless of which ids a save assigned its chests.
-            var members = loop.Edges.OrderBy(e => e.Sequence).Select(e => e.From).Distinct().ToArray();
+            // Only chests share a loop's stock; a station in the ring keeps what its recipes pulled.
+            bool IsChest(ContainerId id) => _world.Find(id)?.Kind == NodeKind.Chest;
+            var members = loop.Edges.OrderBy(e => e.Sequence).Select(e => e.From).Distinct().Where(IsChest).ToArray();
+            var chests = loop.Members.Where(IsChest).ToList();
+            if (chests.Count < 2) return;
             var items = members.SelectMany(m => _world.Contents(m)).Select(s => s.Item).Distinct().OrderBy(i => i.Guid).ToArray();
             foreach (var item in items)
             {
-                var counts = loop.Members.ToDictionary(m => m, m => _world.Count(m, item));
+                var counts = chests.ToDictionary(m => m, m => _world.Count(m, item));
                 if (counts.Values.Max() - counts.Values.Min() <= Catalog.MaxStack(item)) continue;
                 var total = counts.Values.Sum(n => (long)n);
-                var targets = loop.Members.Select((m, i) => (m, n: (int)(total / counts.Count + (i < total % counts.Count ? 1 : 0))))
+                var targets = chests.Select((m, i) => (m, n: (int)(total / counts.Count + (i < total % counts.Count ? 1 : 0))))
                     .ToDictionary(x => x.m, x => x.n);
                 // Incoming items are not forwarded again in this pass. Existing stock may travel
                 // one edge toward a downstream deficit, even when the next chest has its share.
@@ -509,8 +513,9 @@ namespace Satisvampory.Engine.Lists
                             var to = edge.To;
                             if (firstHop.ContainsKey(to) || !edge.Filter.Allows(item, Catalog)) continue;
                             var target = _world.Find(to);
+                            // Stations are fed by their recipes, never handed a loop's share.
                             if (target == null || target.AutomationSuspended || target.Deposit.Special == SpecialKind.Skip
-                                || (target.Kind == NodeKind.Chest && !DepositScore.Takes(target, item, Catalog))
+                                || target.Kind != NodeKind.Chest || !DepositScore.Takes(target, item, Catalog)
                                 || _world.FreeSpace(to, item) <= 0) continue;
                             firstHop[to] = current == from ? to : firstHop[current];
                             if (counts[to] < targets[to])
@@ -631,6 +636,8 @@ namespace Satisvampory.Engine.Lists
             // Applies to edges, loops, and mass-deposit outputs too. Workstation inventories are
             // shared input/output: products follow output routes; ingredients use the grace-controlled return path.
             if (target.Role == StationRole.Workstation) return 0;
+            // A coffin's slots belong to its servant.
+            if (source.Role == StationRole.Coffin || target.Role == StationRole.Coffin) return 0;
             if (source.Role == StationRole.Workstation)
             {
                 if (!_world.StationInputs(from).CanReclaim || _world.Recipes(from).Count == 0) return 0;

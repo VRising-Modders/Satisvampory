@@ -199,5 +199,15 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal(line, err.Line);
             Assert.Contains(text, err.Text);
         }
+
+        [Fact]
+        public void Coffins_never_take_and_unlisted_stations_are_skipped()
+        {
+            var coffin = _w.Chest(Home, "coffin", kind: NodeKind.Station); coffin.Role = StationRole.Coffin;
+            var tomb = _w.Chest(Home, "tomb", kind: NodeKind.Station); tomb.Role = StationRole.UnitSpawner;
+            Assert.Empty(DepositPlanner.Plan(Ctx(), IronOre, 50));
+            var chest = _w.Chest(Home, "chest");
+            Assert.Equal(chest.Id, DepositPlanner.Plan(Ctx(), IronOre, 50).Single().To);
+        }
     }
 }

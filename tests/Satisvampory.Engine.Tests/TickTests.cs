@@ -213,6 +213,35 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void A_station_in_a_balanced_loop_is_never_handed_a_share()
+        {
+            var a = _w.Chest(Home, "a");
+            var tomb = _w.Chest(Home, "tomb", kind: NodeKind.Station); tomb.Role = StationRole.UnitSpawner;
+            var b = _w.Chest(Home, "b");
+            _g.For(a.Id).Output.Add(ListEntry.Of(tomb.Id, _g.NextSequence()));
+            _g.For(tomb.Id).Output.Add(ListEntry.Of(b.Id, _g.NextSequence()));
+            _g.For(b.Id).Output.Add(ListEntry.Of(a.Id, _g.NextSequence()));
+            _w.Put(a, Plank, 1000);
+            Tick(0);
+            foreach (var loop in _state.Loops.Values) loop.Mode = LoopMode.EvenDistribution;
+            for (var t = 1; t < 10; t++) Tick(t);
+            Assert.Equal(0, _w.Count(tomb.Id, Plank));
+        }
+
+        [Fact]
+        public void Coffins_are_never_fed_or_emptied()
+        {
+            var chest = _w.Chest(Home, "chest");
+            var coffin = _w.Chest(Home, "coffin", kind: NodeKind.Station); coffin.Role = StationRole.Coffin;
+            _w.Put(chest, Plank, 10).Put(coffin, IronOre, 5);
+            _g.For(chest.Id).Output.Add(ListEntry.Of(coffin.Id, _g.NextSequence()));
+            _g.For(coffin.Id).Output.Add(ListEntry.Of(chest.Id, _g.NextSequence()));
+            for (var t = 0; t < 5; t++) Tick(t);
+            Assert.Equal(0, _w.Count(coffin.Id, Plank));
+            Assert.Equal(5, _w.Count(coffin.Id, IronOre));
+        }
+
+        [Fact]
         public void Edge_to_a_plot_outside_the_island_is_out_of_scope()
         {
             var a = _w.Chest(Home, "a");

@@ -106,6 +106,18 @@ namespace Satisvampory.Client
             return null;
         }
 
+        /// <summary>An item's stack size as the game sets it; 1 when the catalog has none.</summary>
+        public static int MaxStack(PluginContext ctx, int guid)
+        {
+            try
+            {
+                foreach (var e in ctx.Items.Catalog())
+                    if (e.PrefabGuid == guid) return Math.Max(1, e.MaxAmount);
+            }
+            catch (InvalidOperationException) { }
+            return 1;
+        }
+
         static Dictionary<string, int>? Map(PluginContext ctx)
         {
             try

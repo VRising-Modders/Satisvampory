@@ -1157,7 +1157,8 @@ namespace Satisvampory.Client
             Track(_findPinButton.OnClick(Locate));
             p.EndInline();
             p.BeginInline();
-            _pullAmount = FindControl(p.Input("Take amount (blank: one stack)", ""), true);
+            _takeWhat = FindControl(p.Label(""), true);
+            _pullAmount = FindControl(p.Input("Amount (blank: one stack)", ""), true);
             _findTake = FindControl(p.Button("Take"), true);
             UpdateFindActions();
             Track(_findTake.OnClick(() =>
@@ -1319,6 +1320,7 @@ namespace Satisvampory.Client
         }
 
         IUiButton _findView = null!, _findPinButton = null!, _findTake = null!;
+        IUiLabel _takeWhat = null!;
 
         /// <summary>The location actions stay grayed until a chest or station is chosen (Take also needs an item).</summary>
         void UpdateFindActions()
@@ -1329,6 +1331,9 @@ namespace Satisvampory.Client
             _findPinButton.Interactable = chosen?.HasPosition == true;
             _findTake.Interactable = chosen != null && _findItem != 0;
             _pullAmount.Interactable = chosen != null && _findItem != 0;
+            _takeWhat.Text = _findItem == 0
+                ? "Choose an item and a location to take from storage."
+                : $"Take {ClientItems.NameOf(_ctx, _findItem) ?? "this item"} from storage · one stack is {ClientItems.MaxStack(_ctx, _findItem):N0}";
         }
 
         int _previewSequence;

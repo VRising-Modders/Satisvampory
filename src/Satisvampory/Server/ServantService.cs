@@ -108,7 +108,7 @@ namespace Satisvampory.Server
                 var lootStacks = e.TotalLoot.Count;
                 var trip = CountTrip(e.Territory, e.MissionGuid);
                 var detail = new List<string>();
-                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {Mission(e.MissionGuid, e.MissionName)}{TripText(trip)}"
+                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome) + (s.CapForcedFailure ? " (the repeat-hunt cap)" : "")))} back from {Mission(e.MissionGuid, e.MissionName)}{TripText(trip)}"
                     + (lootStacks > 0 ? $" with {lootStacks} kinds of loot" : ""));
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
@@ -132,7 +132,7 @@ namespace Satisvampory.Server
                 var again = false;
                 if (resend.Count > 0)
                 {
-                    var r = _ctx.Servants.Resend(e);
+                    var r = _ctx.Servants.Resend(e, RepeatCap(server));
                     again = r.Ok;
                     lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
                 }
@@ -246,6 +246,7 @@ namespace Satisvampory.Server
                     var r = _ctx.Servants.Send(new ServantSendRequest
                     {
                         Heart = castle.Heart, Servants = ready, MissionGuid = hunt.MissionGuid, DataSlot = hunt.DataSlot, CheckDiscovered = false,
+                        MaxSuccess = RepeatCap(server),
                     });
                     if (!r.Ok && r.Refusal is ServantSendRefusal.ZoneBusy or ServantSendRefusal.ServantBusy) return; // already back out
                     lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
@@ -322,8 +323,8 @@ namespace Satisvampory.Server
             {
                 var trips = _ctx.Save.Get<Dictionary<string, int>>(TripsKey);
                 var trip = (trips != null && trips.TryGetValue(HuntKey(castle.Territory.Index, m.MissionGuid), out var done) ? done : 0) + 1;
-                // The success cap joins this line once Progenitor lets a mod cap the roll; until then it would be a false claim.
                 lines.Add($"Repeat hunt: on, trip {trip}"
+                    + (RepeatCap(server) is { } cap ? $" · repeats succeed at most {cap * 100:0}%" : "")
                     + (server.RepeatHuntsOnlyWhileClanOnline ? " · only while the clan is online" : ""));
             }
             else
@@ -362,6 +363,13 @@ namespace Satisvampory.Server
                 text += $" (game {string.Join("/", chances.Select(c => Pct(c.Vanilla)).Distinct())}, capped for repeat hunts)";
             return text;
         }
+
+        /// <summary>
+        /// The success cap a repeat send carries (risk for the trips it saves): null at 100%, where the game's
+        /// own chance stands. A capped failure is the game's: the servant dies.
+        /// </summary>
+        static float? RepeatCap(Engine.Persistence.ServerSettings server) =>
+            server.RepeatHuntSuccessCap >= 100 ? null : Math.Clamp(server.RepeatHuntSuccessCap, 1, 99) / 100f;
 
         // ---------------- repeat-hunt trips ----------------
 

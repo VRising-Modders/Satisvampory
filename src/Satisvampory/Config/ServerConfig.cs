@@ -61,7 +61,7 @@ namespace Satisvampory.Config
             c.Flag(ctx, "HeartTopUpOutsideIsland", d.HeartTopUpOutsideIsland, "Also top up hearts outside the island", "A visited plot of the player or clan that is not on their island.", (s, v) => s.HeartTopUpOutsideIsland = v);
             c.Flag(ctx, "AllowRepeatHunts", d.AllowRepeatHunts, "Allow repeat hunts", "Servants go back out on the same hunt.", (s, v) => s.AllowRepeatHunts = v);
             c.Flag(ctx, "RepeatHuntsOnlyWhileClanOnline", d.RepeatHuntsOnlyWhileClanOnline, "Repeat hunts only while a clan member is online", "", (s, v) => s.RepeatHuntsOnlyWhileClanOnline = v);
-            c.Int(ctx, "RepeatHuntSuccessCap", d.RepeatHuntSuccessCap, 1, 100, "Repeat hunt success cap (shown)", "Shown in notices; the roll stays vanilla.", (s, v) => s.RepeatHuntSuccessCap = v);
+            c.Int(ctx, "RepeatHuntSuccessCap", d.RepeatHuntSuccessCap, 1, 100, "Repeat hunt success cap", "Hunts sent out again succeed at most this often (100: the game's own chance). A failed hunt kills the servant, as in the game.", (s, v) => s.RepeatHuntSuccessCap = v);
             c.Aliases = ctx.Bind(Section, "ItemAliases", d.ItemAliases, "Extra item aliases, e.g. ior = Iron Ore; rb = Ruby", synced: true);
             c.Rows.Add((c.Aliases, "Item aliases (server)", "Built-ins (be gbe pbe abe gss sgs dsi ot) always work. Add more as alias = item; separate with ; or new lines."));
             c._apply.Add(s => s.ItemAliases = c.Aliases.Value);

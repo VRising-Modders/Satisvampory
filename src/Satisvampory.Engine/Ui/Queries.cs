@@ -104,9 +104,8 @@ namespace Satisvampory.Engine.Ui
                 if (c.Plot == q.Standing && q.Player is { } p)
                     dist = MathF.Sqrt((c.X - p.X) * (c.X - p.X) + (c.Z - p.Z) * (c.Z - p.Z));
 
-                var section = c.Deposit.Special != SpecialKind.None && c.Deposit.Special != SpecialKind.Skip
-                    ? PickerSection.SpecialChests
-                    : c.Plot == q.Standing ? PickerSection.Here : PickerSection.OtherPlots;
+                // Special-purpose chests (overflow, spoils) list with the other chests; their hint says what they are.
+                var section = c.Plot == q.Standing ? PickerSection.Here : PickerSection.OtherPlots;
 
                 rows.Add(new PickerRow
                 {

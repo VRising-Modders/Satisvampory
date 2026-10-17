@@ -81,7 +81,7 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal("holds 320 Plank", Row("Far").Hint);
             Assert.True(Row("Near").Distance < Row("Far").Distance);
             Assert.Equal("Plot 2", Row("Ore").PlotLabel);
-            Assert.Equal(PickerSection.SpecialChests, Row("Bin").Section);
+            Assert.Equal(PickerSection.Here, Row("Bin").Section);           // special-purpose chests list with the others
             Assert.NotNull(Row("Hidden").Refused);
             Assert.Equal("Hearts only give items through their own Output", rows.Single(r => r.Container == heart.Id).Refused);
             Assert.Equal("makes Iron Ingot", Row("Furnace").Hint);

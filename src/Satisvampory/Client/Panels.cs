@@ -659,9 +659,9 @@ namespace Satisvampory.Client
                 Placeholder = "Search chests, belts, plots, or what they hold",
                 Columns = new[]
                 {
-                    new UiTableColumn("plot", "Plot") { Width = 220 },
-                    new UiTableColumn("dist", "Distance", UiTableColumnKind.Number) { Format = "0 m", Width = 130 },
-                    new UiTableColumn("what", "Holds / makes / wants") { Width = 330 },
+                    new UiTableColumn("plot", "Plot") { Width = 150 },
+                    new UiTableColumn("dist", "Distance", UiTableColumnKind.Number) { Format = "0 m", Width = 110 },
+                    new UiTableColumn("what", "Holds / makes / wants") { Width = 280 },
                 },
                 Sort = new[] { new UiTableSortKey("dist") },
                 Filters = new[]
@@ -670,7 +670,6 @@ namespace Satisvampory.Client
                     new UiChecklistFilter("chests", "Chests"),
                     new UiChecklistFilter("belts", "Belts"),
                     new UiChecklistFilter("stations", "Stations"),
-                    new UiChecklistFilter("special", "Special chests"),
                 },
                 DefaultFilter = "common",
                 AllFilterLabel = "Everything",
@@ -720,7 +719,7 @@ namespace Satisvampory.Client
                         "chest" => new[] { "common", "chests" },
                         "belt" => new[] { "common", "belts" },
                         "station" => new[] { "stations" },
-                        "special" => new[] { "special" },
+                        "special" => new[] { "common", "chests" },
                         _ => new[] { "common" },
                     },
                     BuildingPrefab = x.BuildingPrefab,

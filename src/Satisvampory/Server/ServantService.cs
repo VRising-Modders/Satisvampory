@@ -309,7 +309,12 @@ namespace Satisvampory.Server
             if (left.Count > 0)
                 _ctx.Log.LogInfo($"Satisvampory: servant loot left after stash on plot {castle.Territory.Index} (moved {moved}): "
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))
-                    + $"; {states.Count} servant(s), {world.ContainersOn(home.Standing).Count(c => c.Deposit.Special == SpecialKind.Spoils)} spoils chest(s)");
+                    + $"; {states.Count} servant(s), {world.ContainersOn(home.Standing).Count(c => c.Deposit.Special == SpecialKind.Spoils)} spoils chest(s)"
+                    // Why nothing had a home: no containers seen, none taking anything, or no free space read.
+                    + $"; island {key}: {members.Count} castle(s), {home.Scope.Count} plot(s), "
+                    + $"{home.Scope.Sum(p => world.ContainersOn(p).Count(c => c.Kind == NodeKind.Chest))} chest(s), "
+                    + $"{home.Scope.Sum(p => world.ContainersOn(p).Count(c => c.Kind == NodeKind.Chest && c.Deposit.Takes == Takes.Anything))} take anything, "
+                    + $"free for {left.Keys.First().Guid}: {home.Scope.SelectMany(p => world.ContainersOn(p)).Where(c => c.Kind == NodeKind.Chest).Sum(c => world.FreeSpace(c.Id, left.Keys.First()))}");
             return moved;
         }
 

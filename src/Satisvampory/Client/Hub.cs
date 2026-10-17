@@ -95,6 +95,9 @@ namespace Satisvampory.Client
         {
             keys.Pressed += OnKey;
             _ctx.Track(new OnDispose(() => keys.Pressed -= OnKey));
+            // Build the hub (hidden) right after load: built on the first key press it stalled that frame for
+            // about a second. At load the player is at the menu or joining, where it goes unnoticed.
+            Progenitor.Dev.MainThread.PostDelayed(2, WarmUp, _ctx.Owner);
             // Chat links in Satisvampory's deposit and hunt lines: a chest pins it on the map, an item opens Find.
             _ctx.Chat.OnModLink("satisvampory", OnChestLink);
             _ctx.Chat.OnLinkClicked(OnItemLink);
@@ -279,6 +282,21 @@ namespace Satisvampory.Client
                     _ctx.Hud.Notify(r.Status == RequestStatus.Refused && !string.IsNullOrEmpty(r.Reason) ? r.Reason : r.Status.ToString(), kind: UiNoticeKind.Warning, seconds: 6);
                 }
             });
+
+        int _warmTries;
+
+        void WarmUp()
+        {
+            if (_panel != null) return;
+            try { _ = Panel; }
+            catch (Exception e)
+            {
+                // The game's UI may not be up yet (very early load): try again shortly, a few times.
+                _panel = null;
+                if (++_warmTries < 10) Progenitor.Dev.MainThread.PostDelayed(5, WarmUp, _ctx.Owner);
+                else _ctx.Log.LogInfo("Satisvampory: hub warm-up skipped: " + e.Message);
+            }
+        }
 
         IUiPanel Panel
         {

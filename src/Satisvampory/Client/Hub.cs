@@ -1106,7 +1106,7 @@ namespace Satisvampory.Client
                 new UiTableColumn("name", "Matches — best first") { Hideable = false },
                 new UiTableColumn("kind", "Type") { Width = 210 },
                 new UiTableColumn("amount", "Stored", UiTableColumnKind.Number) { Width = 130 },
-            }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
+            }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, ColumnChooser = false, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
             Track(_findMatches.OnSelectionChanged(ids => SelectFindMatch(ids.FirstOrDefault())));
             Track(FindControl(p.Button("Back to matches"), true).OnClick(() => { _findMatches.SetSelected(Array.Empty<string>()); ShowFindStage(false); }));
             _findTable = FindControl(p.DataTable("find", new[]
@@ -1115,7 +1115,7 @@ namespace Satisvampory.Client
                 new UiTableColumn("plot", "Plot") { Width = 320 },
                 new UiTableColumn("count", "Stored", UiTableColumnKind.Number) { Format = "#,0", Width = 130 },
                 new UiTableColumn("holds", "Details") { Width = 380 },
-            }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
+            }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, ColumnChooser = false, MultiSelect = false, TotalRow = false, EmptyText = "No locations in the selected plots." }), true);
             Track(_findTable.OnSelectionChanged(_ =>
             {
                 if (_player.AutoPinFind && SelectedFindLocation()?.HasPosition == true) Locate();

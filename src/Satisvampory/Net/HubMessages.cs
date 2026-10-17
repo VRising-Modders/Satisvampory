@@ -348,6 +348,32 @@ namespace Satisvampory.Net
         [Field(9)] public string Name = "";
     }
 
+    /// <summary>Island numbers for a hovered recipe: its product and each requirement.</summary>
+    [ModMessage("sv.recipe.info")]
+    public sealed class RecipeInfoReq
+    {
+        /// <summary>The station (none for the character crafting tab).</summary>
+        [Field(1)] public TargetMsg Target = new();
+        /// <summary>The product first, then the requirements.</summary>
+        [Field(2)] public List<int> Items = new();
+    }
+
+    [ModMessage("sv.recipe.info.reply")]
+    public sealed class RecipeInfoReply
+    {
+        /// <summary>In step with the request's items.</summary>
+        [Field(1)] public List<long> Island = new();
+        /// <summary>What the station's Inputs can reach; -1 without a station.</summary>
+        [Field(2)] public List<long> Reachable = new();
+        /// <summary>Already in the station; -1 without a station.</summary>
+        [Field(3)] public List<int> AtStation = new();
+        [Field(4)] public List<int> Reserve = new();
+        /// <summary>-1: no cap.</summary>
+        [Field(5)] public List<int> Cap = new();
+        /// <summary>"this castle", "your castles", "the clan's castles".</summary>
+        [Field(6)] public string Scope = "";
+    }
+
     [ModMessage("sv.find.preview.end")]
     public sealed class EndPreviewReq
     {

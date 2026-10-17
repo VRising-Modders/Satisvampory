@@ -56,6 +56,7 @@ namespace Satisvampory.Server
             r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => SetRule(s, q)));
             r.Handle<FindReq, FindReply>((u, q, i) => With(u, s => Find(s, q)));
             r.Handle<PreviewReq, PreviewReply>((u, q, i) => With(u, s => BeginPreview(s, q)));
+            r.Handle<RecipeInfoReq, RecipeInfoReply>((u, q, i) => With(u, s => RecipeInfo(s, q)));
             r.Handle<EndPreviewReq, ViewSaved>((u, q, i) =>
             {
                 if (_previews.TryGetValue(u, out var current) && current.Token == q.Token)
@@ -778,6 +779,41 @@ namespace Satisvampory.Server
         }
 
         /// <summary>What a place is, in words the player knows from the game.</summary>
+        /// <summary>
+        /// A hovered recipe's numbers: per item, the island total in storage, what the station's Inputs reach and
+        /// already hold, the reserve and the cap.
+        /// </summary>
+        RecipeInfoReply RecipeInfo(Session s, RecipeInfoReq q)
+        {
+            var reply = new RecipeInfoReply
+            {
+                Scope = s.Island.Castles.Count <= 1 ? "this castle" : s.Island.OwnerKey.StartsWith("clan/") ? "the clan's castles" : "your castles",
+            };
+            var graph = s.Island.State.Graph;
+            ContainerInfo? station = null;
+            if (q.Target.NetIndex != 0 || q.Target.NetGeneration != 0 || q.Target.ContainerId.Length > 0)
+                station = TargetResolver.Resolve(_ctx, q.Target, out _) is { } sid ? s.World.Find(sid) : null;
+            var chests = s.Island.Scope.SelectMany(p => s.World.ContainersOn(p)).Where(c => c.Kind == NodeKind.Chest).ToList();
+            HashSet<ContainerId>? reach = null;
+            if (station != null)
+            {
+                var lists = graph.For(station.Id);
+                reach = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit)
+                    ? chests.Select(c => c.Id).ToHashSet()
+                    : lists.Input.SelectMany(e => graph.Expand(e, false, station.Id)).ToHashSet();
+            }
+            foreach (var guid in q.Items)
+            {
+                var item = new ItemId(guid);
+                reply.Island.Add(chests.Sum(c => (long)s.World.Count(c.Id, item)));
+                reply.Reachable.Add(reach == null ? -1 : chests.Where(c => reach.Contains(c.Id)).Sum(c => (long)s.World.Count(c.Id, item)));
+                reply.AtStation.Add(station == null ? -1 : s.World.Count(station.Id, item));
+                reply.Reserve.Add(s.Island.State.Rules.Reserve(item, s.Catalog));
+                reply.Cap.Add(s.Island.State.Rules.Cap(item, s.Catalog) ?? -1);
+            }
+            return reply;
+        }
+
         internal static string TypeOf(ContainerInfo? c) => c == null ? "" : c.Kind switch
         {
             NodeKind.Heart => "Castle heart",

@@ -110,6 +110,7 @@ namespace Satisvampory.Client
             _ctx.Track(storage.OnClick(ToggleStorageMenu));
             _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
+            AttachRecipeTooltip();
             _ctx.Events.On<InventorySortUsed>(OnSort);
         }
 
@@ -147,6 +148,52 @@ namespace Satisvampory.Client
         readonly Dictionary<int, (double At, string Line)> _storageCache = new();
 
         /// <summary>"In storage: 1,240 (3 chests)" on item tooltips while on a plot; cached ten seconds per item.</summary>
+        /// <summary>
+        /// The game's recipe tooltip at a station or in the crafting tab: the product's island total, reserve and cap
+        /// under the description; per requirement its total, what this station's Inputs reach, reserve and cap.
+        /// </summary>
+        void AttachRecipeTooltip()
+        {
+            var body = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid + ".recipe");
+            var needs = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipRequirements, _ctx.Owner, _ctx.Guid + ".recipe.req");
+            _ctx.Track(body);
+            _ctx.Track(needs);
+            var sequence = 0;
+            _ctx.Track(body.OnPanel(e =>
+            {
+                var seq = ++sequence;
+                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); needs.ClearRows(); return; }
+                var t = e.Target;
+                var items = new List<int>();
+                if (t.ProductGuid != 0) items.Add(t.ProductGuid);
+                items.AddRange(t.Requirements.Select(r => r.ItemGuid));
+                if (items.Count == 0) return;
+                var target = new TargetMsg { NetIndex = t.NetworkIdIndex, NetGeneration = t.NetworkIdGeneration, NetType = t.NetworkId2 };
+                _ctx.Requests.Send<RecipeInfoReq, RecipeInfoReply>(new RecipeInfoReq { Target = target, Items = items }, r =>
+                {
+                    if (seq != sequence || !r.Ok || r.Reply == null || !body.IsOpen) return;
+                    var a = r.Reply;
+                    string Cap(int i) => a.Cap[i] < 0 ? "no cap" : $"cap {a.Cap[i]:N0}";
+                    string Name(int guid) => ClientItems.NameOf(_ctx, guid) ?? "Item";
+                    var first = 0;
+                    if (t.ProductGuid != 0)
+                    {
+                        body.SetRows(new List<VanillaRow> { new VanillaRow($"{Name(t.ProductGuid)}: {a.Island[0]:N0} stored in {a.Scope} · reserve {a.Reserve[0]:N0} · {Cap(0)}", LabelTone.Normal) });
+                        first = 1;
+                    }
+                    var lines = new List<VanillaRow>();
+                    for (var i = first; i < items.Count && i < a.Island.Count; i++)
+                    {
+                        var line = $"{Name(items[i])}: {a.Island[i]:N0} stored";
+                        if (a.Reachable[i] >= 0) line += $" · {a.Reachable[i]:N0} reachable · {a.AtStation[i]:N0} here";
+                        line += $" · reserve {a.Reserve[i]:N0} · {Cap(i)}";
+                        lines.Add(new VanillaRow(line, LabelTone.Normal));
+                    }
+                    needs.SetRows(lines);
+                });
+            }));
+        }
+
         void AttachTooltip()
         {
             var tip = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid);

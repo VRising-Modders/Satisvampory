@@ -336,21 +336,7 @@ namespace Satisvampory.Server
             };
             if (m.Chances.Count > 0) lines.Add(SuccessText(m.Chances, names));
 
-            var castleOn = Stores.Castle(_ctx.Save, castle.Territory.Index).RepeatHunts;
-            var ownerOn = _half.PlayerFor(castle.Owner.PlatformId).RepeatMyHunts;
-            if (server.AllowRepeatHunts && castleOn && ownerOn)
-            {
-                var trips = _ctx.Save.Get<Dictionary<string, int>>(TripsKey);
-                var trip = (trips != null && trips.TryGetValue(HuntKey(castle.Territory.Index, m.MissionGuid), out var done) ? done : 0) + 1;
-                lines.Add($"Repeat hunt: on, trip {trip}"
-                    + (RepeatCap(server) is { } cap ? $" · repeats succeed at most {cap * 100:0}%" : "")
-                    + (server.RepeatHuntsOnlyWhileClanOnline ? " · only while the clan is online" : ""));
-            }
-            else
-            {
-                var why = !server.AllowRepeatHunts ? "the server does not allow it" : !castleOn ? "off for this castle" : "off in the owner's settings";
-                lines.Add($"Repeat hunt: off ({why})");
-            }
+            // Repeat state and trip show on the return; the cap shows on the Success line only when it lowers it.
             return string.Join("\n", lines);
         }
 

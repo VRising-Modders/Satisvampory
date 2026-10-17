@@ -210,7 +210,6 @@ namespace Satisvampory.Server
         internal static void Report(SatisContext ctx, ServerHalf half, string header, List<string> lines, IEnumerable<(Entity User, ulong Account)> readers,
             Func<string, string>? forLog = null, float delaySeconds = 0.1f)
         {
-            if (lines.Count == 0) return;
             var catalog = half.Catalog.Current;
             ctx.Log.LogInfo($"Satisvampory: {(forLog == null ? header : forLog(header))} | " + string.Join(" | ", lines.Select(l => Plain(l, catalog))));
             var to = readers.Where(r => half.PlayerFor(r.Account).LogMyDeposits).Select(r => r.User).ToList();

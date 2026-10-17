@@ -74,7 +74,7 @@ namespace Satisvampory.Server
                         var key = $"{castle.Territory.Index}:{m.Row}:{m.StartedUtc.Ticks}";
                         seen.Add(key);
                         if (!_knownHunts.Add(key) || !_seeded) continue;
-                        foreach (var user in ClanOnline(castle)) Notify(user, SentText(castle, m, names, server));
+                        ChatOrToast(castle, SentText(castle, m, names, server));
                     }
                 }
                 _knownHunts.IntersectWith(seen);
@@ -146,7 +146,7 @@ namespace Satisvampory.Server
                 EndTrip(e.Territory, e.MissionGuid, again);
 
                 var text = string.Join("\n", lines);
-                foreach (var user in clanOnline) Notify(user, text);
+                ToastIfChatOff(castle, text);
                 Log(castle.Owner.PlatformId, text, plot);
                 ChatReport(castle, lines, detail);
             }
@@ -269,7 +269,7 @@ namespace Satisvampory.Server
 
             var text = string.Join("\n", lines);
             _ctx.Log.LogInfo("Satisvampory: " + ForLog(text).Replace("\n", " |"));
-            foreach (var user in clanOnline) Notify(user, text);
+            ToastIfChatOff(castle, text);
             Log(castle.Owner.PlatformId, text, plot);
             ChatReport(castle, lines, detail);
         }
@@ -485,10 +485,9 @@ namespace Satisvampory.Server
                     {
                         var plot = Labels.Name(_ctx.Save, castle);
                         var text = $"{plot}: {string.Join(", ", hunt.Servants)} ({Mission(hunt.MissionGuid, hunt.MissionName)}): {outcome}";
-                        _ctx.Log.LogInfo("Satisvampory: " + ForLog(text));
-                        foreach (var user in ClanOnline(castle)) Notify(user, text);
                         Log(castle.Owner.PlatformId, text, plot);
-                        if (detail.Count > 0) ServerActions.Report(_ctx, _half, text, detail, ClanOnlineAccounts(castle), ForLog);
+                        ServerActions.Report(_ctx, _half, text, detail, ClanOnlineAccounts(castle), ForLog);
+                        ToastIfChatOff(castle, text);
                     }
                 }
                 catch (Exception e)
@@ -543,6 +542,24 @@ namespace Satisvampory.Server
             if (list.Count == 0 && _ctx.Players.TryGetByAccount(castle.Owner.PlatformId, out var p) && p.IsOnline && _ctx.Players.IsFresh(p))
                 list.Add((castle.Owner.User.ToEntity(), castle.Owner.PlatformId));
             return list;
+        }
+
+        /// <summary>
+        /// Hunt news goes to chat for clan members who keep "Show where my deposits go" on; the others get the
+        /// pop-up instead, so nobody gets both or neither.
+        /// </summary>
+        void ToastIfChatOff(ICastleHandle castle, string text)
+        {
+            foreach (var (user, account) in ClanOnlineAccounts(castle))
+                if (!_half.PlayerFor(account).LogMyDeposits) Notify(user, text);
+        }
+
+        /// <summary>A multi-line hunt notice: chat (first line as the header) or the pop-up, per player.</summary>
+        void ChatOrToast(ICastleHandle castle, string text)
+        {
+            var lines = text.Split('\n');
+            ServerActions.Report(_ctx, _half, lines[0], lines.Skip(1).Select(l => l.Trim()).ToList(), ClanOnlineAccounts(castle), ForLog);
+            ToastIfChatOff(castle, text);
         }
 
         /// <summary>Online users of the castle's clan, or its owner when clanless.</summary>

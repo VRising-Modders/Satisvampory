@@ -55,6 +55,13 @@ namespace Satisvampory.Net
         [Field(14)] public int BuildingPrefab;
         /// <summary>Added by Satisvampory (the Default Belt Input, a factory's products-to-storage Output), not by a player.</summary>
         [Field(15)] public bool Auto;
+        /// <summary>
+        /// A link set on the other end (its Output names this as a destination, or its Input as a source): that
+        /// container's id, the side it is set on (0 Input, 1 Output) and its index there. Empty for this container's own.
+        /// </summary>
+        [Field(16)] public string LinkOwner = "";
+        [Field(17)] public int LinkSide;
+        [Field(18)] public int LinkIndex;
     }
 
     [ModMessage("sv.priority")]
@@ -171,6 +178,8 @@ namespace Satisvampory.Net
         [Field(6)] public RowMsg Entry = new();
         [Field(7)] public int PullOrder;
         [Field(8)] public int SendOrder;
+        /// <summary>Op 7: remove the entry at Index on Side of this other container (a link shown from this end).</summary>
+        [Field(9)] public string LinkOwner = "";
     }
 
     [ModMessage("sv.deposit.set")]

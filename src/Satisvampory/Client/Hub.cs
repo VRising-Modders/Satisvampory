@@ -110,7 +110,9 @@ namespace Satisvampory.Client
             _ctx.Track(storage.OnClick(ToggleStorageMenu));
             _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
-            AttachRecipeTooltip();
+            // Needs Progenitor's recipe tooltip site (#89); an older Core leaves it off.
+            try { AttachRecipeTooltip(); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: recipe tooltip numbers off (Progenitor too old?): " + e.Message); }
             _ctx.Events.On<InventorySortUsed>(OnSort);
         }
 

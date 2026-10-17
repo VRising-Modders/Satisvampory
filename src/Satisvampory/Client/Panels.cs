@@ -338,7 +338,7 @@ namespace Satisvampory.Client
             _list = panel.DataTable("rows", new[]
             {
                 new UiTableColumn("name", _side == 0 ? "Pulls from" : "Sends to") { Hideable = false },
-                new UiTableColumn("details", "Details") { Width = 280 },
+                new UiTableColumn("details", "Details") { Width = 230 },
                 new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 4 },
             }, new UiDataTableOptions
             {
@@ -356,13 +356,16 @@ namespace Satisvampory.Client
                         else if (rows[i].Kind == 1) Owner.OpenHub?.Invoke(Hub.BeltsTab);
                         break;
                     case "up":
-                        if (i > 0) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i - 1 });
+                        if (i > 0 && rows[i].LinkOwner.Length == 0) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i - 1 });
                         break;
                     case "down":
-                        if (i < rows.Count - 1) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i + 1 });
+                        if (i < rows.Count - 1 && rows[i + 1].LinkOwner.Length == 0 && rows[i].LinkOwner.Length == 0) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = i, To = i + 1 });
                         break;
                     case "remove":
-                        Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = i });
+                        var r = rows[i];
+                        Owner.Edit(r.LinkOwner.Length > 0
+                            ? new EditListReq { Target = Owner.Target(), Side = r.LinkSide, Op = 7, Index = r.LinkIndex, LinkOwner = r.LinkOwner }
+                            : new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = i });
                         break;
                 }
             }));
@@ -412,8 +415,10 @@ namespace Satisvampory.Client
                     .Action("find", UiRowActionIcon.Locate,
                         r.ContainerId.Length > 0 ? "Find this chest or station" : r.Kind == 1 ? "Open this belt in Belts" : "Mass Deposit has no place to find",
                         r.ContainerId.Length > 0 || r.Kind == 1)
-                    .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && i > 0)
-                    .Action("down", UiRowActionIcon.Down, "Later in the list", s.CanEdit && i < rows.Count - 1)
+                    // A link set on the other end is ordered there: no arrows here.
+                    .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && r.LinkOwner.Length == 0 && i > 0)
+                    .Action("down", UiRowActionIcon.Down, "Later in the list",
+                        s.CanEdit && r.LinkOwner.Length == 0 && i < rows.Count - 1 && rows[i + 1].LinkOwner.Length == 0)
                     .Action("remove", UiRowActionIcon.Remove, "Remove", s.CanEdit)));
                 var others = _side == 0 ? s.InputFromOthers : s.OutputFromOthers;
                 _others.Text = others.Count == 0 ? "" : (_side == 0 ? "Also pulled in by other lists:\n  " : "Also taken by other lists:\n  ") + string.Join("\n  ", others.Take(12));

@@ -143,6 +143,18 @@ namespace Satisvampory.Server
                 case 2:
                     Must(s.Edits.MoveEntry(s.Role, s.Container.Id, side, r.Index, r.To));
                     break;
+                case 7:
+                {
+                    // A link set on the other end, ended from this one: only one that names this container.
+                    if (!Guid.TryParseExact(r.LinkOwner, "N", out var ownerGuid)) throw new RequestRefusedException("Unknown link.");
+                    var owner = new EngineId(ownerGuid);
+                    var lists = s.Island.State.Graph.For(owner);
+                    var list = side == ListSide.Input ? lists.Input : lists.Output;
+                    if (r.Index < 0 || r.Index >= list.Count || list[r.Index].Kind != EntryKind.Container || list[r.Index].Container != s.Container.Id)
+                        throw new RequestRefusedException("That link changed; reopen the panel.");
+                    Must(s.Edits.RemoveEntry(s.Role, owner, side, r.Index));
+                    break;
+                }
                 case 3:
                     Must(s.Edits.SetOrders(s.Role, s.Container.Id, (PullOrder)r.PullOrder, (SendOrder)r.SendOrder));
                     break;
@@ -361,6 +373,17 @@ namespace Satisvampory.Server
             var report = _half.Ticker?.LastReport(s.Island.OwnerKey);
             foreach (var e in lists.Input) msg.Input.Add(Row(s, e, ListSide.Input, report));
             foreach (var e in lists.Output) msg.Output.Add(Row(s, e, ListSide.Output, report));
+            // Links set on the other end show here too, so a transfer can be ended from either end.
+            foreach (var (owner, other) in graph.Lists)
+            {
+                if (owner == c.Id) continue;
+                for (var j = 0; j < other.Output.Count; j++)
+                    if (other.Output[j].Kind == EntryKind.Container && other.Output[j].Container == c.Id)
+                        msg.Input.Add(LinkRow(s, owner, other.Output[j], 1, j, ListSide.Input, report));
+                for (var j = 0; j < other.Input.Count; j++)
+                    if (other.Input[j].Kind == EntryKind.Container && other.Input[j].Container == c.Id)
+                        msg.Output.Add(LinkRow(s, owner, other.Input[j], 0, j, ListSide.Output, report));
+            }
 
             var d = c.Deposit;
             msg.Deposit.Takes = (int)d.Takes;
@@ -371,11 +394,7 @@ namespace Satisvampory.Server
             foreach (var item in d.BannedItems) msg.Deposit.Bans.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item) });
             foreach (var cat in d.BannedCategories) msg.Deposit.Bans.Add(new PriorityMsg { Category = cat, Label = "Category " + cat });
             string NameOf(Engine.Model.ContainerId id) => s.World.Find(id) is { } x ? $"{x.DisplayName} · {PlotLabel(s.Island, x.Plot)}" : "a chest";
-            foreach (var edge in graph.Edges().Where(x => x.DefinedOn != c.Id))
-            {
-                if (edge.To == c.Id) msg.InputFromOthers.Add($"{NameOf(edge.From)} (set on {(edge.DefinedOn == edge.From ? "its Output" : NameOf(edge.DefinedOn) + "'s Input")})");
-                else if (edge.From == c.Id) msg.OutputFromOthers.Add($"{NameOf(edge.To)} (set on {(edge.DefinedOn == edge.To ? "its Input" : NameOf(edge.DefinedOn) + "'s Output")})");
-            }
+            // Direct links from the other end are rows now; belt-made ones are covered by the belt's own row.
 
             var loop = report?.Loops.FirstOrDefault(l => l.Members.Contains(c.Id));
             if (loop != null)
@@ -396,6 +415,17 @@ namespace Satisvampory.Server
                         On = row.On,
                     });
             return msg;
+        }
+
+        /// <summary>A link another container set (its <paramref name="ownerSide"/> list, entry <paramref name="index"/>), as seen from this end.</summary>
+        RowMsg LinkRow(Session s, EngineId owner, ListEntry e, int ownerSide, int index, ListSide side, Engine.Lists.TickReport? report)
+        {
+            var row = Row(s, new ListEntry { Kind = EntryKind.Container, Container = owner, Sequence = e.Sequence }, side, report);
+            row.LinkOwner = owner.Value.ToString("N");
+            row.LinkSide = ownerSide;
+            row.LinkIndex = index;
+            row.Status = (ownerSide == 1 ? "set on its Output" : "set on its Input") + (string.IsNullOrEmpty(row.Status) ? "" : " · " + row.Status);
+            return row;
         }
 
         RowMsg Row(Session s, ListEntry e, ListSide side, Engine.Lists.TickReport? report)

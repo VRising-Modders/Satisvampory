@@ -95,6 +95,9 @@ namespace Satisvampory.Client
         {
             keys.Pressed += OnKey;
             _ctx.Track(new OnDispose(() => keys.Pressed -= OnKey));
+            // Chat links in Satisvampory's deposit and hunt lines: a chest pins it on the map, an item opens Find.
+            _ctx.Chat.OnModLink("satisvampory", OnChestLink);
+            _ctx.Chat.OnLinkClicked(OnItemLink);
 
             var inv = UiApi.AttachToVanilla(VanillaUiSite.InventoryPanel, VanillaPanelAnchor.BesideSort, _ctx.Owner, _ctx.Guid);
             _ctx.Track(inv);
@@ -1159,6 +1162,44 @@ namespace Satisvampory.Client
         {
             var id = _findTable.Selected.FirstOrDefault();
             return int.TryParse(id, out var index) && index >= 0 && index < _findRows.Count ? _findRows[index] : null;
+        }
+
+        /// <summary>
+        /// A destination chest in a deposit or hunt line: pin it on the map like Find does. The payload is the
+        /// server's "x,y,z"; anything that is not three sane numbers is ignored.
+        /// </summary>
+        bool OnChestLink(Progenitor.Chat.ChatLinkClick click)
+        {
+            if (!click.IsFromServer || click.LinkType != "chest") return false;
+            var parts = click.Payload.Split(',');
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            if (parts.Length != 3
+                || !float.TryParse(parts[0], System.Globalization.NumberStyles.Float, c, out var x)
+                || !float.TryParse(parts[1], System.Globalization.NumberStyles.Float, c, out var y)
+                || !float.TryParse(parts[2], System.Globalization.NumberStyles.Float, c, out var z)
+                || !float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z)
+                || Math.Abs(x) > 10000 || Math.Abs(y) > 1000 || Math.Abs(z) > 10000) return false;
+            var name = click.Text.Length > 80 ? click.Text.Substring(0, 80) : click.Text;
+            _findPin?.Dispose();
+            _findPin = _ctx.Hud.Locate(new Unity.Mathematics.float3(x, y, z), name, 60, arrivalDistance: 3, showOnMaps: true);
+            _ctx.Hud.Notify("Pinned " + name + ".");
+            return true;
+        }
+
+        /// <summary>An item link anywhere in chat: show where that item is stored (Find).</summary>
+        bool OnItemLink(Progenitor.Chat.ChatLinkClick click)
+        {
+            if (click.Kind != Progenitor.Chat.ChatLinkKind.Item || click.ItemPrefab == 0) return false;
+            var name = ClientItems.NameOf(_ctx, click.ItemPrefab);
+            if (string.IsNullOrEmpty(name)) return false;
+            OpenTab(FindTab);
+            Progenitor.Dev.MainThread.PostDelayed(0.15, () =>
+            {
+                if (_panel == null || !_panel.Visible) return;
+                _findText.Value = name;
+                RunFind();
+            }, _ctx.Owner);
+            return true;
         }
 
         void Locate()

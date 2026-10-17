@@ -147,7 +147,8 @@ namespace Satisvampory.Server
         /// ("20 Copper Ore, 1 Thread Coarse → Metal1 (Plot 6)"), then what found no room.
         /// </summary>
         internal static List<string> MoveLines(IWorld world, ItemCatalog catalog, Func<PlotId, string> plotName,
-            IEnumerable<(ContainerId To, ItemId Item, int Amount)> moves, IReadOnlyDictionary<ItemId, int> left, string leftIn)
+            IEnumerable<(ContainerId To, ItemId Item, int Amount)> moves, IReadOnlyDictionary<ItemId, int> left, string leftIn,
+            Func<ContainerId, string>? chestLink = null)
         {
             // Items go as chat item links, which a Progenitor client shows by the game's own name.
             // A chat line takes at most eight, so a chest that got more gets more lines.
@@ -155,7 +156,7 @@ namespace Satisvampory.Server
             foreach (var g in moves.GroupBy(m => m.To))
             {
                 var c = world.Find(g.Key);
-                var where = c == null ? g.Key.ToString() : $"{c.DisplayName} ({plotName(c.Plot)})";
+                var where = chestLink?.Invoke(g.Key) ?? (c == null ? g.Key.ToString() : $"{c.DisplayName} ({plotName(c.Plot)})");
                 foreach (var chunk in Chunks(g.GroupBy(m => m.Item).Select(x => $"{x.Sum(m => m.Amount):N0} {ItemLink(x.Key)}")))
                     lines.Add($"{string.Join(", ", chunk)} → {where}");
             }
@@ -164,13 +165,31 @@ namespace Satisvampory.Server
             return lines;
         }
 
+        internal const string LinkOwner = "satisvampory";
+
+        /// <summary>
+        /// A destination chest as a chat link ("Storage (Plot 1)"): a click pins it on the player's map. The payload is
+        /// its position, which the client checks before using.
+        /// </summary>
+        internal static Func<ContainerId, string> ChestLinks(SatisContext ctx, ProgenitorWorld world, Func<PlotId, string> plotName) => id =>
+        {
+            var c = world.Find(id);
+            if (c == null) return id.ToString();
+            var text = $"{c.DisplayName} ({plotName(c.Plot)})";
+            if (!ctx.Castles.TryGetBuildingPosition(world.EntityOf(id), out var p)) return text;
+            try { return Progenitor.Chat.ChatLinks.ModLink(LinkOwner, "chest", FormattableString.Invariant($"{p.X:0.##},{p.Y:0.##},{p.Z:0.##}"), text); }
+            catch (ArgumentException) { return text; }
+        };
+
         static string ItemLink(ItemId item) => "[item:" + item.Guid.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
 
         static readonly System.Text.RegularExpressions.Regex ItemLinks = new(@"\[item:(-?\d+)\]");
 
         /// <summary>The server log has no client to draw item links: it gets the catalog's names.</summary>
+        static readonly System.Text.RegularExpressions.Regex ModLinks = new(@"\[mod:[^|\]]*\|((?:\\.|[^\]\\])*)\]");
+
         static string Plain(string line, ItemCatalog catalog) =>
-            ItemLinks.Replace(line, m => catalog.NameOf(new ItemId(int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))));
+            ItemLinks.Replace(ModLinks.Replace(line, m => m.Groups[1].Value.Replace("\\|", "|").Replace("\\]", "]").Replace("\\\\", "\\")), m => catalog.NameOf(new ItemId(int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))));
 
         static IEnumerable<List<string>> Chunks(IEnumerable<string> parts)
         {
@@ -220,10 +239,11 @@ namespace Satisvampory.Server
             return lines;
         }
 
-        static void ReportAction(SatisContext ctx, ServerHalf half, string verb, Entity userEntity, User user, IWorld world, ItemCatalog catalog, Island island, ActionResult r)
+        static void ReportAction(SatisContext ctx, ServerHalf half, string verb, Entity userEntity, User user, ProgenitorWorld world, ItemCatalog catalog, Island island, ActionResult r)
         {
             if (r.Moves.Count == 0 && r.Left.Count == 0) return;
-            var lines = MoveLines(world, catalog, PlotNames(ctx.Save, island.Castles), r.Moves.Select(m => (m.To, m.Item, m.Amount)), r.Left, "your bag");
+            var names = PlotNames(ctx.Save, island.Castles);
+            var lines = MoveLines(world, catalog, names, r.Moves.Select(m => (m.To, m.Item, m.Amount)), r.Left, "your bag", ChestLinks(ctx, world, names));
             Report(ctx, half, $"{verb} {r.Items:N0} items:", lines, new[] { (userEntity, user.PlatformId) });
         }
 

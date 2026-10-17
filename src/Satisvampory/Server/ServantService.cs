@@ -109,7 +109,7 @@ namespace Satisvampory.Server
                 var lootStacks = e.TotalLoot.Count;
                 var trip = CountTrip(e.Territory, e.MissionGuid);
                 var detail = new List<string>();
-                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome) + (s.CapForcedFailure ? " (the repeat-hunt cap)" : "")))} back from {Mission(e.MissionGuid, e.MissionName)}{TripText(trip)}"
+                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome) + (s.CapForcedFailure ? " (the repeat-hunt cap)" : "")))} back from {Mission(e.MissionGuid, e.MissionName)}{After(e.LengthSeconds)}{TripText(trip)}"
                     + (lootStacks > 0 ? $" with {lootStacks} kinds of loot" : ""));
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
@@ -166,6 +166,8 @@ namespace Satisvampory.Server
             public int MissionGuid { get; set; }
             public string MissionName { get; set; } = "";
             public int DataSlot { get; set; }
+            /// <summary>The hunt's length, for the return notice; 0 in records from before it was kept.</summary>
+            public float LengthSeconds { get; set; }
             public List<string> Servants { get; set; } = new();
         }
 
@@ -185,7 +187,8 @@ namespace Satisvampory.Server
             var hunts = OutHunts();
             var servants = m.Servants.Select(s => names.TryGetValue(s, out var n) ? n : "").Where(n => n.Length > 0).ToList();
             if (hunts.TryGetValue(key, out var had) && had.DataSlot == m.DataSlot && had.Servants.SequenceEqual(servants)) return key;
-            hunts[key] = new OutHunt { Territory = castle.Territory.Index, MissionGuid = m.MissionGuid, MissionName = m.MissionName, DataSlot = m.DataSlot, Servants = servants };
+            hunts[key] = new OutHunt { Territory = castle.Territory.Index, MissionGuid = m.MissionGuid, MissionName = m.MissionName, DataSlot = m.DataSlot, Servants = servants,
+                LengthSeconds = m.LengthSeconds };
             _ctx.Save.Set(HuntsKey, hunts);
             return key;
         }
@@ -230,7 +233,7 @@ namespace Satisvampory.Server
             var plot = Labels.Name(_ctx.Save, castle);
             var trip = CountTrip(hunt.Territory, hunt.MissionGuid);
             var detail = new List<string>();
-            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {Mission(hunt.MissionGuid, hunt.MissionName)}{TripText(trip)} while the server was not watching" };
+            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {Mission(hunt.MissionGuid, hunt.MissionName)}{After(hunt.LengthSeconds)}{TripText(trip)} while the server was not watching" };
             var alive = servants.Where(s => s.State != Progenitor.Servants.ServantState.Dead).ToList();
             if (server.AllowServantLootStash && owner.ServantLootStash && alive.Any(s => s.ItemStacks > 0))
             {
@@ -327,8 +330,7 @@ namespace Satisvampory.Server
         {
             var who = m.Servants.Select(s => names.TryGetValue(s, out var n) ? n : "a servant").ToList();
             var whoText = who.Count <= 1 ? string.Join("", who) : string.Join(", ", who.Take(who.Count - 1)) + " and " + who[who.Count - 1];
-            var minutes = m.LengthSeconds / 60f;
-            var length = minutes >= 60 ? $"{minutes / 60f:0.#} h" : $"{minutes:0} min";
+            var length = Length(m.LengthSeconds);
             var lines = new List<string>
             {
                 $"{Labels.Name(_ctx.Save, castle)}: {whoText} left to hunt {Mission(m.MissionGuid, m.MissionName)} · back in {length}",
@@ -520,6 +522,15 @@ namespace Satisvampory.Server
             var trips = _ctx.Save.Get<Dictionary<string, int>>(TripsKey) ?? new();
             if (trips.Remove(HuntKey(territory, mission))) _ctx.Save.Set(TripsKey, trips);
         }
+
+        /// <summary>"2 h", "45 min": a hunt's length as the throne offers it.</summary>
+        static string Length(float seconds)
+        {
+            var minutes = seconds / 60f;
+            return minutes >= 60 ? $"{minutes / 60f:0.#} h" : $"{minutes:0} min";
+        }
+
+        static string After(float seconds) => seconds > 0 ? " after " + Length(seconds) : "";
 
         static string TripText(int trip) => trip > 1 ? $" (trip {trip})" : "";
 

@@ -107,7 +107,8 @@ namespace Satisvampory.World
                         BuildingPrefab = row.Building.PrefabGuid,
                         X = CastleGeometry.TileToWorld(row.Building.TileX),
                         Z = CastleGeometry.TileToWorld(row.Building.TileY),
-                        Role = servantSlots ? StationRole.Coffin : IsUnitStation(row) && !row.IsStation ? StationRole.UnitSpawner : RoleOf(row),
+                        Role = servantSlots ? StationRole.Coffin : IsDevourer(row) ? StationRole.Devourer
+                            : IsUnitStation(row) && !row.IsStation ? StationRole.UnitSpawner : RoleOf(row),
                         DefaultBeltEligible = servantKnown && !servantContainer,
                     };
                     if (_deposit(id) is { } d) Copy(d, info.Deposit);
@@ -375,6 +376,10 @@ namespace Satisvampory.World
             if (Has(name, "Tomb") || Has(name, "Nest") || Has(name, "Spawner")) return StationRole.UnitSpawner;
             return row.IsRefinement ? StationRole.Refinement : StationRole.Workstation;
         }
+
+        /// <summary>The Devourer is the game's salvage station (TM_SalvageStation_Table).</summary>
+        static bool IsDevourer(CastleContainerInfo row) =>
+            Has(row.Building.PrefabName ?? string.Empty, "SalvageStation") || Has(row.Building.PrefabName ?? string.Empty, "Devour");
 
         static bool IsUnitStation(CastleContainerInfo row) => Has(row.Building.PrefabName ?? string.Empty, "UnitStation");
 

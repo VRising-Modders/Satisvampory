@@ -109,7 +109,12 @@ namespace Satisvampory.Engine.Lists
             var changed = new List<ContainerId>();
             foreach (var c in containers)
             {
-                if (!IsFactory(c) || !graph.Lists.TryGetValue(c.Id, out var lists) || lists.Output.Count > 0) continue;
+                if (!IsFactory(c) || !graph.Lists.TryGetValue(c.Id, out var lists)) continue;
+                // A Devourer once taken for a chest still has the chest's Default Belt Output: that is a leftover, not a choice.
+                var leftover = c.Role == StationRole.Devourer && lists.Output.Count == 1 && IsEntry(lists.Output[0])
+                    && lists.Output[0].Filter.IsAnything && lists.Output[0].BeltPeers == null;
+                if (leftover) lists.Output.Clear();
+                if (lists.Output.Count > 0) continue;
                 lists.Output.Add(AutoOutput(graph));
                 changed.Add(c.Id);
             }

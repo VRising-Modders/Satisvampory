@@ -85,7 +85,7 @@ namespace Satisvampory.Engine.Ui
             void AddContainer(ContainerInfo c, bool inIsland)
             {
                 var label = c.Plot == q.Standing ? "here" : plotLabel(c.Plot);
-                var hint = Hint(world, catalog, c);
+                var hint = Hint(world, catalog, c, q.Side);
                 if (!Matches(c.DisplayName, label, hint)) return;
 
                 string? refused = null;
@@ -109,7 +109,9 @@ namespace Satisvampory.Engine.Ui
                     Kind = PickerRowKind.Container,
                     Section = section,
                     Container = c.Id,
-                    Name = c.DisplayName,
+                    // Three stations all named "R2S2" read apart by their type.
+                    Name = c.Kind == NodeKind.Station && c.FurnitureName.Length > 0 && !NameFold.Fold(c.DisplayName).Contains(NameFold.Fold(c.FurnitureName))
+                        ? $"{c.DisplayName} · {c.FurnitureName}" : c.DisplayName,
                     PlotLabel = label,
                     Distance = dist,
                     Hint = c.Deposit.Special is not (SpecialKind.None or SpecialKind.Skip) ? $"{c.Deposit.Special} · {hint}".TrimEnd(' ', '·') : hint,
@@ -183,11 +185,19 @@ namespace Satisvampory.Engine.Ui
             return seen;
         }
 
-        static string Hint(IWorldView world, ItemCatalog catalog, ContainerInfo c)
+        static string Hint(IWorldView world, ItemCatalog catalog, ContainerInfo c, PickerSide side)
         {
             if (c.Kind == NodeKind.Station)
             {
-                var want = world.Recipes(c.Id).Where(r => r.Enabled).SelectMany(r => r.Inputs).Select(s => s.Item).Distinct().FirstOrDefault();
+                // As a source a station gives its products; as a destination it takes its ingredients.
+                var enabled = world.Recipes(c.Id).Where(r => r.Enabled).ToList();
+                if (enabled.Count == 0) return "no recipe switched on";
+                if (side == PickerSide.Input)
+                {
+                    var makes = enabled.SelectMany(r => r.Outputs).Select(s => s.Item).Distinct().FirstOrDefault();
+                    return makes.Guid != 0 ? $"makes {catalog.NameOf(makes)}" : "makes nothing it can give";
+                }
+                var want = enabled.SelectMany(r => r.Inputs).Select(s => s.Item).Distinct().FirstOrDefault();
                 return want.Guid != 0 ? $"wants {catalog.NameOf(want)}" : "no recipe switched on";
             }
             var top = world.Contents(c.Id).OrderByDescending(s => s.Amount).FirstOrDefault();

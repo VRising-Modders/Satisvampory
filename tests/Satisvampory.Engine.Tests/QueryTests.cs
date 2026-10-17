@@ -56,7 +56,10 @@ namespace Satisvampory.Engine.Tests
             skip.Deposit.Special = SpecialKind.Skip;
             var heart = _w.Chest(Home, "", kind: NodeKind.Heart);
             var furnace = _w.Chest(Home, "Furnace", kind: NodeKind.Station);
-            _w.StationRecipes[furnace.Id] = new List<Recipe> { new(1, new[] { new ItemStack(IronOre, 10) }, new ItemStack[0], true) };
+            furnace.FurnitureName = "Furnace";
+            var grinder = _w.Chest(Home, "R2S2", kind: NodeKind.Station);
+            grinder.FurnitureName = "Grinder";
+            _w.StationRecipes[furnace.Id] = new List<Recipe> { new(1, new[] { new ItemStack(IronOre, 10) }, new[] { new ItemStack(IronIngot, 1) }, true) };
             _w.Chest(Outside, "Their chest");
             _g.For(near.Id).Input.Add(ListEntry.Of(self.Id));    // self → near already
             var belt = _g.BeltOrCreate("Ore belt");
@@ -81,12 +84,14 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal(PickerSection.SpecialChests, Row("Bin").Section);
             Assert.NotNull(Row("Hidden").Refused);
             Assert.Equal("Hearts only give items through their own Output", rows.Single(r => r.Container == heart.Id).Refused);
-            Assert.Equal("wants Iron Ore", Row("Furnace").Hint);
+            Assert.Equal("makes Iron Ingot", Row("Furnace").Hint);
+            Assert.Contains(rows, r => r.Name == "R2S2 · Grinder");          // a station named apart from its type shows it           // as a source it gives its products
             Assert.Equal("Outside your sharing island", Row("Their chest").Refused);
             Assert.Equal(PickerSection.Belts, Row("Ore belt").Section);
             Assert.DoesNotContain(rows, r => r.Kind == PickerRowKind.MassDeposit); // a chest has no demand to pull for
             var outRows = Picker.Rows(_w, _cat, _g, new[] { Home, Away }, Label, new PickerQuery { Self = self.Id, Side = PickerSide.Output, Standing = Home });
             Assert.Equal("Push: Mass Deposit", outRows.Last().Name);
+            Assert.Equal("wants Iron Ore", outRows.Single(r => r.Name == "Furnace").Hint); // as a destination it takes ingredients
             var furnaceRows = Picker.Rows(_w, _cat, _g, new[] { Home, Away }, Label, new PickerQuery { Self = furnace.Id, Side = PickerSide.Input, Standing = Home });
             Assert.Equal("Pull: reverse Mass Deposit", furnaceRows.Last().Name);
 

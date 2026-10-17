@@ -74,14 +74,7 @@ namespace Satisvampory.Server
                         var key = $"{castle.Territory.Index}:{m.Row}:{m.StartedUtc.Ticks}";
                         seen.Add(key);
                         if (!_knownHunts.Add(key) || !_seeded) continue;
-                        var who = string.Join(", ", m.Servants.Select(s => names.TryGetValue(s, out var n) ? n : "a servant"));
-                        var repeat = server.AllowRepeatHunts && Stores.Castle(_ctx.Save, castle.Territory.Index).RepeatHunts
-                            && _half.PlayerFor(castle.Owner.PlatformId).RepeatMyHunts;
-                        var hours = m.LengthSeconds / 3600f;
-                        var text = $"{Labels.Name(_ctx.Save, castle)}: {who} sent on {m.MissionName} ({(hours >= 1 ? $"{hours:0.#} h" : $"{m.LengthSeconds / 60f:0} min")})"
-                            + $" · repeat hunts {(repeat ? "on" : "off")}"
-                            + (repeat ? $" · success cap {server.RepeatHuntSuccessCap}%" : "");
-                        foreach (var user in ClanOnline(castle)) Notify(user, text);
+                        foreach (var user in ClanOnline(castle)) Notify(user, SentText(castle, m, names, server));
                     }
                 }
                 _knownHunts.IntersectWith(seen);
@@ -302,6 +295,39 @@ namespace Satisvampory.Server
                     + string.Join(", ", left.Select(kv => $"{kv.Key.Guid} x{kv.Value} (homes {DepositPlanner.Plan(home, kv.Key, kv.Value).Sum(x => x.Amount)})"))
                     + $"; {states.Count} servant(s), {world.ContainersOn(home.Standing).Count(c => c.Deposit.Special == SpecialKind.Spoils)} spoils chest(s)");
             return moved;
+        }
+
+        /// <summary>
+        /// Who left, where to, for how long, and whether the hunt will repeat (with its trip number and the
+        /// success chance once Progenitor reports it).
+        /// </summary>
+        string SentText(ICastleHandle castle, ServantMission m, Dictionary<CastleId, string> names, Engine.Persistence.ServerSettings server)
+        {
+            var who = m.Servants.Select(s => names.TryGetValue(s, out var n) ? n : "a servant").ToList();
+            var whoText = who.Count <= 1 ? string.Join("", who) : string.Join(", ", who.Take(who.Count - 1)) + " and " + who[who.Count - 1];
+            var minutes = m.LengthSeconds / 60f;
+            var length = minutes >= 60 ? $"{minutes / 60f:0.#} h" : $"{minutes:0} min";
+            var lines = new List<string>
+            {
+                $"{Labels.Name(_ctx.Save, castle)}: {whoText} left to hunt {ProgenitorWorld.PrettyMission(m.MissionName)} · back in {length}",
+            };
+
+            var castleOn = Stores.Castle(_ctx.Save, castle.Territory.Index).RepeatHunts;
+            var ownerOn = _half.PlayerFor(castle.Owner.PlatformId).RepeatMyHunts;
+            if (server.AllowRepeatHunts && castleOn && ownerOn)
+            {
+                var trips = _ctx.Save.Get<Dictionary<string, int>>(TripsKey);
+                var trip = (trips != null && trips.TryGetValue(HuntKey(castle.Territory.Index, m.MissionGuid), out var done) ? done : 0) + 1;
+                // The success cap joins this line once Progenitor lets a mod cap the roll; until then it would be a false claim.
+                lines.Add($"Repeat hunt: on, trip {trip}"
+                    + (server.RepeatHuntsOnlyWhileClanOnline ? " · only while the clan is online" : ""));
+            }
+            else
+            {
+                var why = !server.AllowRepeatHunts ? "the server does not allow it" : !castleOn ? "off for this castle" : "off in the owner's settings";
+                lines.Add($"Repeat hunt: off ({why})");
+            }
+            return string.Join("\n", lines);
         }
 
         // ---------------- repeat-hunt trips ----------------

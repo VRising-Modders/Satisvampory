@@ -369,6 +369,22 @@ namespace Satisvampory.World
             return parts.Count == 0 ? prefab!.Replace('_', ' ') : string.Join(" ", parts);
         }
 
+        /// <summary>
+        /// "ServantMission_Strongblade_CarversLoggingOutpost" → "Carvers Logging Outpost (Strongblade)": a readable
+        /// stand-in until the game's own mission name reaches the server.
+        /// </summary>
+        internal static string PrettyMission(string? prefab)
+        {
+            if (string.IsNullOrEmpty(prefab)) return "a hunt";
+            var parts = prefab!.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => !w.Equals("ServantMission", StringComparison.OrdinalIgnoreCase)
+                    && !(w.Length <= 3 && (w[0] == 'T' || w[0] == 't') && w.Skip(1).All(char.IsDigit)))
+                .Select(SplitCamel).ToList();
+            if (parts.Count == 0) return prefab!.Replace('_', ' ');
+            var place = parts[parts.Count - 1];
+            return parts.Count == 1 ? place : $"{place} ({string.Join(" ", parts.Take(parts.Count - 1))})";
+        }
+
         static readonly HashSet<string> NoiseWords = new(StringComparer.OrdinalIgnoreCase)
         {
             "TM", "BP", "Castle", "SpecialStation", "CraftingStation", "RefinementStation", "UnitStation",

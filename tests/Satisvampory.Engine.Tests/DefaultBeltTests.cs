@@ -43,7 +43,9 @@ namespace Satisvampory.Engine.Tests
             var furnace = Furnace();
             var bench = world.Chest(home, "Bench", kind: NodeKind.Station); bench.Role = StationRole.Workstation;
             var prison = world.Chest(home, "Cell", kind: NodeKind.Station); prison.Role = StationRole.Refinement; prison.FurnitureName = "Prison Cell";
+            var devourer = world.Chest(home, "Devourer", kind: NodeKind.Station); devourer.Role = StationRole.Devourer;
             Initialize();
+            Assert.Equal(EntryKind.MassDeposit, Assert.Single(state.Graph.For(devourer.Id).Output).Kind);
             Assert.Equal(EntryKind.MassDeposit, Assert.Single(state.Graph.For(furnace.Id).Output).Kind);
             Assert.Empty(state.Graph.For(bench.Id).Output);
             Assert.Empty(state.Graph.For(prison.Id).Output);

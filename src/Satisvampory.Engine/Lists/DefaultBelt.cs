@@ -38,6 +38,8 @@ namespace Satisvampory.Engine.Lists
                     if (IsFactory(c)) lists.Output.Add(AutoOutput(graph));
                     lists.PullOrder = PullOrder.ReverseMassDeposit;
                 }
+                // The Devourer takes what the player feeds it; only its products need a way out.
+                else if (IsFactory(c)) lists.Output.Add(AutoOutput(graph));
             }
         }
 

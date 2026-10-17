@@ -51,9 +51,15 @@ namespace Satisvampory.Engine.Lists
         // Migration-only restriction: null means all counterparts; empty means none.
         public HashSet<ContainerId>? BeltPeers { get; init; }
         public bool CounterpartOnly { get; init; }
+        /// <summary>
+        /// The Default Belt Input a station was given automatically. It supplies crafts the player
+        /// starts at the station, but never feeds the station on its own: a factory only pulls stock
+        /// through Inputs the player set.
+        /// </summary>
+        public bool Auto { get; init; }
         public ListEntry Copy(BeltId? belt = null) => new() { Kind = Kind, Container = Container, Belt = belt ?? Belt,
             Filter = CloneFilter(Filter), Sequence = Sequence, BeltOrder = BeltOrder,
-            BeltPeers = BeltPeers == null ? null : new(BeltPeers), CounterpartOnly = CounterpartOnly };
+            BeltPeers = BeltPeers == null ? null : new(BeltPeers), CounterpartOnly = CounterpartOnly, Auto = Auto };
         static ItemFilter CloneFilter(ItemFilter f) { var n = new ItemFilter(); n.Items.UnionWith(f.Items); n.Categories.UnionWith(f.Categories);
             n.ExcludeItems.UnionWith(f.ExcludeItems); n.ExcludeCategories.UnionWith(f.ExcludeCategories); return n; }
 

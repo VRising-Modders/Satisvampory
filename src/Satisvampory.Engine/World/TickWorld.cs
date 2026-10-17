@@ -64,9 +64,9 @@ namespace Satisvampory.Engine.World
             _contents.Remove((id, InvPart.Main)); _contents.Remove((id, InvPart.Output));
             _space.Remove(id); _inputs.Remove(id);
         }
-        public int Transfer(ContainerId from, InvPart part, ContainerId to, ItemId item, int amount)
+        public int Transfer(ContainerId from, InvPart part, ContainerId to, ItemId item, int amount, bool takeBusyInputs = false)
         {
-            try { return _live.Transfer(from, part, to, item, amount); }
+            try { return _live.Transfer(from, part, to, item, amount, takeBusyInputs); }
             finally { Invalidate(from); Invalidate(to); }
         }
         public int Destroy(ContainerId from, ItemId item, int amount)

@@ -40,7 +40,8 @@ namespace Satisvampory.Engine.World
     {
         /// <summary>Moves up to <paramref name="amount"/>; returns how many moved. Never duplicates or destroys.</summary>
         /// <remarks>Always lands in the main (input) inventory of <paramref name="to"/>.</remarks>
-        int Transfer(ContainerId from, InvPart fromPart, ContainerId to, ItemId item, int amount);
+        /// <param name="takeBusyInputs">Take from a busy station's input even though its demand is unknown (the one-time station cleanup).</param>
+        int Transfer(ContainerId from, InvPart fromPart, ContainerId to, ItemId item, int amount, bool takeBusyInputs = false);
 
         /// <summary>Destroys up to <paramref name="amount"/> (trash chests only); returns how many were removed.</summary>
         int Destroy(ContainerId from, ItemId item, int amount);

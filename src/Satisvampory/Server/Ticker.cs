@@ -375,6 +375,8 @@ namespace Satisvampory.Server
                     ls.Mode = mode;
                 }
 
+                var toClear = state.StationsToClear.Count;
+                var clearHere = state.StationsToClear.Any(id => world.Find(id) != null);
                 var report = new ConveyorTick(world, deposit, state.Graph, state.Rules, tickState, new TickOptions
                 {
                     LayoutSignature = LayoutSignature(key, members, server),
@@ -384,13 +386,29 @@ namespace Satisvampory.Server
                     MovesPerTick = Math.Max(0, budget - used),
                     LoopMovesPerTick = server.LoopMovesPerTick,
                     LoopsAllowed = server.AllowLoops,
+                    StationsToClear = state.StationsToClear,
                 }).Run(Now);
                 Mark("conveyor");
                 foreach (var (phase, ms) in report.Timings) Mark("  " + phase + "@" + ms.ToString("0"));
                 _lastReports[key] = report;
                 // A sleeping loop wakes on an outside change, which the inventory fingerprint sees;
                 // only a leftover's grace timer needs ticks to pass.
-                pending = tickState.LeftoverSince.Count > 0;
+                pending = tickState.LeftoverSince.Count > 0 || (clearHere && state.StationsToClear.Any(id => world.Find(id) != null));
+                if (state.StationsToClear.Count != toClear)
+                {
+                    Stores.Save(_ctx.Save, key, state);
+                    _ctx.Log.LogInfo($"Satisvampory: station cleanup on {key}: {toClear - state.StationsToClear.Count} station(s) emptied back to storage, {state.StationsToClear.Count} to go");
+                    var catalog = _half.Catalog.Current;
+                    foreach (var g in report.Moves.Where(m => m.Why == "station cleanup").GroupBy(m => m.From))
+                    {
+                        var c = world.Find(g.Key);
+                        _ctx.Log.LogInfo($"Satisvampory: station cleanup: {c?.DisplayName ?? g.Key.ToString()} [{g.Key}] on plot {c?.Plot}: "
+                            + string.Join(", ", g.GroupBy(m => m.Item).Select(x => $"{x.Sum(m => m.Amount)} x {catalog.NameOf(x.Key)}")));
+                    }
+                    foreach (var id in state.StationsToClear.Where(id => world.Find(id) != null))
+                        _ctx.Log.LogInfo($"Satisvampory: station cleanup waiting on {world.Find(id)?.DisplayName ?? id.ToString()} [{id}]: "
+                            + (report.Diagnostics.TryGetValue(id, out var why) ? string.Join(", ", why.Where(w => w.StartsWith("cleanup-")).Distinct().Take(6)) : "not reached"));
+                }
                 _listIslandTicks++;
                 foreach (var codes in report.Diagnostics.Values)
                     foreach (var code in codes) _diagSinceLog[code] = (_diagSinceLog.TryGetValue(code, out var dn) ? dn : 0) + 1;

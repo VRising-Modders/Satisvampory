@@ -25,6 +25,7 @@ namespace Satisvampory.Engine.Persistence
         public long BeltOrder { get; set; }
         public List<string>? BeltPeers { get; set; }
         public bool CounterpartOnly { get; set; }
+        public bool Auto { get; set; }
     }
 
     public sealed class FilterDto
@@ -89,8 +90,10 @@ namespace Satisvampory.Engine.Persistence
     public sealed class IslandSave
     {
         /// <summary>3: containers that predate the Default Belt join it once (see DefaultBelt.MigrateExisting).
-        /// 4: stations lose the default Mass Deposit Output they were given (DefaultBelt.RemoveDefaultStationOutputs).</summary>
-        public const int CurrentVersion = 4;
+        /// 4: stations lose the default Mass Deposit Output they were given (DefaultBelt.RemoveDefaultStationOutputs).
+        /// 5: a station's automatic Default Belt Input no longer feeds it (DefaultBelt.MarkAutoInputs).
+        /// 6: coffins and unit stations, once taken for chests, give back what was put in them.</summary>
+        public const int CurrentVersion = 6;
 
         // Missing versions in typed store reads are legacy; Capture explicitly writes the current version.
         public int Version { get; set; } = 1;
@@ -107,6 +110,9 @@ namespace Satisvampory.Engine.Persistence
 
         /// <summary>Crafting-table recipe switches (spec 04): container id → recipe guids switched on.</summary>
         public Dictionary<string, List<int>> TableRecipesOn { get; set; } = new();
+
+        /// <summary>Stations whose contents are still to go back to storage (version 5 cleanup).</summary>
+        public List<string> StationsToClear { get; set; } = new();
     }
 
     /// <summary>The engine objects an <see cref="IslandSave"/> becomes.</summary>
@@ -134,6 +140,15 @@ namespace Satisvampory.Engine.Persistence
 
         /// <summary>Loaded from a save older than version 4: default station outputs still need removing.</summary>
         public bool DefaultOutputsDue { get; set; }
+
+        /// <summary>Loaded from a save older than version 5: automatic station Inputs still need marking.</summary>
+        public bool AutoInputsDue { get; set; }
+
+        /// <summary>Loaded from a save older than version 6: coffins and unit stations still hold what deposits put there.</summary>
+        public bool MisfiledStationsDue { get; set; }
+
+        /// <summary>Stations the conveyor empties back into storage once, then forgets.</summary>
+        public HashSet<ContainerId> StationsToClear { get; init; } = new();
     }
 
     public static class SaveCodec
@@ -179,6 +194,7 @@ namespace Satisvampory.Engine.Persistence
                 CustomCategories = s.Categories.Custom.ToDictionary(k => k.Key, v => v.Value.Select(i => i.Guid).ToList()),
                 Aliases = s.Categories.Aliases.ToDictionary(k => k.Key, v => v.Value.Guid),
                 TableRecipesOn = s.TableRecipesOn.Where(kv => kv.Value.Count > 0).ToDictionary(k => Id(k.Key), v => v.Value.OrderBy(x => x).ToList()),
+                StationsToClear = s.StationsToClear.Select(Id).OrderBy(x => x).ToList(),
             };
 
             foreach (var b in s.Graph.Belts.Values)
@@ -224,7 +240,7 @@ namespace Satisvampory.Engine.Persistence
                 throw new InvalidOperationException($"Save version {save.Version} is newer than this build ({IslandSave.CurrentVersion})");
             Normalize(save);
             nextSequence = save.NextSequence;
-            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3, DefaultOutputsDue = save.Version < 4 };
+            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3, DefaultOutputsDue = save.Version < 4, AutoInputsDue = save.Version < 5, MisfiledStationsDue = save.Version < 6 };
             state.Graph.Sequence = save.NextSequence;
 
             foreach (var b in save.Belts.Where(b => b != null))
@@ -286,6 +302,9 @@ namespace Satisvampory.Engine.Persistence
 
             foreach (var (key, mode) in save.LoopModes)
                 if (Enum.TryParse<LoopMode>(mode, out var m)) state.LoopModes[key] = m;
+
+            foreach (var key in save.StationsToClear ?? new List<string>())
+                if (ParseId(key) is { } station) state.StationsToClear.Add(station);
 
             return state;
         }
@@ -372,6 +391,7 @@ namespace Satisvampory.Engine.Persistence
             BeltOrder = e.BeltOrder,
             BeltPeers = e.BeltPeers?.Select(Id).ToList(),
             CounterpartOnly = e.CounterpartOnly,
+            Auto = e.Auto,
         };
 
         static ListEntry? FromDto(EntryDto d)
@@ -389,7 +409,7 @@ namespace Satisvampory.Engine.Persistence
                 case "massDeposit":
                     return new ListEntry { Kind = EntryKind.MassDeposit, Filter = filter, Sequence = d.Sequence };
                 case "belt":
-                    return Guid.TryParse(d.Belt, out var b) ? new ListEntry { Kind = EntryKind.Belt, Belt = new BeltId(b), Filter = filter, Sequence = d.Sequence, BeltOrder = d.BeltOrder, CounterpartOnly = d.CounterpartOnly, BeltPeers = d.BeltPeers == null ? null : new HashSet<ContainerId>(d.BeltPeers.Select(ParseId).Where(x => x != null).Select(x => x!.Value)) } : null;
+                    return Guid.TryParse(d.Belt, out var b) ? new ListEntry { Kind = EntryKind.Belt, Belt = new BeltId(b), Filter = filter, Sequence = d.Sequence, BeltOrder = d.BeltOrder, CounterpartOnly = d.CounterpartOnly, Auto = d.Auto, BeltPeers = d.BeltPeers == null ? null : new HashSet<ContainerId>(d.BeltPeers.Select(ParseId).Where(x => x != null).Select(x => x!.Value)) } : null;
                 default:
                     return ParseId(d.Container ?? string.Empty) is { } id ? new ListEntry { Kind = EntryKind.Container, Container = id, Filter = filter, Sequence = d.Sequence } : null;
             }

@@ -68,6 +68,9 @@ namespace Satisvampory.Engine.Lists
 
         /// <summary>Inventories the caller already read this moment, so the tick does not read them again.</summary>
         public IReadOnlyDictionary<(ContainerId, InvPart), ItemStack[]>? Prefetched { get; init; }
+
+        /// <summary>Stations to empty back into storage once; each is removed when nothing is left to move.</summary>
+        public ISet<ContainerId>? StationsToClear { get; init; }
     }
 
     /// <summary>
@@ -220,6 +223,7 @@ namespace Satisvampory.Engine.Lists
             }
 
             var live = edges.Where(e => !skip.Contains(e)).ToList();
+            ClearStations();
             FeedStations(live, now);
             _report.Timings.Add(("stations", watch.Elapsed.TotalMilliseconds));
             _report.Timings.Add(("  plan", _tPlan.Elapsed.TotalMilliseconds));
@@ -272,7 +276,7 @@ namespace Satisvampory.Engine.Lists
             var result = new List<ContainerId>();
             foreach (var e in lists.Input)
             {
-                if (e.Kind == EntryKind.MassDeposit) continue; // resolved per item below
+                if (e.Kind == EntryKind.MassDeposit || e.Auto) continue; // mass deposit: resolved per item below
                 foreach (var id in _graph.Expand(e, output: false, owner: station.Id))
                     if (edges.Any(x => x.From == id && x.To == station.Id) && !result.Contains(id)) result.Add(id);
             }
@@ -320,7 +324,7 @@ namespace Satisvampory.Engine.Lists
             {
                 var list = new List<ContainerId>(sources);
                 var seen = new HashSet<ContainerId>(list);
-                var massSources = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit && e.Filter.Allows(item, Catalog))
+                var massSources = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit && !e.Auto && e.Filter.Allows(item, Catalog))
                     ? Reverse(item).Order.ToHashSet() : new HashSet<ContainerId>();
                 if (massSources.Count > 0)
                     foreach (var id in Reverse(item).Order)
@@ -334,7 +338,7 @@ namespace Satisvampory.Engine.Lists
                     .Where(id => _world.Find(id) is { } c && c.Kind is NodeKind.Chest or NodeKind.Station
                         && !c.AutomationSuspended && c.Deposit.Special != SpecialKind.Skip && !_world.IsRaided(c.Plot))
                     .Where(id => massSources.Contains(id)
-                        || lists.Input.Any(e => _graph.Allows(e, station.Id, false, id, item, Catalog))
+                        || lists.Input.Any(e => !e.Auto && _graph.Allows(e, station.Id, false, id, item, Catalog))
                         || _graph.For(id).Output.Any(e => _graph.Allows(e, id, true, station.Id, item, Catalog)))
                     .ToList();
             }
@@ -397,6 +401,48 @@ namespace Satisvampory.Engine.Lists
             _tLeftover.Start();
             ReturnLeftovers(station, plan.Leftovers, item => SourcesFor(item).ToHashSet(), now);
             _tLeftover.Stop();
+        }
+
+        /// <summary>
+        /// The one-time cleanup: everything in each listed station's input goes back to storage by
+        /// Mass Deposit order, even mid-craft (the list holds only factories). A station whose stock
+        /// finds no room stays listed.
+        /// </summary>
+        void ClearStations()
+        {
+            var set = _opt.StationsToClear;
+            if (set == null || set.Count == 0) return;
+            foreach (var id in set.ToList())
+            {
+                var station = _world.Find(id);
+                // Not in this world: another island under the same settings owns it.
+                if (station == null) continue;
+                // Never a bench: its slots hold the player's queued crafts.
+                if (station.Kind != NodeKind.Station
+                    || station.Role is not (StationRole.None or StationRole.Refinement or StationRole.Coffin or StationRole.UnitSpawner))
+                { set.Remove(id); continue; }
+                if (!_inScope.Contains(id) || station.AutomationSuspended) continue;
+                // A unit station keeps its spawn ingredients; everything else goes.
+                var keep = station.Role == StationRole.UnitSpawner
+                    ? _world.Recipes(id).SelectMany(r => r.Inputs).Select(i => i.Item).ToHashSet()
+                    : new HashSet<ItemId>();
+                var done = true;
+                foreach (var stack in _world.Contents(id, InvPart.Main).ToList())
+                {
+                    if (keep.Contains(stack.Item)) continue;
+                    var left = stack.Amount;
+                    var plan = DepositPlanner.Plan(_ctx, stack.Item, left, id);
+                    foreach (var m in plan)
+                        left -= Move(id, InvPart.Main, m.To, stack.Item, m.Amount, "station cleanup");
+                    if (left > 0)
+                    {
+                        done = false;
+                        _report.Diag(id, plan.Count == 0 ? $"cleanup-no-home:{stack.Item.Guid}" : $"cleanup-refused:{stack.Item.Guid}");
+                    }
+                }
+                if (done) set.Remove(id);
+                else _report.Diag(id, "sink-full");
+            }
         }
 
         void ReturnLeftovers(ContainerInfo station, IReadOnlyDictionary<ItemId, int> leftovers,
@@ -637,16 +683,17 @@ namespace Satisvampory.Engine.Lists
             // shared input/output: products follow output routes; ingredients use the grace-controlled return path.
             if (target.Role == StationRole.Workstation) return 0;
             // A coffin's slots belong to its servant.
-            if (source.Role == StationRole.Coffin || target.Role == StationRole.Coffin) return 0;
+            if (target.Role == StationRole.Coffin || (source.Role == StationRole.Coffin && why != "station cleanup")) return 0;
             if (source.Role == StationRole.Workstation)
             {
                 if (!_world.StationInputs(from).CanReclaim || _world.Recipes(from).Count == 0) return 0;
                 bool returning = why == "leftover return" || why == "leftover home";
                 if (returning == IsBenchProduct(from, item)) return 0;
             }
-            if (part == InvPart.Main && ProtectsInputs(source) && !_world.StationInputs(from).CanReclaim) return 0;
+            if (part == InvPart.Main && ProtectsInputs(source) && !_world.StationInputs(from).CanReclaim
+                && !(why == "station cleanup" && source.Role != StationRole.Workstation)) return 0;
             if (target.Kind == NodeKind.Chest && !DepositScore.Takes(target, item, Catalog)) return 0;
-            var moved = _world.Transfer(from, part, to, item, amount);
+            var moved = _world.Transfer(from, part, to, item, amount, takeBusyInputs: why == "station cleanup");
             if (moved <= 0) return 0;
             _moves++;
             var plot = _world.Find(from)?.Plot ?? default;

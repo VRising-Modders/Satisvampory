@@ -33,7 +33,7 @@ namespace Satisvampory.Engine.Lists
                 else if (c.Kind == NodeKind.Station && c.Role is StationRole.None or StationRole.Refinement or StationRole.Workstation)
                 {
                     // Input only: a station sends nothing out until the player sets an Output.
-                    lists.Input.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
+                    lists.Input.Add(AutoInput(graph));
                     lists.PullOrder = PullOrder.ReverseMassDeposit;
                 }
             }
@@ -77,12 +77,41 @@ namespace Satisvampory.Engine.Lists
                 }
                 else if (c.Kind == NodeKind.Station && c.Role is StationRole.None or StationRole.Refinement or StationRole.Workstation && lists.Input.Count == 0)
                 {
-                    lists.Input.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
+                    lists.Input.Add(AutoInput(graph));
                     lists.PullOrder = PullOrder.ReverseMassDeposit;
                     changed.Add(c.Id);
                 }
             }
             return changed;
+        }
+
+        static ListEntry AutoInput(LogisticsGraph graph) =>
+            new() { Kind = EntryKind.Belt, Belt = Id, Sequence = graph.NextSequence(), Auto = true };
+
+        /// <summary>
+        /// Save version 5: a station's unfiltered Default Belt Input was the automatic one; mark it so
+        /// it stops feeding the station. Returns the factories (not benches, coffins or braziers) that
+        /// were fed only that way, whose contents Satisvampory put there and now sends back.
+        /// </summary>
+        public static List<ContainerId> MarkAutoInputs(LogisticsGraph graph, IEnumerable<ContainerInfo> containers)
+        {
+            var fedOnlyByDefault = new List<ContainerId>();
+            foreach (var c in containers)
+            {
+                if (c.Kind != NodeKind.Station || !graph.Lists.TryGetValue(c.Id, out var lists)) continue;
+                var marked = false;
+                for (var i = 0; i < lists.Input.Count; i++)
+                {
+                    var e = lists.Input[i];
+                    if (!IsEntry(e) || e.Auto || !e.Filter.IsAnything || e.BeltPeers != null || e.CounterpartOnly) continue;
+                    lists.Input[i] = new ListEntry { Kind = e.Kind, Belt = e.Belt, Sequence = e.Sequence, BeltOrder = e.BeltOrder, Auto = true };
+                    marked = true;
+                }
+                if (marked && c.Role is StationRole.None or StationRole.Refinement && lists.Input.All(e => e.Auto)
+                    && !graph.Lists.Any(kv => kv.Key != c.Id && kv.Value.Output.Any(o => o.Kind == EntryKind.Container && o.Container == c.Id)))
+                    fedOnlyByDefault.Add(c.Id);
+            }
+            return fedOnlyByDefault;
         }
 
         public static IEnumerable<ContainerId> Suppliers(LogisticsGraph graph) =>

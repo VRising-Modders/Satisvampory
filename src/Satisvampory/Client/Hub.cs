@@ -188,7 +188,7 @@ namespace Satisvampory.Client
                 case Keys.MassDeposit: Open(MassDepositTab); break;
                 case Keys.BeltsAndCategories: Open(BeltsTab); break;
                 case Keys.Inventory: Open(InventoryTab); break;
-                case Keys.Find: Open(FindTab); break;
+                case Keys.Find: OpenFindFresh(); break;
                 case Keys.Tidy: Tidy(); break;
                 case Keys.HuntLog: Open(HuntLogTab); break;
             }
@@ -211,6 +211,15 @@ namespace Satisvampory.Client
                 _ctx.Hud.Notify(c.TidyResult, kind: UiNoticeKind.Success, seconds: 5);
                 DrawCastle(c);
             });
+        }
+
+        /// <summary>The Find key starts a new search: an empty field and no old results.</summary>
+        void OpenFindFresh()
+        {
+            Open(FindTab);
+            ++_findSequence; // a search still in flight must not land in the fresh field
+            _findText.Value = "";
+            DrawFind(new FindReply());
         }
 
         void Open(int tab)

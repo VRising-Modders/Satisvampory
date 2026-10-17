@@ -80,6 +80,7 @@ namespace Satisvampory.Server
                 _knownHunts.IntersectWith(seen);
                 _seeded = true;
                 CatchUp(castles, outNow, server);
+                RetryHeld(castles, server);
             }
             catch (Exception e)
             {
@@ -134,7 +135,13 @@ namespace Satisvampory.Server
                 {
                     var r = _ctx.Servants.Resend(e, RepeatCap(server));
                     again = r.Ok;
-                    lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
+                    if (!r.Ok && r.Refusal == ServantSendRefusal.ServantHasItems)
+                    {
+                        Hold(new OutHunt { Territory = e.Territory, MissionGuid = e.MissionGuid, MissionName = e.MissionName, DataSlot = e.DataSlot,
+                            Servants = alive.Select(s => s.Name).ToList() });
+                        lines.Add("  their bags are still full: stashing and sending them again as soon as there is room");
+                    }
+                    else lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
                 }
                 EndTrip(e.Territory, e.MissionGuid, again);
 
@@ -249,7 +256,12 @@ namespace Satisvampory.Server
                         MaxSuccess = RepeatCap(server),
                     });
                     if (!r.Ok && r.Refusal is ServantSendRefusal.ZoneBusy or ServantSendRefusal.ServantBusy) return; // already back out
-                    lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
+                    if (!r.Ok && r.Refusal == ServantSendRefusal.ServantHasItems)
+                    {
+                        Hold(hunt);
+                        lines.Add("  their bags are still full: stashing and sending them again as soon as there is room");
+                    }
+                    else lines.Add(r.Ok ? "  sending them again" : "  could not send them again: " + r.Reason);
                     again = r.Ok;
                 }
             }
@@ -370,6 +382,97 @@ namespace Satisvampory.Server
         /// </summary>
         static float? RepeatCap(Engine.Persistence.ServerSettings server) =>
             server.RepeatHuntSuccessCap >= 100 ? null : Math.Clamp(server.RepeatHuntSuccessCap, 1, 99) / 100f;
+
+        // ---------------- repeats held back by full bags ----------------
+
+        /// <summary>A repeat the game refused because the servants still carried loot (no room to stash it).</summary>
+        sealed class HeldHunt
+        {
+            public OutHunt Hunt { get; set; } = new();
+            public DateTime Since { get; set; }
+        }
+
+        const string HeldKey = "hunts/held";
+        /// <summary>How long a held repeat keeps trying before it gives up.</summary>
+        static readonly TimeSpan HoldFor = TimeSpan.FromHours(1);
+        double _lastHeldTry;
+
+        Dictionary<string, HeldHunt> HeldHunts() => _ctx.Save.Get<Dictionary<string, HeldHunt>>(HeldKey) ?? new();
+
+        void Hold(OutHunt hunt)
+        {
+            var held = HeldHunts();
+            held[HuntKey(hunt.Territory, hunt.MissionGuid)] = new HeldHunt { Hunt = hunt, Since = DateTime.UtcNow };
+            _ctx.Save.Set(HeldKey, held);
+        }
+
+        /// <summary>
+        /// About once a minute: stash what held servants carry and, once their bags are empty, send them out
+        /// again (with the repeat cap). Gives up when they are already out, dead, or after an hour.
+        /// </summary>
+        void RetryHeld(List<ICastleHandle> castles, Engine.Persistence.ServerSettings server)
+        {
+            var now = _clock.Elapsed.TotalSeconds;
+            if (now - _lastHeldTry < 60) return;
+            _lastHeldTry = now;
+            var held = HeldHunts();
+            if (held.Count == 0) return;
+            var changed = false;
+            foreach (var (key, h) in held.ToList())
+            {
+                var hunt = h.Hunt;
+                var castle = castles.FirstOrDefault(c => c.Territory.Index == hunt.Territory);
+                if (castle == null) continue;
+                string? outcome = null;
+                try
+                {
+                    var heart = castle.Heart.ToEntity();
+                    List<ServantInfo> Mine() => _ctx.Servants.List(heart).Where(s => hunt.Servants.Contains(s.Name)).ToList();
+                    var servants = Mine();
+                    if (servants.Count == 0 || servants.Any(s => s.State == Progenitor.Servants.ServantState.AwayOnHunt)
+                        || servants.All(s => s.State == Progenitor.Servants.ServantState.Dead))
+                    { held.Remove(key); changed = true; continue; }
+                    var loaded = servants.Where(s => s.ItemStacks > 0).ToList();
+                    var stashed = 0;
+                    var detail = new List<string>();
+                    if (loaded.Count > 0)
+                        stashed = StashLoot(castle, loaded.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server, out detail);
+                    var ready = Mine().Where(s => s.State == Progenitor.Servants.ServantState.Free).Select(s => s.Servant).ToList();
+                    if (ready.Count > 0 && ready.Count == Mine().Count(s => s.State != Progenitor.Servants.ServantState.Dead))
+                    {
+                        var r = _ctx.Servants.Send(new ServantSendRequest
+                        {
+                            Heart = castle.Heart, Servants = ready, MissionGuid = hunt.MissionGuid, DataSlot = hunt.DataSlot, CheckDiscovered = false,
+                            MaxSuccess = RepeatCap(server),
+                        });
+                        if (r.Ok || r.Refusal is not ServantSendRefusal.ServantHasItems)
+                        {
+                            held.Remove(key); changed = true;
+                            outcome = r.Ok ? $"stashed {stashed:N0} items they still carried and sent them again" : "could not send them again: " + r.Reason;
+                        }
+                    }
+                    if (outcome == null && DateTime.UtcNow - h.Since > HoldFor)
+                    {
+                        held.Remove(key); changed = true;
+                        outcome = "gave up sending them again: their loot still has no room in storage";
+                    }
+                    if (outcome != null)
+                    {
+                        var plot = Labels.Name(_ctx.Save, castle);
+                        var text = $"{plot}: {string.Join(", ", hunt.Servants)} ({Mission(hunt.MissionGuid, hunt.MissionName)}): {outcome}";
+                        _ctx.Log.LogInfo("Satisvampory: " + ForLog(text));
+                        foreach (var user in ClanOnline(castle)) Notify(user, text);
+                        Log(castle.Owner.PlatformId, text, plot);
+                        if (detail.Count > 0) ServerActions.Report(_ctx, _half, text, detail, ClanOnlineAccounts(castle), ForLog);
+                    }
+                }
+                catch (Exception e)
+                {
+                    _ctx.Log.LogError($"Satisvampory: held hunt on plot {hunt.Territory} failed: {e.Message}");
+                }
+            }
+            if (changed) _ctx.Save.Set(HeldKey, held);
+        }
 
         // ---------------- repeat-hunt trips ----------------
 

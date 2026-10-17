@@ -76,12 +76,11 @@ namespace Satisvampory.Engine.Ui
             bool Matches(string name, string label, string hint) =>
                 needle.Length == 0 || NameFold.Fold(name).Contains(needle) || NameFold.Fold(label).Contains(needle) || NameFold.Fold(hint).Contains(needle);
 
-            bool WouldLoop(ContainerId other)
-            {
-                var (from, to) = q.Side == PickerSide.Input ? (other, q.Self) : (q.Self, other);
-                var trial = edges.Append(new Edge(from, to, new ItemFilter(), q.Self, q.Side == PickerSide.Output, long.MaxValue)).ToList();
-                return LoopFinder.Find(trial).Any(l => l.Members.Contains(q.Self) && l.Members.Contains(other));
-            }
+            // A new edge other→self (Input) or self→other (Output) closes a loop exactly when a path already
+            // runs the other way. One search from this container answers it for every candidate; running the
+            // loop finder per candidate over a Default Belt island took seconds.
+            var linked = Reachable(edges, q.Self, forward: q.Side == PickerSide.Input);
+            bool WouldLoop(ContainerId other) => other != q.Self && linked.Contains(other);
 
             void AddContainer(ContainerInfo c, bool inIsland)
             {
@@ -162,6 +161,26 @@ namespace Satisvampory.Engine.Ui
                 .ThenBy(r => r.PlotLabel, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        /// <summary>Containers reachable from <paramref name="start"/> along edges (or against them).</summary>
+        static HashSet<ContainerId> Reachable(IReadOnlyList<Edge> edges, ContainerId start, bool forward)
+        {
+            var next = new Dictionary<ContainerId, List<ContainerId>>();
+            foreach (var e in edges)
+            {
+                var (a, b) = forward ? (e.From, e.To) : (e.To, e.From);
+                if (!next.TryGetValue(a, out var l)) next[a] = l = new List<ContainerId>();
+                l.Add(b);
+            }
+            var seen = new HashSet<ContainerId>();
+            var queue = new Queue<ContainerId>();
+            queue.Enqueue(start);
+            while (queue.Count > 0)
+                if (next.TryGetValue(queue.Dequeue(), out var outs))
+                    foreach (var n in outs)
+                        if (seen.Add(n)) queue.Enqueue(n);
+            return seen;
         }
 
         static string Hint(IWorldView world, ItemCatalog catalog, ContainerInfo c)

@@ -21,6 +21,25 @@ namespace Satisvampory.Engine.Tests
         readonly LogisticsGraph _g = new();
 
         [Fact]
+        public void Picker_stays_fast_on_a_default_belt_island_and_flags_output_loops()
+        {
+            var state = new Persistence.IslandState();
+            for (var i = 0; i < 250; i++) _w.Chest(Home, "Chest " + i);
+            for (var i = 0; i < 40; i++) { var s = _w.Chest(Home, "Furnace " + i, kind: NodeKind.Station); s.Role = StationRole.Refinement; }
+            DefaultBelt.Initialize(state.Graph, _w.ContainersOn(Home));
+            var self = _w.Chest(Home, "Self");
+            var feeder = _w.Chest(Home, "Feeder");
+            state.Graph.For(feeder.Id).Output.Add(ListEntry.Of(self.Id, state.Graph.NextSequence()));
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var rows = Picker.Rows(_w, _cat, state.Graph, new[] { Home }, Label, new PickerQuery { Self = self.Id, Side = PickerSide.Output, Standing = Home });
+            watch.Stop();
+            Assert.True(watch.ElapsedMilliseconds < 500, $"picker took {watch.ElapsedMilliseconds} ms");
+            Assert.True(rows.Single(r => r.Name == "Feeder").ClosesLoop);  // self → feeder closes feeder → self
+            Assert.False(rows.Single(r => r.Name == "Chest 3").ClosesLoop);
+        }
+
+        [Fact]
         public void Picker_sections_greys_hints_and_loop_flags()
         {
             var self = _w.Chest(Home, "Ore in");

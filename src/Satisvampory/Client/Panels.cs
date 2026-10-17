@@ -138,6 +138,9 @@ namespace Satisvampory.Client
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
 
+        /// <summary>Show a container in the Object preview; the action runs when the preview closes.</summary>
+        internal Action<string, Action>? PreviewContainer { get; set; }
+
         internal TargetMsg Target() => new()
         {
             NetIndex = _target.NetworkIdIndex,
@@ -627,7 +630,7 @@ namespace Satisvampory.Client
     internal sealed class PickerView : View
     {
         int _side;
-        IUiPicker _picker = null!;
+        IUiChecklist _list = null!;
         IUiLabel _note = null!;
 
         public PickerView(Panels owner) : base(owner)
@@ -639,18 +642,51 @@ namespace Satisvampory.Client
         protected override void Build(IUiPanel panel)
         {
             var ctx = Owner.Ctx;
+            panel.GameWindow(1100); // room for the plot, distance and contents columns
             _note = panel.Label("");
-            _picker = panel.Picker("targets", Array.Empty<UiPickerEntry>(), new UiPickerOptions { Multi = true, Rows = 10, Placeholder = "Search chests, belts, plots, or what they hold" });
-            ctx.Track(_picker.OnPicked(picked =>
+            _list = panel.Checklist("targets", Array.Empty<UiChecklistEntry>(), new UiChecklistOptions
             {
-                foreach (var e in picked)
+                Placeholder = "Search chests, belts, plots, or what they hold",
+                Columns = new[]
                 {
-                    var row = e.Id == "md" ? new RowMsg { Kind = 2 }
-                        : e.Id.StartsWith("b:") ? new RowMsg { Kind = 1, BeltId = e.Id.Substring(2) }
-                        : new RowMsg { Kind = 0, ContainerId = e.Id.Substring(2) };
+                    new UiTableColumn("plot", "Plot") { Width = 220 },
+                    new UiTableColumn("dist", "Distance", UiTableColumnKind.Number) { Format = "0 m", Width = 130 },
+                    new UiTableColumn("what", "Holds / makes / wants") { Width = 330 },
+                },
+                Sort = new[] { new UiTableSortKey("dist") },
+                Filters = new[]
+                {
+                    new UiChecklistFilter("common", "Chests & belts"),
+                    new UiChecklistFilter("chests", "Chests"),
+                    new UiChecklistFilter("belts", "Belts"),
+                    new UiChecklistFilter("stations", "Stations"),
+                    new UiChecklistFilter("special", "Special chests"),
+                },
+                DefaultFilter = "common",
+                AllFilterLabel = "Everything",
+                ConfirmFormat = "Add {0}",
+                Preview = true,
+                FillHeight = true,
+                EmptyText = "Nothing matches.",
+            });
+            ctx.Track(_list.OnConfirmed(picked =>
+            {
+                foreach (var id in picked)
+                {
+                    var row = id == "md" ? new RowMsg { Kind = 2 }
+                        : id.StartsWith("b:") ? new RowMsg { Kind = 1, BeltId = id.Substring(2) }
+                        : new RowMsg { Kind = 0, ContainerId = id.Substring(2) };
                     Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 0, Entry = row });
                 }
                 Hide();
+            }));
+            ctx.Track(_list.OnCancelled(Hide));
+            // View: the Object preview of a chest or station, then back to the list as it was.
+            ctx.Track(_list.OnPreview(id =>
+            {
+                if (!id.StartsWith("c:") || Owner.PreviewContainer == null) return;
+                _list.Suspend();
+                Owner.PreviewContainer(id.Substring(2), () => _list.Resume());
             }));
         }
 
@@ -661,12 +697,27 @@ namespace Satisvampory.Client
             _note.Text = side == 0 ? "Add to Input: where this pulls from." : "Add to Output: where this sends to.";
             Owner.Send<PickerReq, PickerReply>(new PickerReq { Target = Owner.Target(), Side = side }, r =>
             {
-                _picker.SetEntries(r.Rows.Select(x => new UiPickerEntry(x.Key, x.Label)
+                _list.SetSelected(Array.Empty<string>());
+                _list.Query = "";
+                _list.SetEntries(r.Rows.Select(x => new UiChecklistEntry(x.Key, x.Label)
                 {
                     Section = x.Section,
-                    Note = x.ClosesLoop ? x.Note + " · closes a loop" : x.Note,
+                    Note = x.ClosesLoop ? "closes a loop" : "",
+                    Keywords = new[] { x.Plot, x.Hint },
+                    Filters = x.Kind switch
+                    {
+                        "chest" => new[] { "common", "chests" },
+                        "belt" => new[] { "common", "belts" },
+                        "station" => new[] { "stations" },
+                        "special" => new[] { "special" },
+                        _ => new[] { "common" },
+                    },
+                    BuildingPrefab = x.BuildingPrefab,
                     DisabledReason = x.Refused ?? "",
-                }));
+                }
+                .Text("plot", x.Plot)
+                .Number("dist", x.Distance >= 0 ? x.Distance : null, x.Distance >= 0 ? null : "")
+                .Text("what", x.Hint)));
                 base.Show();
             });
         }

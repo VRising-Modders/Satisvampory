@@ -193,6 +193,13 @@ namespace Satisvampory.Net
         [Field(4)] public string Note = "";
         [Field(5)] public string Refused = "";
         [Field(6)] public bool ClosesLoop;
+        /// <summary>"chest", "station", "special", "belt" or "md": the Add list's Show filter.</summary>
+        [Field(7)] public string Kind = "";
+        [Field(8)] public string Plot = "";
+        /// <summary>Metres from the player on the same plot; -1 when not known.</summary>
+        [Field(9)] public float Distance = -1;
+        [Field(10)] public string Hint = "";
+        [Field(11)] public int BuildingPrefab;
     }
 
     [ModMessage("sv.picker")]

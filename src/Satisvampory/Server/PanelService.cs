@@ -239,6 +239,16 @@ namespace Satisvampory.Server
                     Note = string.Join(" · ", new[] { row.PlotLabel, row.Distance is { } d ? $"{d:0} m" : "", row.Hint }.Where(x => !string.IsNullOrEmpty(x))),
                     Refused = row.Refused ?? string.Empty,
                     ClosesLoop = row.ClosesLoop,
+                    Kind = row.Kind switch
+                    {
+                        PickerRowKind.Belt => "belt",
+                        PickerRowKind.MassDeposit => "md",
+                        _ => row.Section == PickerSection.SpecialChests ? "special" : row.Station ? "station" : "chest",
+                    },
+                    Plot = row.PlotLabel,
+                    Distance = row.Distance ?? -1,
+                    Hint = row.Hint,
+                    BuildingPrefab = row.BuildingPrefab,
                 });
             return reply;
         }

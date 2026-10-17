@@ -1313,16 +1313,30 @@ namespace Satisvampory.Client
             var token = _previewToken; _previewToken = "";
             if (token.Length > 0) Send<EndPreviewReq, ViewSaved>(new EndPreviewReq { Token = token }, _ => { });
             if (_previewPanel != null) UiApi.Hide(_previewPanel);
-            UiApi.Show(Panel);
+            var back = _previewReturn;
+            _previewReturn = null;
+            if (back != null) back();
+            else UiApi.Show(Panel);
         }
 
         void PreviewFind()
         {
             var row = SelectedFindLocation();
             if (row == null || !row.HasPosition) return;
+            BeginPreview(row.ContainerId, _findClan, null);
+        }
+
+        /// <summary>The Object preview for another window (the Add list): it hides nothing and calls back when closed.</summary>
+        internal void PreviewContainer(string containerId, Action returnTo) => BeginPreview(containerId, true, returnTo);
+
+        Action? _previewReturn;
+
+        void BeginPreview(string containerId, bool clan, Action? returnTo)
+        {
             _preview?.Dispose();
             var sequence = ++_previewSequence;
-            Send<PreviewReq, PreviewReply>(new PreviewReq { ContainerId = row.ContainerId, IncludeClanPlots = _findClan }, reply =>
+            _previewReturn = returnTo;
+            Send<PreviewReq, PreviewReply>(new PreviewReq { ContainerId = containerId, IncludeClanPlots = clan }, reply =>
             {
                 if (sequence != _previewSequence)
                 {
@@ -1356,7 +1370,7 @@ namespace Satisvampory.Client
                 _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }
                     .Text("item", ClientItems.NameOf(_ctx, item) ?? "Item " + item)
                     .Number("amount", i < reply.Amounts.Count ? reply.Amounts[i] : 0)));
-                UiApi.Hide(Panel);
+                if (_previewReturn == null) UiApi.Hide(Panel);
                 UiApi.Show(_previewPanel);
                 Progenitor.Dev.MainThread.PostDelayed(0.75, () =>
                 {

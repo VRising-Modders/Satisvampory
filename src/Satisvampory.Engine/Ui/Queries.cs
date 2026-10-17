@@ -49,6 +49,10 @@ namespace Satisvampory.Engine.Ui
         public string? Refused { get; init; }
         /// <summary>Picking this closes a loop; allowed, but the UI sends the player to the loop settings.</summary>
         public bool ClosesLoop { get; init; }
+        /// <summary>A station (furnace, press, tomb...) rather than a chest.</summary>
+        public bool Station { get; init; }
+        /// <summary>The building's prefab, for its icon; 0 for belts and Mass Deposit.</summary>
+        public int BuildingPrefab { get; init; }
     }
 
     public sealed class PickerQuery
@@ -117,6 +121,8 @@ namespace Satisvampory.Engine.Ui
                     Hint = c.Deposit.Special is not (SpecialKind.None or SpecialKind.Skip) ? $"{c.Deposit.Special} · {hint}".TrimEnd(' ', '·') : hint,
                     Refused = refused,
                     ClosesLoop = refused == null && WouldLoop(c.Id),
+                    Station = c.Kind == NodeKind.Station,
+                    BuildingPrefab = c.BuildingPrefab,
                 });
             }
 

@@ -43,6 +43,7 @@ namespace Satisvampory
             hub.Attach(_keys);
             _admin.OpenHub = hub.OpenTab;
             panels.OpenHub = hub.OpenTab;
+            panels.PreviewContainer = hub.PreviewContainer;
             _ctx.Track(new OnDispose(() => _admin.OpenHub = null));
             _ctx.Track(new OnDispose(() => _stopped = true));
             KeepPrefsSent();

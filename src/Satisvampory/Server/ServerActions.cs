@@ -207,11 +207,12 @@ namespace Satisvampory.Server
             p => castles.FirstOrDefault(c => ProgenitorWorld.PlotOf(c) == p) is { } c ? Labels.Name(save, c) : "Plot " + p.Value;
 
         /// <summary>The breakdown to the server log and, for players who keep "Log my deposits" on, to their chat.</summary>
-        internal static void Report(SatisContext ctx, ServerHalf half, string header, List<string> lines, IEnumerable<(Entity User, ulong Account)> readers)
+        internal static void Report(SatisContext ctx, ServerHalf half, string header, List<string> lines, IEnumerable<(Entity User, ulong Account)> readers,
+            Func<string, string>? forLog = null)
         {
             if (lines.Count == 0) return;
             var catalog = half.Catalog.Current;
-            ctx.Log.LogInfo($"Satisvampory: {header} | " + string.Join(" | ", lines.Select(l => Plain(l, catalog))));
+            ctx.Log.LogInfo($"Satisvampory: {(forLog == null ? header : forLog(header))} | " + string.Join(" | ", lines.Select(l => Plain(l, catalog))));
             var to = readers.Where(r => half.PlayerFor(r.Account).LogMyDeposits).Select(r => r.User).ToList();
             if (to.Count == 0) return;
             // Sent a moment later, from the main thread: lines sent from inside a game event handler

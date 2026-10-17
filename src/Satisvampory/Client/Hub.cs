@@ -254,7 +254,7 @@ namespace Satisvampory.Client
                 case FindTab: ShowFindStage(_findAtLocations); break;
                 case HuntLogTab:
                     Send<GetHuntLogReq, HuntLogReply>(new GetHuntLogReq(), r =>
-                        _huntLog.Text = (r.Lines.Count == 0 ? "No hunts in the last 72 hours." : string.Join("\n", r.Lines.Take(40)))
+                        _huntLog.Text = (r.Lines.Count == 0 ? "No hunts in the last 72 hours." : ClientItems.Missions(_ctx, string.Join("\n", r.Lines.Take(40))))
                             + (r.Servants.Count == 0 ? "" : "\n\nServants now:\n  " + string.Join("\n  ", r.Servants)));
                     break;
             }

@@ -108,7 +108,7 @@ namespace Satisvampory.Server
                 var lootStacks = e.TotalLoot.Count;
                 var trip = CountTrip(e.Territory, e.MissionGuid);
                 var detail = new List<string>();
-                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {ProgenitorWorld.PrettyMission(e.MissionName)}{TripText(trip)}"
+                lines.Add($"{plot}: {string.Join(", ", e.Servants.Select(s => s.Name + Outcome(s.Outcome)))} back from {Mission(e.MissionGuid, e.MissionName)}{TripText(trip)}"
                     + (lootStacks > 0 ? $" with {lootStacks} kinds of loot" : ""));
 
                 if (server.AllowServantLootStash && owner.ServantLootStash && alive.Count > 0)
@@ -223,7 +223,7 @@ namespace Satisvampory.Server
             var plot = Labels.Name(_ctx.Save, castle);
             var trip = CountTrip(hunt.Territory, hunt.MissionGuid);
             var detail = new List<string>();
-            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {ProgenitorWorld.PrettyMission(hunt.MissionName)}{TripText(trip)} while the server was not watching" };
+            var lines = new List<string> { $"{plot}: {string.Join(", ", servants.Select(s => s.Name))} came back from {Mission(hunt.MissionGuid, hunt.MissionName)}{TripText(trip)} while the server was not watching" };
             var alive = servants.Where(s => s.State != Progenitor.Servants.ServantState.Dead).ToList();
             if (server.AllowServantLootStash && owner.ServantLootStash && alive.Any(s => s.ItemStacks > 0))
             {
@@ -255,7 +255,7 @@ namespace Satisvampory.Server
             EndTrip(hunt.Territory, hunt.MissionGuid, again);
 
             var text = string.Join("\n", lines);
-            _ctx.Log.LogInfo("Satisvampory: " + text.Replace("\n", " |"));
+            _ctx.Log.LogInfo("Satisvampory: " + ForLog(text).Replace("\n", " |"));
             foreach (var user in clanOnline) Notify(user, text);
             Log(castle.Owner.PlatformId, text, plot);
             ChatReport(castle, lines, detail);
@@ -312,8 +312,9 @@ namespace Satisvampory.Server
             var length = minutes >= 60 ? $"{minutes / 60f:0.#} h" : $"{minutes:0} min";
             var lines = new List<string>
             {
-                $"{Labels.Name(_ctx.Save, castle)}: {whoText} left to hunt {ProgenitorWorld.PrettyMission(m.MissionName)} · back in {length}",
+                $"{Labels.Name(_ctx.Save, castle)}: {whoText} left to hunt {Mission(m.MissionGuid, m.MissionName)} · back in {length}",
             };
+            if (m.Chances.Count > 0) lines.Add(SuccessText(m.Chances, names));
 
             var castleOn = Stores.Castle(_ctx.Save, castle.Territory.Index).RepeatHunts;
             var ownerOn = _half.PlayerFor(castle.Owner.PlatformId).RepeatMyHunts;
@@ -331,6 +332,35 @@ namespace Satisvampory.Server
                 lines.Add($"Repeat hunt: off ({why})");
             }
             return string.Join("\n", lines);
+        }
+
+        /// <summary>Readable names of missions seen, for the server log (the game's names live on clients).</summary>
+        readonly Dictionary<int, string> _missionNames = new();
+
+        /// <summary>A mission as a <c>[mission:guid]</c> token: chat and Satisvampory's client print the game's name.</summary>
+        string Mission(int guid, string prefab)
+        {
+            _missionNames[guid] = ProgenitorWorld.PrettyMission(prefab);
+            return _ctx.Servants.MissionToken(guid);
+        }
+
+        static readonly System.Text.RegularExpressions.Regex MissionTokens = new(@"\[mission:(-?\d+)\]");
+
+        string ForLog(string text) => MissionTokens.Replace(text, m =>
+            int.TryParse(m.Groups[1].Value, out var g) && _missionNames.TryGetValue(g, out var n) ? n : "a hunt");
+
+        /// <summary>"Success: 100%", or per servant when they differ ("Alexander 87%, PewPewPew 92%").</summary>
+        static string SuccessText(IReadOnlyList<ServantChance> chances, Dictionary<CastleId, string> names)
+        {
+            static string Pct(float f) => $"{Math.Round(f * 100):0}%";
+            var applied = chances.Select(c => c.Applied).Distinct().ToList();
+            var text = applied.Count == 1
+                ? "Success: " + Pct(applied[0])
+                : "Success: " + string.Join(", ", chances.Select(c => $"{(names.TryGetValue(c.Servant, out var n) ? n : "a servant")} {Pct(c.Applied)}"));
+            // A capped repeat shows what the cap cost ("game 100%, capped for repeat hunts").
+            if (chances.Any(c => c.MaxSuccess is { } cap && cap < c.Vanilla))
+                text += $" (game {string.Join("/", chances.Select(c => Pct(c.Vanilla)).Distinct())}, capped for repeat hunts)";
+            return text;
         }
 
         // ---------------- repeat-hunt trips ----------------
@@ -363,7 +393,7 @@ namespace Satisvampory.Server
         {
             var body = lines.Skip(1).Select(l => l.Trim()).Where(l => !l.StartsWith("loot stashed")).Concat(detail).ToList();
             if (body.Count == 0) body.Add("no loot to stash");
-            ServerActions.Report(_ctx, _half, lines[0], body, ClanOnlineAccounts(castle));
+            ServerActions.Report(_ctx, _half, lines[0], body, ClanOnlineAccounts(castle), ForLog);
         }
 
         List<(Entity User, ulong Account)> ClanOnlineAccounts(ICastleHandle castle)

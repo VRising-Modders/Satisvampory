@@ -105,7 +105,7 @@ namespace Satisvampory
             var t = *(TextPacket*)payload;
             if (t.Magic != EventIds.Magic) return;
             if ((ActionKind)t.Kind == ActionKind.ImportCheck) _admin.LastResult = t.Text();
-            else if ((ActionKind)t.Kind == ActionKind.Notice) _ctx.Hud.Notify(t.Text(), kind: Progenitor.Ui.UiNoticeKind.Info, seconds: 8);
+            else if ((ActionKind)t.Kind == ActionKind.Notice) _ctx.Hud.Notify(Client.ClientItems.Missions(_ctx, t.Text()), kind: Progenitor.Ui.UiNoticeKind.Info, seconds: 8);
         }
 
         unsafe void OnNotice(int eventId, byte* payload, int length)

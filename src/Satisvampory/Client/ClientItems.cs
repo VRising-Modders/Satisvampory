@@ -81,6 +81,19 @@ namespace Satisvampory.Client
             }
         }
 
+        static readonly System.Text.RegularExpressions.Regex MissionTokens = new(@"\[mission:(-?\d+)\]");
+
+        /// <summary>
+        /// Satisvampory's notices and hunt log carry missions as <c>[mission:guid]</c> (the server has no string
+        /// table); this writes the game's own name in ("Fishing Lake"), or "a hunt" when it is not known yet.
+        /// </summary>
+        public static string Missions(PluginContext ctx, string text) =>
+            text.IndexOf("[mission:", StringComparison.Ordinal) < 0 ? text : MissionTokens.Replace(text, m =>
+            {
+                try { return ctx.Servants.MissionDisplayName(int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)) ?? "a hunt"; }
+                catch (Exception) { return "a hunt"; }
+            });
+
         /// <summary>An item's name as the game shows it, or null when the catalog has none.</summary>
         public static string? NameOf(PluginContext ctx, int guid)
         {

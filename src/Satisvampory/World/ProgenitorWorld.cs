@@ -152,6 +152,15 @@ namespace Satisvampory.World
                 state.AutoInputsDue = false;
                 state.DefaultBeltMigrated = true;
             }
+            if (state.FiltersDue)
+            {
+                string Name(EngineId id) => _nodes.TryGetValue(id, out var n) ? n.Info.DisplayName : id.ToString();
+                var moved = Engine.Lists.FilterMigration.MoveToAccepts(state.Graph, state.Deposit, Name, i => i.Guid.ToString());
+                foreach (var id in moved.Changed) state.Touched.Add(id);
+                foreach (var line in moved.Dropped) FailureLog?.Invoke("Satisvampory: link filter dropped (no receiver to hold it): " + line);
+                state.FiltersDue = false;
+                state.DefaultBeltMigrated = true;
+            }
             if (state.MisfiledStationsDue)
             {
                 // Coffins and unit stations used to count as chests, so stash and loops filled them.

@@ -291,18 +291,7 @@ namespace Satisvampory.Client
     internal sealed class ListView : View
     {
         IUiLabel _others = null!;
-
-        int? _filterRow;
-        IUiInput _filterText = null!;
-        IUiButton _filterApply = null!;
-        IUiInput _takeItem = null!, _takeAmount = null!;
-        IUiButton _takeButton = null!;
-
-        string FilterText(FilterMsg f) => string.Join(", ",
-            f.Categories.Select(c => "category " + c)
-                .Concat(f.Items.Select(i => ClientItems.NameOf(Owner.Ctx, i, i.ToString())))
-                .Concat(f.ExcludeCategories.Select(c => "-category " + c))
-                .Concat(f.ExcludeItems.Select(i => "-" + ClientItems.NameOf(Owner.Ctx, i, i.ToString()))));
+        IUiDropdown _add = null!;
 
         protected override string? TipId => Help.ListsTip;
 
@@ -328,65 +317,45 @@ namespace Satisvampory.Client
         {
             var ctx = Owner.Ctx;
             _header = panel.Label("");
+            // One Add menu: the chest/belt list, or clicking chests in the world.
+            panel.BeginInline();
+            _add = panel.CompactDropdown("Add", new[] { "list", "pick" }, "", new[] { "Chests or belts…", "Pick in world" });
+            panel.EndInline();
+            ctx.Track(_add.OnChanged(v =>
+            {
+                if (_redrawing) return;
+                _redrawing = true;
+                try { _add.Value = ""; }
+                finally { _redrawing = false; }
+                if (v == "list") Owner.OpenPicker(_side);
+                else if (v == "pick") PickInWorld();
+            }));
+
+            _list = panel.OrderedList("rows", Array.Empty<UiListItem>(), new UiOrderedListOptions
+            {
+                EmptyText = _side == 0 ? "No sources yet: Add a chest or belt." : "No destinations yet: Add a chest, belt or Mass Deposit.",
+            });
+            ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));
+            ctx.Track(_list.OnReorder(m => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = m.From, To = m.To })));
+            ctx.Track(_list.OnRemove(item => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = int.Parse(item.Id) })));
+
+            // How the list is worked through: a setting under it.
             _order = _side == 0
                 ? panel.Dropdown("Pull order", PullValues, "0", PullLabels)
                 : panel.Dropdown("Send order", SendValues, "0", SendLabels);
             ctx.Track(_order.OnChanged(v =>
             {
                 if (_redrawing || Owner.State == null) return;
-                var s = Owner.State;
+                var st = Owner.State;
                 Owner.Edit(new EditListReq
                 {
                     Target = Owner.Target(),
                     Side = _side,
                     Op = 3,
-                    PullOrder = _side == 0 ? int.Parse(v) : s.PullOrder,
-                    SendOrder = _side == 1 ? int.Parse(v) : s.SendOrder,
+                    PullOrder = _side == 0 ? int.Parse(v) : st.PullOrder,
+                    SendOrder = _side == 1 ? int.Parse(v) : st.SendOrder,
                 });
             }));
-
-            _list = panel.OrderedList("rows", Array.Empty<UiListItem>(), new UiOrderedListOptions
-            {
-                EmptyText = _side == 0 ? "No sources. Add a chest or belt." : "No destinations. Add a chest, belt or Mass Deposit.",
-            });
-            ctx.Track(_list.Term(_side == 0 ? "Input" : "Output"));
-            ctx.Track(_list.OnReorder(m => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 2, Index = m.From, To = m.To })));
-            ctx.Track(_list.OnRemove(item => Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 1, Index = int.Parse(item.Id) })));
-
-            // Row filter (spec 02): expand a row, type what it moves, Apply.
-            ctx.Track(_list.OnExpand((item, open) =>
-            {
-                _filterRow = open && int.TryParse(item.Id, out var i) ? i : null;
-                var rows = Owner.State == null ? null : _side == 0 ? Owner.State.Input : Owner.State.Output;
-                _filterText.Value = _filterRow is { } r && rows != null && r < rows.Count ? FilterText(rows[r].FilterSpec) : "";
-                _filterText.Visible = _filterApply.Visible = _filterRow != null && Owner.State?.CanEdit == true;
-                var takeable = _filterRow is { } t && rows != null && t < rows.Count && rows[t].Kind is 0 or 1;
-                _takeItem.Visible = _takeAmount.Visible = _takeButton.Visible = takeable;
-            }));
-            _filterText = panel.Input("Open row moves (blank: anything; -x excludes)", "");
-            _filterApply = panel.Button("Set filter");
-            _filterText.Visible = _filterApply.Visible = false;
-            _takeItem = panel.Input("Take from the open row: item", "");
-            _takeAmount = panel.Input("Amount (blank: one stack)", "");
-            _takeButton = panel.Button("Take…");
-            _takeItem.Visible = _takeAmount.Visible = _takeButton.Visible = false;
-            ctx.Track(_takeButton.OnClick(() =>
-            {
-                if (_filterRow is not { } row) return;
-                int.TryParse(_takeAmount.Value, out var n);
-                Owner.Send<TakeFromRowReq, TextReply>(new TakeFromRowReq { Target = Owner.Target(), Side = _side, Index = row, Item = ClientItems.Resolve(ctx, _takeItem.Value), Amount = n },
-                    r => ctx.Hud.Notify(r.Text, kind: UiNoticeKind.Success, seconds: 4));
-            }));
-            ctx.Track(_filterApply.OnClick(() =>
-            {
-                if (_filterRow is not { } row) return;
-                Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 4, Index = row, Entry = new RowMsg { FilterSpec = new FilterMsg { Text = string.IsNullOrWhiteSpace(_filterText.Value) ? "anything" : _filterText.Value } } });
-            }));
-
-            ctx.Track(panel.Button("+ Add chest or belt…").OnClick(() => Owner.OpenPicker(_side)));
-            ctx.Track(panel.Button("Manage belts…").OnClick(() => Owner.OpenHub?.Invoke(Hub.BeltsTab)));
-            ctx.Track(panel.Button("Mass Deposit screen…").OnClick(() => Owner.OpenHub?.Invoke(1)));
-            ctx.Track(panel.Button("◎ Pick in world").OnClick(PickInWorld));
             _others = panel.Label("");
             _loop = panel.Label("");
             _loopMode = panel.Dropdown("Loop mode", new[] { "0", "1", "2" }, "0", new[] { "Cycle once, then wait", "Even distribution", "Off (closing edge never runs)" });
@@ -413,7 +382,6 @@ namespace Satisvampory.Client
                 {
                     Badge = r.Kind switch { 1 => "Belt", 2 => _side == 0 ? "Pull" : "Push", _ => "Chest" },
                     Note = r.Where + (string.IsNullOrEmpty(r.Status) ? "" : " · " + r.Status),
-                    Detail = r.Filter,
                     Removable = s.CanEdit,
                 }));
                 var others = _side == 0 ? s.InputFromOthers : s.OutputFromOthers;
@@ -454,9 +422,13 @@ namespace Satisvampory.Client
                     var added = rows.LastOrDefault();
                     var what = added == null ? "it" : $"{added.Name} · {added.Where}";
                     ctx.Hud.Notify($"Added {what} to {(_side == 0 ? "Input" : "Output")} of {reply.Name} · {reply.Where}.", kind: UiNoticeKind.Success, seconds: 4);
-                    Show();
                 });
-            }, () => Show(), new UiWorldPickOptions { Prompt = _side == 0 ? "Interact with a container or station to pull from. Esc to cancel." : "Interact with a container or station to send to. Esc to cancel." });
+            }, () => Show(), new UiWorldPickOptions
+            {
+                // Pick several in one go; Esc ends it and brings the list back.
+                Repeat = true,
+                Prompt = _side == 0 ? "Interact with containers or stations to pull from. Esc when done." : "Interact with containers or stations to send to. Esc when done.",
+            });
         }
 
     }
@@ -681,6 +653,7 @@ namespace Satisvampory.Client
                 Hide();
             }));
             ctx.Track(_list.OnCancelled(Hide));
+            ctx.Track(panel.Button("Manage belts…").OnClick(() => { Hide(); Owner.OpenHub?.Invoke(Hub.BeltsTab); }));
             // View: the Object preview of a chest or station, then back to the list as it was.
             ctx.Track(_list.OnPreview(id =>
             {

@@ -52,9 +52,8 @@ namespace Satisvampory.Engine.Lists
         public HashSet<ContainerId>? BeltPeers { get; init; }
         public bool CounterpartOnly { get; init; }
         /// <summary>
-        /// The Default Belt Input a station was given automatically. It supplies crafts the player
-        /// starts at the station, but never feeds the station on its own: a factory only pulls stock
-        /// through Inputs the player set.
+        /// The Default Belt Input a station was given automatically (not one the player added). It feeds
+        /// the station like any Input; the flag only lets the UI say where it came from.
         /// </summary>
         public bool Auto { get; init; }
         public ListEntry Copy(BeltId? belt = null) => new() { Kind = Kind, Container = Container, Belt = belt ?? Belt,

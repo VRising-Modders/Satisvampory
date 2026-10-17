@@ -133,7 +133,7 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
-        public void The_automatic_input_never_feeds_a_factory()
+        public void The_automatic_input_feeds_a_factory_for_its_enabled_recipes()
         {
             var supply = world.Chest(away, "Supplies");
             var station = Furnace();
@@ -141,7 +141,7 @@ namespace Satisvampory.Engine.Tests
             Initialize();
             Assert.True(Assert.Single(state.Graph.For(station.Id).Input).Auto);
             Tick();
-            Assert.Equal(0, world.Count(station.Id, IronOre));
+            Assert.True(world.Count(station.Id, IronOre) > 0);
         }
 
         [Fact]

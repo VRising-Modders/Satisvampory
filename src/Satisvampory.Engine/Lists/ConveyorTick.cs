@@ -276,7 +276,7 @@ namespace Satisvampory.Engine.Lists
             var result = new List<ContainerId>();
             foreach (var e in lists.Input)
             {
-                if (e.Kind == EntryKind.MassDeposit || e.Auto) continue; // mass deposit: resolved per item below
+                if (e.Kind == EntryKind.MassDeposit) continue; // resolved per item below
                 foreach (var id in _graph.Expand(e, output: false, owner: station.Id))
                     if (edges.Any(x => x.From == id && x.To == station.Id) && !result.Contains(id)) result.Add(id);
             }
@@ -324,7 +324,7 @@ namespace Satisvampory.Engine.Lists
             {
                 var list = new List<ContainerId>(sources);
                 var seen = new HashSet<ContainerId>(list);
-                var massSources = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit && !e.Auto && e.Filter.Allows(item, Catalog))
+                var massSources = lists.Input.Any(e => e.Kind == EntryKind.MassDeposit && e.Filter.Allows(item, Catalog))
                     ? Reverse(item).Order.ToHashSet() : new HashSet<ContainerId>();
                 if (massSources.Count > 0)
                     foreach (var id in Reverse(item).Order)
@@ -338,7 +338,7 @@ namespace Satisvampory.Engine.Lists
                     .Where(id => _world.Find(id) is { } c && c.Kind is NodeKind.Chest or NodeKind.Station
                         && !c.AutomationSuspended && c.Deposit.Special != SpecialKind.Skip && !_world.IsRaided(c.Plot))
                     .Where(id => massSources.Contains(id)
-                        || lists.Input.Any(e => !e.Auto && _graph.Allows(e, station.Id, false, id, item, Catalog))
+                        || lists.Input.Any(e => _graph.Allows(e, station.Id, false, id, item, Catalog))
                         || _graph.For(id).Output.Any(e => _graph.Allows(e, id, true, station.Id, item, Catalog)))
                     .ToList();
             }

@@ -93,8 +93,9 @@ namespace Satisvampory.Engine.Persistence
         /// 4: stations lose the default Mass Deposit Output they were given (DefaultBelt.RemoveDefaultStationOutputs).
         /// 5: a station's automatic Default Belt Input no longer feeds it (DefaultBelt.MarkAutoInputs).
         /// 6: coffins and unit stations, once taken for chests, give back what was put in them.
-        /// 7: link filters become the receiving container's Accepts (FilterMigration).</summary>
-        public const int CurrentVersion = 7;
+        /// 7: link filters become the receiving container's Accepts (FilterMigration).
+        /// 8: stations recognized by their prefab (Blood Homogenizer...) give back what deposits put in them.</summary>
+        public const int CurrentVersion = 8;
 
         // Missing versions in typed store reads are legacy; Capture explicitly writes the current version.
         public int Version { get; set; } = 1;
@@ -150,6 +151,9 @@ namespace Satisvampory.Engine.Persistence
 
         /// <summary>Loaded from a save older than version 7: link filters still need moving to Accepts.</summary>
         public bool FiltersDue { get; set; }
+
+        /// <summary>Loaded from a save older than version 8: stations known only by their prefab still hold deposits.</summary>
+        public bool MisfiledStations2Due { get; set; }
 
         /// <summary>Stations the conveyor empties back into storage once, then forgets.</summary>
         public HashSet<ContainerId> StationsToClear { get; init; } = new();
@@ -244,7 +248,7 @@ namespace Satisvampory.Engine.Persistence
                 throw new InvalidOperationException($"Save version {save.Version} is newer than this build ({IslandSave.CurrentVersion})");
             Normalize(save);
             nextSequence = save.NextSequence;
-            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3, DefaultOutputsDue = save.Version < 4, AutoInputsDue = save.Version < 5, MisfiledStationsDue = save.Version < 6, FiltersDue = save.Version < 7 };
+            var state = new IslandState { DefaultBeltMigrationDue = save.Version < 3, DefaultOutputsDue = save.Version < 4, AutoInputsDue = save.Version < 5, MisfiledStationsDue = save.Version < 6, FiltersDue = save.Version < 7, MisfiledStations2Due = save.Version < 8 };
             state.Graph.Sequence = save.NextSequence;
 
             foreach (var b in save.Belts.Where(b => b != null))

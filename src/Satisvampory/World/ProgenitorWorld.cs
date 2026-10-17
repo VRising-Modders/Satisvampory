@@ -98,7 +98,9 @@ namespace Satisvampory.World
                     var servantSlots = servantKnown && servantContainer;
                     // Coffins hold a servant's things and unit stations (Tomb, Vermin Nest) their spawn
                     // ingredients: stations, never chests that deposits, belts or loops may fill.
-                    var station = row.IsStation || servantSlots || IsUnitStation(row);
+                    // The game does not report every station as one (the Blood Homogenizer, Tomb, coffins): by its
+                    // prefab too, or deposits and belts fill it like a chest.
+                    var station = row.IsStation || servantSlots || IsUnitStation(row) || IsStationPrefab(row);
                     var info = new ContainerInfo(id, plot, station ? NodeKind.Station : NodeKind.Chest, row.Nameplate)
                     {
                         FurnitureName = Pretty(row.Building.PrefabName),
@@ -159,6 +161,14 @@ namespace Satisvampory.World
                 foreach (var id in moved.Changed) state.Touched.Add(id);
                 foreach (var line in moved.Dropped) FailureLog?.Invoke("Satisvampory: link filter dropped (no receiver to hold it): " + line);
                 state.FiltersDue = false;
+                state.DefaultBeltMigrated = true;
+            }
+            if (state.MisfiledStations2Due)
+            {
+                // Stations the game does not report as such (the Blood Homogenizer) counted as chests too.
+                foreach (var n in _nodes.Values.Where(n => n.Info.Kind == NodeKind.Station && !n.GameStation && n.Info.Role == StationRole.None))
+                    state.StationsToClear.Add(n.Info.Id);
+                state.MisfiledStations2Due = false;
                 state.DefaultBeltMigrated = true;
             }
             if (state.MisfiledStationsDue)
@@ -361,6 +371,10 @@ namespace Satisvampory.World
         }
 
         static bool IsUnitStation(CastleContainerInfo row) => Has(row.Building.PrefabName ?? string.Empty, "UnitStation");
+
+        static readonly string[] StationWords = { "CraftingStation", "RefinementStation", "SpecialStation", "ResearchStation", "SalvageStation" };
+
+        static bool IsStationPrefab(CastleContainerInfo row) => StationWords.Any(w => Has(row.Building.PrefabName ?? string.Empty, w));
 
         static bool Has(string s, string part) => s.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0;
 

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Satisvampory.Engine.Model;
 
-namespace Satisvampory.Server
+namespace Satisvampory.Engine.Logging
 {
     /// <summary>
     /// What Satisvampory moved, kept per castle for 24 hours (server memory only). Each entry is written once,
@@ -13,9 +13,9 @@ namespace Satisvampory.Server
     /// island's log is read by collecting the entries of the castles in it now; who may read is decided then.
     /// Identical moves within a minute merge into one entry ("×6 moves").
     /// </summary>
-    internal sealed class MoveLog
+    public sealed class MoveLog
     {
-        internal sealed class Entry
+        public sealed class Entry
         {
             public long Minute;
             public DateTime Last;
@@ -45,13 +45,17 @@ namespace Satisvampory.Server
         readonly Dictionary<PlotId, List<Entry>> _byCastle = new();
         readonly Dictionary<(long, int, Guid, Guid, string, int, string), Entry> _open = new();
         long _openMinute = -1;
+        readonly Func<DateTime> _now;
+
+        /// <param name="clock">UTC now; tests pass their own.</param>
+        public MoveLog(Func<DateTime>? clock = null) => _now = clock ?? (() => DateTime.UtcNow);
 
         /// <summary>One move. <paramref name="fromPlot"/> or <paramref name="toPlot"/> is null for a player's or servant's bag.</summary>
-        internal void Add(PlotId? fromPlot, PlotId? toPlot, int item, int amount, Guid from, string fromName, string fromPlotLabel,
+        public void Add(PlotId? fromPlot, PlotId? toPlot, int item, int amount, Guid from, string fromName, string fromPlotLabel,
             Guid to, string toName, string toPlotLabel, string why, int forItem = 0, string actor = "")
         {
             if (amount <= 0 || (fromPlot == null && toPlot == null)) return;
-            var now = DateTime.UtcNow;
+            var now = _now();
             var minute = now.Ticks / TimeSpan.TicksPerMinute;
             if (minute != _openMinute) { _open.Clear(); _openMinute = minute; }
             var key = (minute, item, from, to, why, forItem, actor);
@@ -81,9 +85,9 @@ namespace Satisvampory.Server
         }
 
         /// <summary>A player's settings change on one castle: a container's (Filter, Input, Output...) or the island's (belts, categories).</summary>
-        internal void Change(PlotId castle, Guid container, string containerName, string plotLabel, string detail, string actor)
+        public void Change(PlotId castle, Guid container, string containerName, string plotLabel, string detail, string actor)
         {
-            var now = DateTime.UtcNow;
+            var now = _now();
             File(castle, new Entry
             {
                 Minute = now.Ticks / TimeSpan.TicksPerMinute, Last = now, Moves = 1,
@@ -92,10 +96,10 @@ namespace Satisvampory.Server
         }
 
         /// <summary>Newest first, from the given castles, last <paramref name="hours"/> hours, filtered.</summary>
-        internal List<Entry> Read(IEnumerable<PlotId> castles, double hours, Func<Entry, bool> keep, int max)
+        public List<Entry> Read(IEnumerable<PlotId> castles, double hours, Func<Entry, bool> keep, int max)
         {
-            var since = DateTime.UtcNow - TimeSpan.FromHours(Math.Min(hours, Keep.TotalHours));
-            var cutoff = DateTime.UtcNow - Keep;
+            var since = _now() - TimeSpan.FromHours(Math.Min(hours, Keep.TotalHours));
+            var cutoff = _now() - Keep;
             var seen = new HashSet<Entry>();
             var result = new List<Entry>();
             foreach (var castle in castles)
@@ -115,7 +119,7 @@ namespace Satisvampory.Server
         }
 
         /// <summary>The conveyor's own words as a reader sees them.</summary>
-        internal static string Why(string conveyorWhy) => conveyorWhy switch
+        public static string Why(string conveyorWhy) => conveyorWhy switch
         {
             "station feed" => "Station feed",
             "edge" => "Input/Output",

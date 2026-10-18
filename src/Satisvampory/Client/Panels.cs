@@ -104,11 +104,14 @@ namespace Satisvampory.Client
 
         internal void Mount(IUiPanel panel) => _nativeTabs?.Mount(panel);
 
+        const int ResearchScroll = 2065714452;
+
         void LogButton(VanillaUiSite site)
         {
             var handle = UiApi.AttachToVanilla(site, VanillaPanelAnchor.BesideRename, _ctx.Owner, _ctx.Guid + ".log");
             _ctx.Track(handle);
-            var button = handle.Button("Log");
+            // The game's Research Scroll icon (a parchment) as the face; the caption is its tooltip.
+            var button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll));
             _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings (last 24 hours).", "Log"));
             _ctx.Track(button.OnClick(() =>
             {

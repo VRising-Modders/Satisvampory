@@ -5,6 +5,7 @@ using System.Linq;
 using Progenitor.Castles;
 using Progenitor.Players;
 using ProjectM.Network;
+using Satisvampory.Engine.Logging;
 using Satisvampory.Engine.Deposit;
 using Satisvampory.Engine.Model;
 using Satisvampory.Engine.Persistence;

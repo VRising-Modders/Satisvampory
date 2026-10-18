@@ -7,6 +7,7 @@ using Progenitor.Plugins;
 using Progenitor.Dev;
 using Progenitor.Networking;
 using ProjectM.Network;
+using Satisvampory.Engine.Logging;
 using Satisvampory.Engine.Deposit;
 using Satisvampory.Engine.Edits;
 using Satisvampory.Engine.Lists;

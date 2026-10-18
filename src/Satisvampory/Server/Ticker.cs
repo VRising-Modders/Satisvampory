@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using Progenitor.Castles;
 using Progenitor.Dev;
+using Satisvampory.Engine.Logging;
 using Satisvampory.Engine.Deposit;
 using Satisvampory.Engine.Lists;
 using Satisvampory.Engine.Model;

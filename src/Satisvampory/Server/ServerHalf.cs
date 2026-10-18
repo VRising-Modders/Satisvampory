@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.Collections.Generic;
 using ProjectM.Network;
+using Satisvampory.Engine.Logging;
 using Satisvampory.Config;
 using Satisvampory.Engine.Persistence;
 using Satisvampory.Net;

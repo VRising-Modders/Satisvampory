@@ -46,7 +46,7 @@ namespace Satisvampory.Config
             c.Flag(ctx, "AllowLoops", d.AllowLoops, "Allow loops", "Off: the edge that closes a loop never runs.", (s, v) => s.AllowLoops = v);
             c.Int(ctx, "LoopMovesPerTick", d.LoopMovesPerTick, 1, 120, "Loop moves per tick", "Moves one loop may make each tick.", (s, v) => s.LoopMovesPerTick = v);
             c.Int(ctx, "MovesPerPlot", d.MovesPerPlot, 1, 200, "Moves per plot per tick", "Conveyor budget for one plot.", (s, v) => s.MovesPerPlot = v);
-            c.Int(ctx, "MovesPerTick", d.MovesPerTick, 10, 2000, "Moves per tick", "Conveyor budget for the whole server.", (s, v) => s.MovesPerTick = v);
+            c.Int(ctx, "MovesPerTick", d.MovesPerTick, 10, 2000, "Moves per tick", "Conveyor budget for the whole server, about 12 rounds a minute. Raise it on busy servers with many castles: moves go up, and each frame stays within its time limit.", (s, v) => s.MovesPerTick = v);
             c.Flag(ctx, "AllowQuickStash", d.AllowQuickStash, "Allow quick stash", "Double-tap sort, or the Stash button.", (s, v) => s.AllowQuickStash = v);
             c.Flag(ctx, "AllowStashFromAnywhere", d.AllowStashFromAnywhere, "Allow stash from anywhere", "Players may stash while off every plot.", (s, v) => s.AllowStashFromAnywhere = v);
             c.Flag(ctx, "AllowPull", d.AllowPull, "Allow pull", "Players may take items from storage into bags.", (s, v) => s.AllowPull = v);

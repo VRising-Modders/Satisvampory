@@ -131,6 +131,9 @@ namespace Satisvampory.Net
         [Field(19)] public List<string> InputFromOthers = new();
         [Field(20)] public List<string> OutputFromOthers = new();
         [Field(21)] public string NativeRestriction = "";
+        /// <summary>This is a devourer: its Input offers "Only pull salvageable items".</summary>
+        [Field(22)] public bool IsDevourer;
+        [Field(23)] public bool SalvageableOnly = true;
     }
 
     [ModMessage("sv.recipe")]
@@ -197,6 +200,8 @@ namespace Satisvampory.Net
         [Field(8)] public int SendOrder;
         /// <summary>Op 7: remove the entry at Index on Side of this other container (a link shown from this end).</summary>
         [Field(9)] public string LinkOwner = "";
+        /// <summary>Op 8: a devourer's Input pulls salvageable items only (true) or everything.</summary>
+        [Field(10)] public bool SalvageableOnly = true;
     }
 
     [ModMessage("sv.deposit.set")]

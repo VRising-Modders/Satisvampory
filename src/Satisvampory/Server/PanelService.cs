@@ -163,6 +163,9 @@ namespace Satisvampory.Server
                 case 3:
                     Must(s.Edits.SetOrders(s.Role, s.Container.Id, (PullOrder)r.PullOrder, (SendOrder)r.SendOrder));
                     break;
+                case 8:
+                    Must(s.Edits.SetSalvageableOnly(s.Role, s.Container.Id, r.SalvageableOnly));
+                    break;
                 case 5:
                 case 6:
                     throw new RequestRefusedException("Legacy belt membership edits are no longer supported. Use Input, Output or Manage belts.");
@@ -298,6 +301,7 @@ namespace Satisvampory.Server
                 5 => "put on belt " + (r.Entry.Name.Length > 0 ? r.Entry.Name : Entry()),
                 6 => "taken off a belt",
                 7 => $"{side}: removed a link set on another chest",
+                8 => r.SalvageableOnly ? "Input: only salvageable items" : "Input: everything, salvageable or not",
                 _ => "",
             };
         }
@@ -453,6 +457,8 @@ namespace Satisvampory.Server
                 ReadOnlyReason = s.Role == ActorRole.Guest ? "Clan members can change logistics" : "",
                 Notice = _half.Ticker?.TakeRemovedNote(c.Id) ?? "",
                 PullOrder = (int)lists.PullOrder,
+                IsDevourer = c.Role == StationRole.Devourer,
+                SalvageableOnly = lists.SalvageableOnly,
                 SendOrder = (int)lists.SendOrder,
                 HasDemand = EditService.HasDemand(c),
                 HasOutput = c.Role is not (StationRole.UnitSpawner or StationRole.Brazier),

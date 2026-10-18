@@ -470,6 +470,7 @@ namespace Satisvampory.Client
         readonly int _side;
         IUiLabel _header = null!;
         IUiDropdown _order = null!;
+        IUiToggle _salvageOnly = null!;
         IUiDataTable _list = null!;
         IUiLabel _loop = null!;
         IUiDropdown _loopMode = null!;
@@ -543,6 +544,13 @@ namespace Satisvampory.Client
             }));
 
             // How the list is worked through: a setting under it.
+            // A devourer's Input: only what the game will salvage (raw materials stay where they are).
+            _salvageOnly = panel.Toggle("Only pull salvageable items", true);
+            ctx.Track(_salvageOnly.OnChanged(v =>
+            {
+                if (_redrawing || Owner.State == null) return;
+                Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 8, SalvageableOnly = v });
+            }));
             _order = _side == 0
                 ? panel.Dropdown("Pull order", PullValues, "0", PullLabels)
                 : panel.Dropdown("Send order", SendValues, "0", SendLabels);
@@ -582,6 +590,9 @@ namespace Satisvampory.Client
                     + (s.Deposit.Private ? "\nPrivate chest: Input and Output are off. Turn Private off on the Filter tab to use them." : "");
                 _add.Visible = !s.Deposit.Private;
                 _order.Value = (_side == 0 ? s.PullOrder : s.SendOrder).ToString();
+                _salvageOnly.Visible = _side == 0 && s.IsDevourer;
+                _salvageOnly.Value = s.SalvageableOnly;
+                _salvageOnly.Interactable = s.CanEdit;
                 var rows = _side == 0 ? s.Input : s.Output;
                 // Exceptions last (their order means nothing); the row id stays the list index the server knows.
                 var shown = rows.Select((r, i) => (r, i)).OrderBy(x => x.r.Kind == 3 ? 1 : 0).ThenBy(x => x.i).ToList();

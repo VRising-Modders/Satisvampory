@@ -89,6 +89,9 @@ namespace Satisvampory.Engine.Lists
         public List<ListEntry> Input { get; } = new();
         public List<ListEntry> Output { get; } = new();
         public PullOrder PullOrder { get; set; } = PullOrder.ListOrder;
+
+        /// <summary>A devourer's Input pulls only what the game will salvage (on unless the player turns it off).</summary>
+        public bool SalvageableOnly { get; set; } = true;
         public SendOrder SendOrder { get; set; } = SendOrder.FillInOrder;
     }
 

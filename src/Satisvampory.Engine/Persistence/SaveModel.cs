@@ -42,6 +42,8 @@ namespace Satisvampory.Engine.Persistence
         public List<EntryDto> Input { get; set; } = new();
         public List<EntryDto> Output { get; set; } = new();
         public string PullOrder { get; set; } = nameof(Lists.PullOrder.ListOrder);
+        /// <summary>A devourer pulls unsalvageable items too (off by default: salvageable only).</summary>
+        public bool PullUnsalvageable { get; set; }
         public string SendOrder { get; set; } = nameof(Lists.SendOrder.FillInOrder);
         public string Takes { get; set; } = nameof(Model.Takes.Anything);
         public int BasePriority { get; set; }
@@ -229,6 +231,7 @@ namespace Satisvampory.Engine.Persistence
                     dto.Input = lists.Input.Select(ToDto).ToList();
                     dto.Output = lists.Output.Select(ToDto).ToList();
                     dto.PullOrder = lists.PullOrder.ToString();
+                    dto.PullUnsalvageable = !lists.SalvageableOnly;
                     dto.SendOrder = lists.SendOrder.ToString();
                 }
                 if (s.Deposit.TryGetValue(id, out var d))
@@ -303,6 +306,7 @@ namespace Satisvampory.Engine.Persistence
                 lists.Input.AddRange((dto.Input ?? new()).Where(e => e != null).Select(FromDto).Where(e => e != null).Select(e => e!));
                 lists.Output.AddRange((dto.Output ?? new()).Where(e => e != null).Select(FromDto).Where(e => e != null).Select(e => e!));
                 lists.PullOrder = Enum.TryParse<PullOrder>(dto.PullOrder, out var po) ? po : PullOrder.ListOrder;
+                lists.SalvageableOnly = !dto.PullUnsalvageable;
                 lists.SendOrder = Enum.TryParse<SendOrder>(dto.SendOrder, out var so) ? so : SendOrder.FillInOrder;
 
                 var d = new DepositOptions

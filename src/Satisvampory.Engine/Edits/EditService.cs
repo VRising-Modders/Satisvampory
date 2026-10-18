@@ -159,6 +159,14 @@ namespace Satisvampory.Engine.Edits
             return Accept(EditResult.Done, owner);
         }
 
+        /// <summary>A devourer's Input: salvageable items only, or everything its entries name.</summary>
+        public EditResult SetSalvageableOnly(ActorRole role, ContainerId owner, bool only)
+        {
+            if (!CanEdit(role)) return EditResult.No("Clan members can change logistics");
+            Graph.For(owner).SalvageableOnly = only;
+            return Accept(EditResult.Done, owner);
+        }
+
         // ---------------- deposit options ----------------
 
         public EditResult SetDepositOptions(ActorRole role, ContainerId id, Action<DepositOptions> change)

@@ -244,6 +244,13 @@ namespace Satisvampory.Engine.Tests
             var report = Tick(1);
             Assert.Equal(5, _w.Count(dev.Id, Plank));
             Assert.Contains(report.Diagnostics[dev.Id], d => d.StartsWith("devourer-stuck:"));
+
+            // "Only pull salvageable items" off: it pulls everything its Input names.
+            _w.Put(dev, Plank, -5);
+            _g.For(dev.Id).SalvageableOnly = false;
+            _state.DevourerRefuses.Clear();
+            Tick(2);
+            Assert.True(_w.Count(dev.Id, Plank) > 0);
         }
 
         [Fact]

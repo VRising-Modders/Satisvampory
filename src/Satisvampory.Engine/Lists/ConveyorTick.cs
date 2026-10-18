@@ -407,7 +407,7 @@ namespace Satisvampory.Engine.Lists
             foreach (var src in sources.Where(chosen.Contains))
                 foreach (var stack in _world.Contents(src, PartOf(src)).ToList())
                 {
-                    if (_state.DevourerRefuses.Contains((station.Id, stack.Item)) || !_world.Salvageable(stack.Item)) continue;
+                    if (_state.DevourerRefuses.Contains((station.Id, stack.Item)) || (lists.SalvageableOnly && !_world.Salvageable(stack.Item))) continue;
                     if (!Budget(src)) return;
                     if (Move(src, PartOf(src), station.Id, stack.Item, stack.Amount, "salvage feed") > 0)
                     {

@@ -127,7 +127,7 @@ namespace Satisvampory.World
                         info.NativeRoutingKnown = true;
                         info.NativeAutoRouteItems = false;
                     }
-                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = row.Output, Castle = castle, Entity = row.Entity.ToEntity(), Facing = row.Building.Rotation * 90f, GameStation = row.IsStation };
+                    _nodes[id] = new Node { Info = info, Main = row.Main, Output = OutputOf(row, info), Castle = castle, Entity = row.Entity.ToEntity(), Facing = row.Building.Rotation * 90f, GameStation = row.IsStation };
                     list.Add(info);
                 }
             }
@@ -372,6 +372,15 @@ namespace Satisvampory.World
             r = part == InvPart.Output && n.Info.Kind == NodeKind.Station && n.Info.Role != StationRole.Workstation ? n.Output : n.Main;
             return !r.IsNone;
         }
+
+        /// <summary>
+        /// A station's output inventory. Progenitor reports it for refinement stations only; a devourer has one too
+        /// (its second inventory instance), so it is built from the input's reference.
+        /// </summary>
+        static InventoryRef OutputOf(CastleContainerInfo row, ContainerInfo info) =>
+            !row.Output.IsNone || info.Role != StationRole.Devourer || row.Main.IsNone
+                ? row.Output
+                : new InventoryRef(row.Main.OwnerIndex, row.Main.OwnerVersion, 1, row.Main.Epoch);
 
         static StationRole RoleOf(CastleContainerInfo row)
         {

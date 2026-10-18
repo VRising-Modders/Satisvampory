@@ -545,7 +545,8 @@ namespace Satisvampory.Client
 
             // How the list is worked through: a setting under it.
             // A devourer's Input: only what the game will salvage (raw materials stay where they are).
-            _salvageOnly = panel.Toggle("Only pull salvageable items", true);
+            _salvageOnly = panel.Toggle("Salvageable only", true);
+            ctx.Track(_salvageOnly.Tooltip("Pull only items the Devourer can salvage (weapons, armour, tools). Off: pull everything the list names; what it can't eat goes back to its chest.", "Salvageable only"));
             ctx.Track(_salvageOnly.OnChanged(v =>
             {
                 if (_redrawing || Owner.State == null) return;

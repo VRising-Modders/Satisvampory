@@ -337,7 +337,10 @@ namespace Satisvampory.Server
                     + $"; island {key}: {members.Count} castle(s), {home.Scope.Count} plot(s), "
                     + $"{home.Scope.Sum(p => world.ContainersOn(p).Count(c => c.Kind == NodeKind.Chest))} chest(s), "
                     + $"{home.Scope.Sum(p => world.ContainersOn(p).Count(c => c.Kind == NodeKind.Chest && c.Deposit.Takes == Takes.Anything))} take anything, "
-                    + $"free for {left.Keys.First().Guid}: {home.Scope.SelectMany(p => world.ContainersOn(p)).Where(c => c.Kind == NodeKind.Chest).Sum(c => world.FreeSpace(c.Id, left.Keys.First()))}");
+                    + $"free for {left.Keys.First().Guid}: {home.Scope.SelectMany(p => world.ContainersOn(p)).Where(c => c.Kind == NodeKind.Chest).Sum(c => world.FreeSpace(c.Id, left.Keys.First()))}"
+                    // Per castle: enabled, rows read (cached and fresh), chests the world holds for its plot.
+                    + "; per castle: " + string.Join(", ", members.Select(m =>
+                        $"{m.Territory.Index}{(m.Enabled ? "" : " off")} rows {ProgenitorWorld.Rows(m, cached: true).Count}/{ProgenitorWorld.Rows(m).Count} chests {world.ContainersOn(ProgenitorWorld.PlotOf(m)).Count(c => c.Kind == NodeKind.Chest)}")));
             return moved;
         }
 

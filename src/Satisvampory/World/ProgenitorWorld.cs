@@ -63,7 +63,10 @@ namespace Satisvampory.World
             var heart = castle.Heart.Index == 0 ? 0UL : ((ulong)(uint)castle.Heart.Index << 32) | (uint)castle.Heart.Version;
             if (cached && revision != 0 && RowCache.TryGetValue(key, out var hit) && hit.Heart == heart && hit.Revision == revision) return hit.Rows;
             var rows = castle.Containers().Concat(castle.Stations()).ToList();
-            RowCache[key] = (revision, heart, rows);
+            // An empty read is never kept: right after a Progenitor swap a castle can read as having nothing for a
+            // moment, and a kept empty list stayed until the castle was rebuilt (servant loot had "0 chests").
+            if (rows.Count > 0) RowCache[key] = (revision, heart, rows);
+            else RowCache.Remove(key);
             return rows;
         }
 
@@ -120,6 +123,13 @@ namespace Satisvampory.World
                         info.NativeRoutingKnown = routing?.Known == true;
                         info.NativeAutoRouteItems = routing?.AutoRouteItems == true;
                         info.NativeRoutingReason = routing?.Reason ?? "station API is unavailable";
+                        // A devourer whose routing cannot be read is fed as before it was reported as a station
+                        // (Progenitor #116): its own redistribution is on only when read as on.
+                        if (!info.NativeRoutingKnown && info.Role == StationRole.Devourer)
+                        {
+                            info.NativeRoutingKnown = true;
+                            info.NativeAutoRouteItems = false;
+                        }
                     }
                     else if (station)
                     {

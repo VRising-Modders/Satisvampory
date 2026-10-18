@@ -310,9 +310,24 @@ namespace Satisvampory.Client
             if (Advanced) return null;
             string key;
             try { key = _altKey(); } catch (Exception) { key = ""; }
-            return key.Length == 0 || key == "None" ? null
-                : new VanillaRow($"Hold {key}: total, reserve, available and cap", LabelTone.Muted);
+            if (key.Length == 0 || key == "None") return null;
+            try { return KeyHintRow(); }
+            catch (Exception) { return new VanillaRow($"Hold {key}: total, reserve, available and cap", LabelTone.Muted); }
         }
+
+        // The game's own key-hint look: "Hold [Alt] Total, reserve, available and cap" (Progenitor #114).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static VanillaRow KeyHintRow() => VanillaRow.KeyHint(AltHoldId, "Total, reserve, available and cap", hold: true);
+
+        /// <summary>Numbers under an ingredient line, lined up with its name (Progenitor #114 indent; spaces before).</summary>
+        static VanillaRow UnderLine(string numbers)
+        {
+            try { return Indented(numbers); }
+            catch (Exception) { return new VanillaRow(Indent + numbers, LabelTone.Normal); }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static VanillaRow Indented(string numbers) => new VanillaRow(numbers, LabelTone.Normal, 1);
 
         /// <summary>Numbers set under an ingredient line, indented beneath its name.</summary>
         const string Indent = "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0";
@@ -374,6 +389,11 @@ namespace Satisvampory.Client
             var header = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, (VanillaPanelAnchor)8, _ctx.Owner, _ctx.Guid + ".recipe.head");
             _ctx.Track(header);
             var productRows = header.Enabled ? header : body;
+            // The hint at the very bottom (Progenitor #114, anchor 9); the plugin id is ours so the hint's key
+            // follows our bind. Older Cores: under the requirements.
+            var footer = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, (VanillaPanelAnchor)9, _ctx.Owner, _ctx.Guid);
+            _ctx.Track(footer);
+            var hintRows = footer.Enabled ? footer : needs;
             _ctx.Track(body);
             _ctx.Track(needs);
             // Per requirement line where the Core has it (Progenitor #99): each item's numbers right under its line.
@@ -385,17 +405,19 @@ namespace Satisvampory.Client
             _ctx.Track(body.OnPanel(e =>
             {
                 var seq = ++sequence;
-                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); header.ClearRows(); needs.ClearRows(); ClearLines(); return; }
+                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); header.ClearRows(); needs.ClearRows(); footer.ClearRows(); ClearLines(); return; }
                 if (!Advanced)
                 {
                     body.ClearRows();
                     header.ClearRows();
+                    needs.ClearRows();
                     ClearLines();
                     var hint = HoldHint();
-                    if (hint == null) needs.ClearRows();
-                    else needs.SetRows(new List<VanillaRow> { hint.Value });
+                    if (hint == null) hintRows.ClearRows();
+                    else hintRows.SetRows(new List<VanillaRow> { hint.Value });
                     return;
                 }
+                footer.ClearRows();
                 var t = e.Target;
                 var items = new List<int>();
                 if (t.ProductGuid != 0) items.Add(t.ProductGuid);
@@ -423,7 +445,7 @@ namespace Satisvampory.Client
                         var numbers = Numbers(a.Island[i], a.Reserve[i], available, a.Cap[i], need);
                         var line = i - first;
                         if (perLine != null && line < perLine.Length)
-                            perLine[line].SetRows(new List<VanillaRow> { new VanillaRow(Indent + numbers, LabelTone.Normal) });
+                            perLine[line].SetRows(new List<VanillaRow> { UnderLine(numbers) });
                         else
                             lines.Add(new VanillaRow($"{Name(items[i])}: {numbers}", LabelTone.Normal));
                     }
@@ -445,7 +467,7 @@ namespace Satisvampory.Client
             return handles;
         }
 
-        readonly Dictionary<int, (double At, string[] Lines)> _storageCache = new();
+        readonly Dictionary<int, (double At, StorageCountReply? Reply)> _storageCache = new();
 
         /// <summary>
         /// Item tooltips while on a plot: "In storage: 1,240 (3 chests)", and with advanced numbers the reserve,
@@ -454,36 +476,46 @@ namespace Satisvampory.Client
         void AttachTooltip()
         {
             var tip = _itemTip = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid);
+            // Under the title and at the very bottom where the Core has them (Progenitor #114); else in the body.
+            var head = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, (VanillaPanelAnchor)8, _ctx.Owner, _ctx.Guid + ".item.head");
+            // Our own plugin id here: the hint names our hold bind, which Progenitor looks up by it.
+            var foot = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, (VanillaPanelAnchor)9, _ctx.Owner, _ctx.Guid);
             _ctx.Track(tip);
+            _ctx.Track(head);
+            _ctx.Track(foot);
+            void Draw(int item, StorageCountReply? c)
+            {
+                var body = new List<VanillaRow>();
+                var top = new List<VanillaRow>();
+                var bottom = new List<VanillaRow>();
+                if (c != null && c.Total > 0) body.Add(new VanillaRow($"In storage: {c.Total:N0} ({c.Chests} chest{(c.Chests == 1 ? "" : "s")})"));
+                if (c != null && Advanced)
+                    (head.Enabled ? top : body).Add(new VanillaRow(Numbers(c.Total, c.Reserve, Math.Max(0, c.Total - c.Reserve), c.Cap, 1)));
+                else if (c != null && HoldHint() is { } hint)
+                    (foot.Enabled ? bottom : body).Add(hint);
+                tip.SetRows(body);
+                head.SetRows(top);
+                foot.SetRows(bottom);
+            }
             _ctx.Track(tip.OnPanel(e =>
             {
                 if (e.Change == VanillaPanelChange.Closed || e.Target.ItemGuid == 0)
                 {
-                    tip.SetRows(Array.Empty<string>());
+                    tip.ClearRows(); head.ClearRows(); foot.ClearRows();
                     return;
                 }
                 var item = e.Target.ItemGuid;
-                var advanced = Advanced;
-                var key = advanced ? ~item : item;
                 var now = _clock.Elapsed.TotalSeconds;
-                if (_storageCache.TryGetValue(key, out var hit) && now - hit.At < 10)
+                if (_storageCache.TryGetValue(item, out var hit) && now - hit.At < 10)
                 {
-                    tip.SetRows(hit.Lines);
+                    Draw(item, hit.Reply);
                     return;
                 }
                 _ctx.Requests.Send<StorageCountReq, StorageCountReply>(new StorageCountReq { Item = item }, r =>
                 {
-                    var lines = Array.Empty<string>();
-                    if (r.Ok && r.Reply is { } c)
-                    {
-                        var list = new List<string>();
-                        if (c.Total > 0) list.Add($"In storage: {c.Total:N0} ({c.Chests} chest{(c.Chests == 1 ? "" : "s")})");
-                        if (advanced) list.Add(Numbers(c.Total, c.Reserve, Math.Max(0, c.Total - c.Reserve), c.Cap, 1));
-                        else if (HoldHint() is { } hint) list.Add(hint.Text);
-                        lines = list.ToArray();
-                    }
-                    _storageCache[key] = (_clock.Elapsed.TotalSeconds, lines);
-                    if (tip.IsOpen && tip.Target.ItemGuid == item) tip.SetRows(lines);
+                    var c = r.Ok ? r.Reply : null;
+                    _storageCache[item] = (_clock.Elapsed.TotalSeconds, c);
+                    if (tip.IsOpen && tip.Target.ItemGuid == item) Draw(item, c);
                 });
             }));
         }

@@ -62,9 +62,7 @@ namespace Satisvampory.Client
             if (StationTitleRow(_ctx))
             {
                 LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.BesideRename, kind => kind != VanillaPanelKind.PrisonCell);
-                // Until Progenitor's station title-row button takes clicks (it draws but is dead), every station keeps
-                // the working edge button too.
-                LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
+                LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, kind => kind == VanillaPanelKind.PrisonCell);
             }
             else LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
             LogButton(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge);

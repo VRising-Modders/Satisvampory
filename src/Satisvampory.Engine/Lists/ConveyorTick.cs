@@ -150,15 +150,23 @@ namespace Satisvampory.Engine.Lists
         bool _ran;
 
         // Where station feeding spends its time, reported in TickReport.Timings.
-        readonly System.Diagnostics.Stopwatch _tPlan = new(), _tPull = new(), _tLeftover = new(), _tSources = new();
+        readonly System.Diagnostics.Stopwatch _tPlan = new(), _tPull = new(), _tLeftover = new(), _tSources = new(),
+            _tPrep = new(), _tWaiting = new(), _tAvail = new(), _tReverse = new(), _tBackoff = new(), _tRecipes = new();
+        double _slowestStationMs;
+        string _slowestStation = "";
 
         (List<ContainerId> Order, Dictionary<ContainerId, int> Rank) Reverse(ItemId item)
         {
             if (_reverse.TryGetValue(item, out var hit)) return hit;
-            var order = DepositPlanner.ReverseOrder(_ctx, item);
-            var rank = new Dictionary<ContainerId, int>(order.Count);
-            for (int i = 0; i < order.Count; i++) rank.TryAdd(order[i], i);
-            return _reverse[item] = (order, rank);
+            var was = _tReverse.IsRunning; _tReverse.Start();
+            try
+            {
+                var order = DepositPlanner.ReverseOrder(_ctx, item);
+                var rank = new Dictionary<ContainerId, int>(order.Count);
+                for (int i = 0; i < order.Count; i++) rank.TryAdd(order[i], i);
+                return _reverse[item] = (order, rank);
+            }
+            finally { if (!was) _tReverse.Stop(); }
         }
         readonly LogisticsGraph _graph;
         readonly CastleRules _rules;
@@ -262,6 +270,13 @@ namespace Satisvampory.Engine.Lists
             _report.Timings.Add(("  pull", _tPull.Elapsed.TotalMilliseconds));
             _report.Timings.Add(("  leftovers", _tLeftover.Elapsed.TotalMilliseconds));
             _report.Timings.Add(("  all-sources", _tSources.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  prep", _tPrep.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  waiting", _tWaiting.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  recipes", _tRecipes.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  available", _tAvail.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  reverse", _tReverse.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  backoff", _tBackoff.Elapsed.TotalMilliseconds));
+            _report.Timings.Add(("  slowest-station " + _slowestStation, _slowestStationMs));
             RunChestEdges(live);
             _report.Timings.Add(("chests", watch.Elapsed.TotalMilliseconds));
             foreach (var loop in balance) Balance(loop);
@@ -274,6 +289,9 @@ namespace Satisvampory.Engine.Lists
 
         void FeedStations(List<Edge> edges, double now)
         {
+            // The station time budget counts the setup too (Progenitor stress: one island's stations took 190 ms).
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            _tPrep.Start();
             var stations = _graph.Lists.Keys
                 .Select(id => _world.Find(id))
                 .Where(c => c != null && c.Kind == NodeKind.Station && c.Role != StationRole.Coffin && _inScope.Contains(c.Id))
@@ -296,13 +314,18 @@ namespace Satisvampory.Engine.Lists
             }
             var all = stations.Count;
             // Starved stations wait out their backoff unless something they depend on changed.
+            _tWaiting.Start();
             stations.RemoveAll(s => Waiting(s, now));
+            _tWaiting.Stop();
             foreach (var gone in _state.StarvedStations.Keys.Where(id => _world.Find(id) == null).ToList()) _state.StarvedStations.Remove(gone);
 
-            // Topology is unchanged during this synchronous pass. Build source lists once.
+            // Topology is unchanged during this synchronous pass. Each station's sources are built once, when it is
+            // first fed (a time-limited tick never builds them for the stations it does not reach).
             var incoming = edges.ToLookup(e => e.To);
-            var sourceLists = stations.ToDictionary(s => s.Id, s => Sources(s, incoming[s.Id].ToList()));
-            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var sourceLists = new Dictionary<ContainerId, List<ContainerId>>();
+            List<ContainerId> SourcesOf(ContainerInfo s) =>
+                sourceLists.TryGetValue(s.Id, out var l) ? l : sourceLists[s.Id] = Sources(s, incoming[s.Id].ToList());
+            _tPrep.Stop();
             var reached = stations.Count; // stations that got every round this tick
             // Fair share in whole crafts: round k feeds every station up to k crafts.
             for (var round = 1; round <= _opt.FeedCrafts && Budget(); round++)
@@ -314,11 +337,16 @@ namespace Satisvampory.Engine.Lists
                     var st = stations[i];
                     var depth = st.Role == StationRole.UnitSpawner ? Math.Min(_opt.FeedCrafts, SpecialJobs.SpawnerFeedCrafts) : _opt.FeedCrafts;
                     if (round > depth || (st.Role == StationRole.Workstation && round != depth)) continue;
-                    FeedStation(st, sourceLists[st.Id], round, now, final: round == depth);
+                    var t0 = clock.Elapsed.TotalMilliseconds;
+                    FeedStation(st, SourcesOf(st), round, now, final: round == depth);
+                    var took = clock.Elapsed.TotalMilliseconds - t0;
+                    if (took > _slowestStationMs) { _slowestStationMs = took; _slowestStation = $"{st.DisplayName}#{round}"; }
                 }
             }
             _state.StationCursor = reached >= stations.Count ? 0 : _state.StationCursor + reached;
+            _tBackoff.Start();
             foreach (var st in stations.Take(reached)) Backoff(st, now);
+            _tBackoff.Stop();
         }
 
         /// <summary>Still inside its backoff, with nothing it depends on changed.</summary>
@@ -447,7 +475,9 @@ namespace Satisvampory.Engine.Lists
                 return;
             }
             var lists = _graph.For(station.Id);
+            _tRecipes.Start();
             var original = _world.Recipes(station.Id);
+            _tRecipes.Stop();
             var capped = original.Where(r => r.Enabled && !CapAllows(r)).Select(r => r.Id).ToHashSet();
             var recipes = original
                 .Select(r => r.Enabled && !capped.Contains(r.Id) ? r : r with { Enabled = false })
@@ -518,9 +548,14 @@ namespace Satisvampory.Engine.Lists
                 // Accepts list (as imported 1.x stations have) narrows nothing: its recipes decide.
                 if (Narrows(station.Deposit) && !DepositScore.Takes(station, item, Catalog)) return 0;
                 if (available.TryGetValue(item, out var known)) return known;
-                var inSources = PullFrom(item).Sum(id => SourceCount(id, item));
-                var aboveReserve = IslandTotal(item) - _rules.Reserve(item, Catalog);
-                return available[item] = (int)Math.Max(0, Math.Min(inSources, aboveReserve));
+                var was = _tAvail.IsRunning; _tAvail.Start();
+                try
+                {
+                    var inSources = PullFrom(item).Sum(id => SourceCount(id, item));
+                    var aboveReserve = IslandTotal(item) - _rules.Reserve(item, Catalog);
+                    return available[item] = (int)Math.Max(0, Math.Min(inSources, aboveReserve));
+                }
+                finally { if (!was) _tAvail.Stop(); }
             }
 
             _tPlan.Start();

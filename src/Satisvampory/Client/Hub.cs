@@ -1333,7 +1333,7 @@ namespace Satisvampory.Client
             var savedShow = _ctx.Bind("Find", "Show", "0", "Find: 0 all results, 1 containers only, 2 items only.");
             if (savedScope.Value is not ("here" or "clan")) savedScope.Value = "here";
             if (savedMatch.Value is not ("partial" or "exact")) savedMatch.Value = "partial";
-            if (savedShow.Value is not ("0" or "1" or "2")) savedShow.Value = "0";
+            if (savedShow.Value is not ("0" or "1" or "2" or "3")) savedShow.Value = "0";
             _findClan = savedScope.Value == "clan";
             _findPartial = savedMatch.Value == "partial";
             int.TryParse(savedShow.Value, out _findKind);
@@ -1346,7 +1346,7 @@ namespace Satisvampory.Client
             }));
             var matching = FindControl(p.CompactDropdown("Match", new[] { "partial", "exact" }, savedMatch.Value, new[] { "Partial name", "Full name" }));
             Track(matching.OnChanged(value => { _findPartial = value == "partial"; savedMatch.Value = value; RunFind(); }));
-            var kind = FindControl(p.CompactDropdown("Show", new[] { "0", "1", "2" }, savedShow.Value, new[] { "All results", "Containers only", "Items only" }));
+            var kind = FindControl(p.CompactDropdown("Show", new[] { "0", "1", "2", "3" }, savedShow.Value, new[] { "All results", "Containers only", "Items only", "Recipes only" }));
             Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); savedShow.Value = value; RunFind(); }));
             p.EndInline();
             _findResult = FindControl(p.Label("Search, choose a match, then choose its location."));
@@ -1511,7 +1511,8 @@ namespace Satisvampory.Client
             foreach (var item in r.Items)
             {
                 var name = ClientItems.NameOf(_ctx, item.Item, item.Name);
-                matches.Add((item.MatchRank, item.Total, name, new UiTableRow("item:" + item.Item) { ItemPrefab = item.Item }.Text("name", name).Text("kind", "Item").Number("amount", item.Total)));
+                matches.Add((item.MatchRank, item.Total, name, new UiTableRow("item:" + item.Item) { ItemPrefab = item.Item }.Text("name", name).Text("kind", item.IsRecipe ? "Recipe" : "Item")
+                    .Number("amount", item.IsRecipe ? null : item.Total, item.IsRecipe ? "" : null)));
             }
             for (int i = 0; i < r.ChestsByName.Count; i++)
             {
@@ -1557,9 +1558,12 @@ namespace Satisvampory.Client
             var chosen = SelectedFindLocation();
             _findView.Interactable = chosen?.HasPosition == true;
             _findPinButton.Interactable = chosen?.HasPosition == true;
-            _findTake.Interactable = chosen != null && _findItem != 0;
-            _pullAmount.Interactable = chosen != null && _findItem != 0;
-            _takeWhat.Text = _findItem == 0
+            // A recipe (Feed Prisoner) is made at a station, never stored: nothing to take.
+            var recipe = _lastFind?.Items.FirstOrDefault(i => i.Item == _findItem)?.IsRecipe == true;
+            _findTake.Interactable = chosen != null && _findItem != 0 && !recipe;
+            _pullAmount.Interactable = chosen != null && _findItem != 0 && !recipe;
+            _takeWhat.Text = recipe ? "A recipe: these are the stations that make it."
+                : _findItem == 0
                 ? "Choose an item and a location to take from storage."
                 : $"Take {ClientItems.NameOf(_ctx, _findItem) ?? "this item"} from storage · one stack is {ClientItems.MaxStack(_ctx, _findItem):N0}";
         }

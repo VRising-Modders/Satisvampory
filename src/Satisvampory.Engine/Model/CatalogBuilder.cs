@@ -140,7 +140,7 @@ namespace Satisvampory.Engine.Model
 
         /// <summary>
         /// The game's recipe stand-ins ("FakeItem_FeedPrisoner_SageFish" is the prison's Feed Prisoner recipe,
-        /// "FakeItem_AnyFish" a recipe's "any fish"): never stored, so never an item to find, filter or count.
+        /// "FakeItem_AnyFish" a recipe's "any fish"): never stored, so recipes in Find, never items.
         /// </summary>
         public static bool IsStandIn(string? prefabName) =>
             prefabName != null && prefabName.StartsWith("FakeItem_", StringComparison.Ordinal);
@@ -151,9 +151,10 @@ namespace Satisvampory.Engine.Model
             var kept = new List<GameItem>();
             foreach (var i in items)
             {
-                if (i.Guid == 0 || Flag(i, GameItemCategory.Locked) || IsStandIn(i.PrefabName)) continue;
+                if (i.Guid == 0 || Flag(i, GameItemCategory.Locked)) continue;
                 var name = DisplayNameOf(i);
                 if (name.Length == 0) continue;
+                if (IsStandIn(i.PrefabName)) { catalog.AddRecipe(new ItemId(i.Guid), name); continue; }
                 catalog.AddItem(new ItemId(i.Guid), name, i.MaxStack > 0 ? i.MaxStack : 1);
                 kept.Add(i with { DisplayName = name });
             }

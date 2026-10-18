@@ -219,7 +219,7 @@ namespace Satisvampory.Server
                 foreach (var st in s.World.Contents(c.Id))
                     stock[st.Item] = (stock.TryGetValue(st.Item, out var n) ? n : 0) + st.Amount;
             var reply = new FilterPickerReply();
-            foreach (var item in s.Catalog.AllItems)
+            foreach (var item in s.Catalog.StorableItems)
             {
                 reply.Items.Add(item.Guid);
                 reply.ItemCounts.Add(stock.TryGetValue(item, out var n) ? n : 0);

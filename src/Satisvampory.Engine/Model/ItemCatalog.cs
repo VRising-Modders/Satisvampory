@@ -17,6 +17,23 @@ namespace Satisvampory.Engine.Model
         readonly Dictionary<string, HashSet<ItemId>> _categories = new(StringComparer.Ordinal);
         readonly Dictionary<string, string> _categoryAliases = new(StringComparer.Ordinal);
         readonly Dictionary<ItemId, int> _maxStack = new();
+        readonly HashSet<ItemId> _recipes = new();
+
+        /// <summary>
+        /// A recipe stand-in ("Feed Prisoner"): Find shows it as a Recipe and where it is made; it is never
+        /// stored, so it is in no category, no Filter list and no exact-name lookup.
+        /// </summary>
+        public void AddRecipe(ItemId id, string name)
+        {
+            _names[id] = name;
+            _maxStack[id] = 1;
+            _recipes.Add(id);
+        }
+
+        public bool IsRecipe(ItemId id) => _recipes.Contains(id);
+
+        /// <summary>Real items only (no recipe stand-ins).</summary>
+        public IEnumerable<ItemId> StorableItems => _names.Keys.Where(k => !_recipes.Contains(k));
 
         public void AddItem(ItemId id, string name, int maxStack = 100)
         {
@@ -91,6 +108,7 @@ namespace Satisvampory.Engine.Model
             foreach (var kv in _byName) c._byName[kv.Key] = kv.Value;
             foreach (var kv in _aliases) c._aliases[kv.Key] = kv.Value;
             foreach (var kv in _maxStack) c._maxStack[kv.Key] = kv.Value;
+            c._recipes.UnionWith(_recipes);
             foreach (var kv in _categoryAliases) c._categoryAliases[kv.Key] = kv.Value;
             foreach (var kv in _categories) c._categories[kv.Key] = new HashSet<ItemId>(kv.Value);
             c._builtIn.UnionWith(_builtIn);

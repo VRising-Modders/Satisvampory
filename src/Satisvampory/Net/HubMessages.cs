@@ -302,6 +302,7 @@ namespace Satisvampory.Net
         [Field(1)] public string Text = "";
         [Field(2)] public bool IncludeClanPlots;
         [Field(3)] public bool PartialMatch = true;
+        /// <summary>0 all, 1 containers, 2 items, 3 recipes.</summary>
         [Field(4)] public int Kind;
         /// <summary>Items whose game display name (known only on the client) matches the text, best first.</summary>
         [Field(5)] public List<int> ClientItems = new();
@@ -315,6 +316,8 @@ namespace Satisvampory.Net
         [Field(3)] public List<EvalRowMsg> Chests = new();
         [Field(4)] public int Item;
         [Field(5)] public int MatchRank;
+        /// <summary>A recipe stand-in (Feed Prisoner): its chests are the stations that make it.</summary>
+        [Field(6)] public bool IsRecipe;
     }
 
     [ModMessage("sv.find.reply")]

@@ -756,7 +756,8 @@ namespace Satisvampory.Server
             var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, castles, _ => null);
             var scope = castles.Select(ProgenitorWorld.PlotOf).ToList();
             string PlotLabel(PlotId plot) => castles.Where(c => ProgenitorWorld.PlotOf(c) == plot).Select(c => Labels.Name(_ctx.Save, c)).FirstOrDefault() ?? plot.ToString();
-            var r = Engine.Ui.Find.Run(world, s.Catalog, scope, s.Standing, PlotLabel, q.Text ?? "", q.PartialMatch, q.Kind, _half.Catalog.Findable,
+            // Recipes only (3) is items only to the engine, then kept to recipe stand-ins below.
+            var r = Engine.Ui.Find.Run(world, s.Catalog, scope, s.Standing, PlotLabel, q.Text ?? "", q.PartialMatch, q.Kind == 3 ? 2 : q.Kind, _half.Catalog.Findable,
                 q.ClientItems?.Select(g => new ItemId(g)).ToList());
             var reply = new FindReply { Ambiguous = r.Ambiguous };
             reply.Categories.AddRange(r.Categories);
@@ -778,9 +779,9 @@ namespace Satisvampory.Server
                 }
                 return row;
             }
-            foreach (var it in r.Items.Take(25))
+            foreach (var it in r.Items.Where(x => q.Kind switch { 2 => !s.Catalog.IsRecipe(x.Item), 3 => s.Catalog.IsRecipe(x.Item), _ => true }).Take(25))
                 reply.Items.Add(new FoundMsg { Item = it.Item.Guid, Name = it.Name, Total = it.Total,
-                    MatchRank = it.MatchRank, Chests = it.Chests.Take(40).Select(Row).ToList() });
+                    MatchRank = it.MatchRank, Chests = it.Chests.Take(40).Select(Row).ToList(), IsRecipe = s.Catalog.IsRecipe(it.Item) });
             reply.ChestsByName.AddRange(r.ChestsByName.Take(40).Select(Row));
             return reply;
         }

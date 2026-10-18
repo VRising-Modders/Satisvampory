@@ -75,6 +75,9 @@ namespace Satisvampory.Server
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();
             new MaterialService(_ctx, this).Attach();
+            // Hand moves into the Log (Progenitor #108); an older Core logs none.
+            try { new HandMoves(_ctx, this).Attach(); }
+            catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: hand moves not logged (Progenitor too old?): " + e.Message); }
             Progenitor.Dev.MainThread.PostDelayed(20, () => AdminActions.AutoImportOnFirstBoot(_ctx, this), _ctx.Owner);
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }

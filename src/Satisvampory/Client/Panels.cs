@@ -57,8 +57,14 @@ namespace Satisvampory.Client
                 kind => kind == VanillaPanelKind.UnitStation);
             // A small Log button in the title row of every chest and station: the hub's Log on this one.
             LogButton(VanillaUiSite.ContainerPanel, VanillaPanelAnchor.BesideRename);
-            // Stations and the heart take buttons only on their edges for now (the title row is asked of Progenitor).
-            LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
+            // Stations take it in the title row too where the Core allows (Progenitor #109), except the prison cell,
+            // which has no rename pencil; the heart keeps its edge.
+            if (StationTitleRow(_ctx))
+            {
+                LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.BesideRename, kind => kind != VanillaPanelKind.PrisonCell);
+                LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, kind => kind == VanillaPanelKind.PrisonCell);
+            }
+            else LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
             LogButton(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge);
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: only items you send out of the heart", () => Open(_output));
@@ -120,7 +126,7 @@ namespace Satisvampory.Client
 
         const int ResearchScroll = 2065714452;
 
-        readonly List<IVanillaAttachHandle> _logButtons = new();
+        readonly List<(IVanillaAttachHandle Handle, bool Filtered)> _logButtons = new();
         bool _logShown = true;
 
         /// <summary>The server keeps a log: the Log buttons show.</summary>
@@ -130,16 +136,25 @@ namespace Satisvampory.Client
             set
             {
                 _logShown = value;
-                foreach (var h in _logButtons) h.Visible = value;
+                // A button shown only on some windows comes back on its next panel event.
+                foreach (var (h, filtered) in _logButtons) h.Visible = value && !filtered;
             }
         }
 
-        void LogButton(VanillaUiSite site, VanillaPanelAnchor anchor)
+        /// <summary>The Core takes buttons beside a station's rename pencil (Progenitor #109, which also brought building names).</summary>
+        static bool StationTitleRow(SatisContext ctx) => ctx.Castles.GetType().GetMethod("BuildingDisplayName") != null;
+
+        void LogButton(VanillaUiSite site, VanillaPanelAnchor anchor, Func<VanillaPanelKind, bool>? showFor = null)
         {
-            var handle = UiApi.AttachToVanilla(site, anchor, _ctx.Owner, _ctx.Guid + ".log");
+            var handle = UiApi.AttachToVanilla(site, anchor, _ctx.Owner, _ctx.Guid + ".log." + anchor);
             _ctx.Track(handle);
-            _logButtons.Add(handle);
-            handle.Visible = _logShown;
+            _logButtons.Add((handle, showFor != null));
+            handle.Visible = _logShown && showFor == null;
+            if (showFor != null)
+                _ctx.Track(handle.OnPanel(e =>
+                {
+                    if (e.Change != VanillaPanelChange.Closed) handle.Visible = _logShown && showFor(e.Target.Kind);
+                }));
             // The game's Research Scroll icon (a parchment) as the face; the caption is its tooltip.
             var button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll));
             _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings (last 24 hours).", "Log"));
@@ -944,6 +959,19 @@ namespace Satisvampory.Client
             }));
         }
 
+        /// <summary>The game's own name of a building (Progenitor #109), for search; empty on an older Core.</summary>
+        string GameName(int prefab)
+        {
+            if (prefab == 0 || _noNames) return "";
+            try { return BuildingName(Owner.Ctx, prefab) ?? ""; }
+            catch (Exception) { _noNames = true; return ""; }
+        }
+
+        static bool _noNames;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static string? BuildingName(SatisContext ctx, int prefab) => ctx.Castles.BuildingDisplayName(prefab);
+
         public void Show(int side)
         {
             _side = side;
@@ -957,7 +985,7 @@ namespace Satisvampory.Client
                 {
                     Section = x.Section,
                     Note = x.ClosesLoop ? "closes a loop" : "",
-                    Keywords = new[] { x.Plot, x.Hint },
+                    Keywords = new[] { x.Plot, x.Hint, GameName(x.BuildingPrefab) },
                     Filters = x.Kind switch
                     {
                         "chest" => new[] { "common", "chests" },

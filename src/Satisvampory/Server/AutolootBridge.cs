@@ -16,7 +16,7 @@ namespace Satisvampory.Server
     /// </summary>
     /// <remarks>
     /// Key <c>satisvampory.autoloot.v1</c>: <c>object[] { 1, storage, categories, members }</c>.
-    /// <c>Func&lt;ulong, int, long[]&gt; storage(platformId, item)</c> is <c>{ island total, cap or -1 }</c>, or null
+    /// <c>Func&lt;ulong, int, long[]&gt; storage(platformId, item)</c> is <c>{ island total, cap }</c>, or <c>{ 0, -1 }</c> when the item has no cap (nothing is counted then), or null
     /// without a castle. <c>Func&lt;ulong, string[]&gt; categories(platformId)</c> lists category keys (built-in plus the
     /// island's own). <c>Func&lt;ulong, string, int[]&gt; members(platformId, key)</c> lists an island category's items.
     /// </remarks>
@@ -25,7 +25,7 @@ namespace Satisvampory.Server
         public const string Key = "satisvampory.autoloot.v1";
 
         /// <summary>A player's island and catalog are reused this long: a burst of drops asks many times in one tick.</summary>
-        const double ReuseSeconds = 3;
+        const double ReuseSeconds = 10;
 
         readonly System.Collections.Generic.Dictionary<ulong, (double At, ServerActions.Island? Island, ItemCatalog Catalog)> _homes = new();
         // Every item's stored total per island (its settings owner, so clan members share one walk over the chests).
@@ -79,6 +79,10 @@ namespace Satisvampory.Server
         {
             var (island, catalog) = Home(platformId);
             if (island == null) return null;
+            var id = new ItemId(item);
+            // No cap, nothing to count: most items never cost a walk over the chests.
+            var cap = island.State.Rules.Cap(id, catalog);
+            if (cap == null) return new long[] { 0, -1 };
             var now = _clock.Elapsed.TotalSeconds;
             if (!_totals.TryGetValue(island.OwnerKey, out var hit) || now - hit.At >= ReuseSeconds)
             {
@@ -90,8 +94,7 @@ namespace Satisvampory.Server
                         if (stack.Amount > 0) totals[stack.Item.Guid] = (totals.TryGetValue(stack.Item.Guid, out var n) ? n : 0) + stack.Amount;
                 _totals[island.OwnerKey] = hit = (now, totals);
             }
-            var id = new ItemId(item);
-            return new[] { hit.Totals.TryGetValue(item, out var total) ? total : 0, (long)(island.State.Rules.Cap(id, catalog) ?? -1) };
+            return new[] { hit.Totals.TryGetValue(item, out var total) ? total : 0, (long)cap.Value };
         }
 
         string[] Categories(ulong platformId) => Home(platformId).Catalog.CategoryNames.ToArray();

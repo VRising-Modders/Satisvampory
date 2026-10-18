@@ -65,20 +65,26 @@ namespace Satisvampory.Client
                 LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, kind => kind == VanillaPanelKind.PrisonCell);
             }
             else LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
+            // The heart keeps its Input and Output (where blood comes from, what it sends out), so players can still
+            // feed it by list when the server's top-up is off.
+            Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
             HeartButtons();
         }
 
         IUiButton? _heartLog;
 
         /// <summary>
-        /// The heart has no tab row and no rename pencil: one column at its right edge with Settings (this castle's
-        /// page in the Satisvampory window) and the Log.
+        /// The heart has no tab row and no rename pencil: Input on its left edge; one column at its right edge with
+        /// Output, Settings (this castle's page in the Satisvampory window) and the Log.
         /// </summary>
         void HeartButtons()
         {
             var handle = UiApi.AttachToVanilla(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, _ctx.Owner, _ctx.Guid);
             _ctx.Track(handle);
             FollowTarget(handle, null);
+            var output = handle.Button("Output");
+            _ctx.Track(output.Tooltip("Output: only items you send out of the heart", "Output"));
+            _ctx.Track(output.OnClick(() => Open(_output)));
             var settings = handle.Button("Settings");
             _ctx.Track(settings.Tooltip("This castle's Satisvampory settings.", "Settings"));
             _ctx.Track(settings.OnClick(() => OpenHub?.Invoke(Hub.CastleTab)));

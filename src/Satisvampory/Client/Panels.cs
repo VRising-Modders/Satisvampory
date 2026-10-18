@@ -109,6 +109,11 @@ namespace Satisvampory.Client
                 _state = null;
                 _openVersion++;
                 HideAll();
+                if (_afterReopen is { } back)
+                {
+                    _afterReopen = null;
+                    Load(() => Progenitor.Dev.MainThread.PostDelayed(0.1, back, _ctx.Owner));
+                }
             }
         }
 
@@ -214,9 +219,64 @@ namespace Satisvampory.Client
         /// While a flow that closes the game window on purpose runs (Pick in world), the panels keep their chest:
         /// edits made meanwhile go to it and their answers are not thrown away.
         /// </summary>
-        internal bool HoldTarget { get; set; }
+        internal bool HoldTarget
+        {
+            get => _holdTarget;
+            set
+            {
+                // Remember the chest the flow started on: a preview shows another chest in the game window, and our
+                // panels must come back to this one, not that one.
+                if (value && !_holdTarget) _held = (_target, _hasTarget, _containerId, _state);
+                _holdTarget = value;
+            }
+        }
+
+        bool _holdTarget;
+        (VanillaPanelTarget Target, bool Has, string ContainerId, PanelMsg? State) _held;
+
+        void RestoreHeld()
+        {
+            (_target, _hasTarget, _containerId, _state) = _held;
+        }
 
         bool _noTabDisable;
+
+        /// <summary>The player's open container window now (Progenitor #110), or null.</summary>
+        internal static object? SnapshotWindow(SatisContext ctx)
+        {
+            try { return LastWindowCore(ctx); }
+            catch (Exception) { return null; }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static object? LastWindowCore(SatisContext ctx) => ctx.Inventory.LastWindow;
+
+        Action? _afterReopen;
+
+        /// <summary>
+        /// Reopen the window in <paramref name="window"/> if it was open, then run <paramref name="then"/> once it is
+        /// back (our panels reset when a window opens); straight away when nothing needs reopening.
+        /// </summary>
+        internal void AfterReopen(object? window, Action then)
+        {
+            if (window == null) { RestoreHeld(); then(); return; }
+            _afterReopen = then;
+            try
+            {
+                ReopenCore(_ctx, window, opened =>
+                {
+                    if (opened) return; // OnPanelChanged runs it once the window is back
+                    var a = _afterReopen; _afterReopen = null;
+                    if (a != null) { RestoreHeld(); a(); }
+                });
+            }
+            catch (Exception) { var a = _afterReopen; _afterReopen = null; if (a != null) { RestoreHeld(); a(); } }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void ReopenCore(SatisContext ctx, object window, Action<bool> done) =>
+            ctx.Inventory.ReopenLast((Progenitor.Inventory.ContainerWindowInfo)window,
+                r => done(r == Progenitor.Inventory.ContainerReopenResult.Opened));
 
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
@@ -1068,7 +1128,15 @@ namespace Satisvampory.Client
             {
                 if (!id.StartsWith("c:") || Owner.PreviewContainer == null) return;
                 _list.Suspend();
-                Owner.PreviewContainer(id.Substring(2), () => _list.Resume());
+                // The preview takes the game's container window; afterwards the player's chest comes back and so
+                // does this list, as it was.
+                var window = Panels.SnapshotWindow(ctx);
+                Owner.HoldTarget = true;
+                Owner.PreviewContainer(id.Substring(2), () =>
+                {
+                    Owner.HoldTarget = false;
+                    Owner.AfterReopen(window, () => { _list.Resume(); base.Show(); });
+                });
             }));
         }
 

@@ -86,6 +86,8 @@ namespace Satisvampory.Client
                 if (e.Change == VanillaPanelChange.Closed)
                 {
                     if (_nativeTabs != tabs) return;
+                    // A pick in the world closes the game window on purpose; the panel keeps its chest meanwhile.
+                    if (HoldTarget) return;
                     _hasTarget = false;
                     _openVersion++;
                     HideAll();
@@ -103,6 +105,16 @@ namespace Satisvampory.Client
         }
 
         internal void Mount(IUiPanel panel) => _nativeTabs?.Mount(panel);
+
+        // Its own method: on a Core without SetTabEnabled only this call fails (and is caught).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void SetListTabs(IVanillaPanelTabs tabs, bool on)
+        {
+            const string why = "Private chest: Input and Output are off. Turn Private off on the Filter tab.";
+            if (tabs.IsTabEnabled(1) == on && tabs.IsTabEnabled(2) == on) return;
+            tabs.SetTabEnabled(1, on, on ? "" : why);
+            tabs.SetTabEnabled(2, on, on ? "" : why);
+        }
 
         const int ResearchScroll = 2065714452;
 
@@ -135,6 +147,7 @@ namespace Satisvampory.Client
             {
                 if (e.Change == VanillaPanelChange.Closed)
                 {
+                    if (HoldTarget) return;
                     _hasTarget = false;
                     _openVersion++;
                     HideAll();
@@ -157,6 +170,12 @@ namespace Satisvampory.Client
                 }
             }));
         }
+
+        /// <summary>
+        /// While a flow that closes the game window on purpose runs (Pick in world), the panels keep their chest:
+        /// edits made meanwhile go to it and their answers are not thrown away.
+        /// </summary>
+        internal bool HoldTarget { get; set; }
 
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
@@ -203,6 +222,10 @@ namespace Satisvampory.Client
         {
             _state = reply;
             _containerId = reply.ContainerId;
+            // A private chest's Input and Output do not run: grey their tabs (Progenitor #106; older Cores keep the notice).
+            if (_nativeTabs != null)
+                try { SetListTabs(_nativeTabs, !reply.Deposit.Private); }
+                catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: tab disabling unavailable (Progenitor too old?): " + e.Message); }
             // Only open views: redrawing builds a view's panel, and a built panel shows.
             _input.RedrawIfOpen();
             _output.RedrawIfOpen();
@@ -470,6 +493,7 @@ namespace Satisvampory.Client
         {
             var ctx = Owner.Ctx;
             Hide();
+            Owner.HoldTarget = true;
             ctx.Hud.PickInWorld(result =>
             {
                 if (!result.IsCurrent || !result.HasNetworkId)
@@ -491,7 +515,12 @@ namespace Satisvampory.Client
                     var what = added == null ? "it" : $"{added.Name} · {added.Where}";
                     ctx.Hud.Notify($"Added {what} to {(_side == 0 ? "Input" : "Output")} of {reply.Name} · {reply.Where}.", kind: UiNoticeKind.Success, seconds: 4);
                 });
-            }, () => Show(), new UiWorldPickOptions
+            }, () =>
+            {
+                // Back to the list as it is now (what the picks added), still on the same chest.
+                Owner.HoldTarget = false;
+                Owner.Load(() => Show());
+            }, new UiWorldPickOptions
             {
                 CloseGameWindows = true, // the open container and character panels would hide the world
                 // Pick several in one go; Esc ends it and brings the list back.

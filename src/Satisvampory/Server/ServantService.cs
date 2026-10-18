@@ -122,7 +122,7 @@ namespace Satisvampory.Server
                     // by the time a handler runs, and then nothing would move.
                     var home = _ctx.Servants.List(castle.Heart.ToEntity()).ToDictionary(x => x.Servant);
                     var bags = alive.Select(s => (home.TryGetValue(s.Servant, out var info) ? info.Inventory : s.Inventory, s.Outcome == ServantOutcome.Injured)).ToList();
-                    var moved = StashLoot(castle, bags, server, out detail);
+                    var moved = StashLoot(castle, bags, server, out detail, alive.Select(s => s.Name).ToList(), e.MissionGuid);
                     if (moved > 0) lines.Add($"  loot stashed ({moved:N0} items)");
                     else _ctx.Log.LogInfo($"Satisvampory: returning servants' loot on {plot} found no home ({bags.Count} servant(s))");
                 }
@@ -241,7 +241,8 @@ namespace Satisvampory.Server
             var alive = servants.Where(s => s.State != Progenitor.Servants.ServantState.Dead).ToList();
             if (server.AllowServantLootStash && owner.ServantLootStash && alive.Any(s => s.ItemStacks > 0))
             {
-                var moved = StashLoot(castle, alive.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server, out detail);
+                var moved = StashLoot(castle, alive.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server, out detail,
+                    alive.Select(s => s.Name).ToList(), hunt.MissionGuid);
                 if (moved > 0) lines.Add($"  loot stashed ({moved:N0} items)");
             }
 
@@ -307,8 +308,16 @@ namespace Satisvampory.Server
         int StashLoot(ICastleHandle castle, List<ReturnedServant> servants, Engine.Persistence.ServerSettings server) =>
             StashLoot(castle, servants.Select(s => (s.Inventory, s.Outcome == ServantOutcome.Injured)), server, out _);
 
+        /// <summary>"Rhonen's bag", "Rhonen and Bella's bags": who the loot came from, for the Log.</summary>
+        static string Bags(IReadOnlyList<string> names) => names.Count switch
+        {
+            0 => "Servants' bags",
+            1 => names[0] + "'s bag",
+            _ => string.Join(", ", names.Take(names.Count - 1)) + " and " + names[names.Count - 1] + "'s bags",
+        };
+
         int StashLoot(ICastleHandle castle, IEnumerable<(Progenitor.Inventory.InventoryRef Inventory, bool Injured)> servants, Engine.Persistence.ServerSettings server,
-            out List<string> detail)
+            out List<string> detail, IReadOnlyList<string>? who = null, int missionGuid = 0)
         {
             _half.Catalog.Refresh(_ctx); // cheap when unchanged; never stash against an empty catalog
             var all = _ctx.Castles.All().Where(c => c.Enabled).ToList();
@@ -326,7 +335,9 @@ namespace Satisvampory.Server
             var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
             // One line per item: what came home and where it went.
             var plotNames = ServerActions.PlotNames(_ctx.Save, members);
-            ServerActions.LogMoves(_half, world, plotNames, moves.Select(m => (m.From, m.To, m.Item, m.Amount, default(ItemId))), "Servant loot", "", "Servants' bags");
+            // The hunt as a [mission:guid] token: each reader's client writes the game's own place name in.
+            ServerActions.LogMoves(_half, world, plotNames, moves.Select(m => (m.From, m.To, m.Item, m.Amount, default(ItemId))),
+                missionGuid != 0 ? $"Hunt loot · [mission:{missionGuid}]" : "Hunt loot", "", Bags(who ?? Array.Empty<string>()));
             detail = ServerActions.MoveLines(world, home.Catalog, plotNames,
                 moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags", ServerActions.ChestLinks(_ctx, world, plotNames));
             if (left.Count > 0)
@@ -471,7 +482,8 @@ namespace Satisvampory.Server
                     var stashed = 0;
                     var detail = new List<string>();
                     if (loaded.Count > 0)
-                        stashed = StashLoot(castle, loaded.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server, out detail);
+                        stashed = StashLoot(castle, loaded.Select(s => (s.Inventory, s.State == Progenitor.Servants.ServantState.Injured)), server, out detail,
+                            loaded.Select(s => s.Name).ToList(), hunt.MissionGuid);
                     var ready = Mine().Where(s => s.State == Progenitor.Servants.ServantState.Free).Select(s => s.Servant).ToList();
                     if (ready.Count > 0 && ready.Count == Mine().Count(s => s.State != Progenitor.Servants.ServantState.Dead))
                     {

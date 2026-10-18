@@ -195,7 +195,7 @@ namespace Satisvampory.Client
                 {
                     var change = r.Detail.Length > 0;
                     var time = DateTimeOffset.FromUnixTimeSeconds(r.At).ToLocalTime().ToString("HH:mm");
-                    var why = r.For != 0 ? $"{r.Why}, for {Name(r.For)}" : r.Why;
+                    var why = r.For != 0 ? $"{r.Why}, for {Name(r.For)}" : ClientItems.Missions(_ctx, r.Why);
                     if (r.Moves > 1) why += $" (×{r.Moves} moves)";
                     // A change about an item (a reserve, a cap) shows the item with its icon, and what changed under Why.
                     var aboutItem = change && r.Item != 0;

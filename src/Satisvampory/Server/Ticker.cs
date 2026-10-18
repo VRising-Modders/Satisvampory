@@ -263,6 +263,8 @@ namespace Satisvampory.Server
                         var took = watch.Elapsed.TotalMilliseconds - t1;
                         islandsMs += took;
                         ran.Add($"{key} {took:0}");
+                        _islandMs.TryGetValue(key, out var st);
+                        _islandMs[key] = (st.Count + 1, st.Sum + took, Math.Max(st.Max, took));
                     }
                     catch (Exception e)
                     {
@@ -313,6 +315,9 @@ namespace Satisvampory.Server
         readonly Dictionary<string, IdleState> _idle = new();
         int _skippedSinceLog;
         double _maxTickMsSinceLog;
+
+        /// <summary>Each island's ticks since the last minute log: count, total and longest ms.</summary>
+        readonly Dictionary<string, (int Count, double Sum, double Max)> _islandMs = new();
         double _skippedMsSinceLog;
 
         static string IslandId(string key, List<ICastleHandle> members) =>
@@ -496,6 +501,11 @@ namespace Satisvampory.Server
                     _listIslandTicks = 0;
                     _skippedSinceLog = 0;
                     _skippedMsSinceLog = 0;
+                    if (_islandMs.Count > 0)
+                        _ctx.Log.LogInfo("Satisvampory: island ticks (longest/average ms, ticks): " + string.Join(", ", _islandMs
+                            .OrderByDescending(kv => kv.Value.Max)
+                            .Select(kv => $"{kv.Key.Substring(kv.Key.LastIndexOf('/') + 1)} {kv.Value.Max:0}/{kv.Value.Sum / kv.Value.Count:0} x{kv.Value.Count}")));
+                    _islandMs.Clear();
                     _maxTickMsSinceLog = 0;
                     _movedSinceLog = 0;
                     _moveRecordsSinceLog = 0;

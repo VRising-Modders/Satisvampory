@@ -128,6 +128,7 @@ namespace Satisvampory.Engine.Logging
             "station cleanup" => "Station cleanup",
             "loop balance" => "Loop balance",
             "brazier fuel" => "Brazier fuel",
+            "salvage feed" => "Salvage feed",
             _ => conveyorWhy,
         };
     }

@@ -168,6 +168,22 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void A_devourer_takes_everything_from_linked_chests_but_nothing_through_the_default_belt()
+        {
+            var dev = _w.Chest(Home, "The Devourer", kind: NodeKind.Station);
+            dev.Role = StationRole.Devourer;
+            var salvage = _w.Chest(Home, "Salvage");
+            var storage = _w.Chest(Home, "Storage");
+            _w.Put(salvage, Sword, 1).Put(storage, Plank, 50);
+            _g.For(dev.Id).Input.Add(ListEntry.Of(salvage.Id, _g.NextSequence()));
+            _g.For(dev.Id).Input.Add(new ListEntry { Kind = EntryKind.Container, Container = storage.Id, Sequence = _g.NextSequence(), Auto = true });
+            var report = Tick();
+            Assert.Equal(1, _w.Count(dev.Id, Sword));
+            Assert.Equal(0, _w.Count(dev.Id, Plank));
+            Assert.Contains(report.Moves, m => m.Why == "salvage feed");
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

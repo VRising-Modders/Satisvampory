@@ -374,6 +374,28 @@ namespace Satisvampory.Engine.Lists
             }
         }
 
+        /// <summary>
+        /// A devourer takes everything from the chests a player linked to it (its own Input entries, or another chest's
+        /// Output naming it), never through the automatic Default Belt or a reverse Mass Deposit: those would salvage the
+        /// whole island. What the game will not salvage stays where it is.
+        /// </summary>
+        void FeedDevourer(ContainerInfo station, List<ContainerId> sources)
+        {
+            var lists = _graph.For(station.Id);
+            var chosen = new HashSet<ContainerId>();
+            foreach (var e in lists.Input.Where(e => !e.Auto && e.Kind != EntryKind.MassDeposit))
+                foreach (var id in _graph.Expand(e, output: false, owner: station.Id)) chosen.Add(id);
+            foreach (var (owner, other) in _graph.Lists)
+                if (owner != station.Id && other.Output.Any(e => !e.Auto && e.Kind == EntryKind.Container && e.Container == station.Id))
+                    chosen.Add(owner);
+            foreach (var src in sources.Where(chosen.Contains))
+                foreach (var stack in _world.Contents(src, PartOf(src)).ToList())
+                {
+                    if (!Budget(src)) return;
+                    if (Move(src, PartOf(src), station.Id, stack.Item, stack.Amount, "salvage feed") > 0) _pulledInto.Add(station.Id);
+                }
+        }
+
         /// <summary>Source chests for a station's inputs, in pull order.</summary>
         List<ContainerId> Sources(ContainerInfo station, List<Edge> edges)
         {
@@ -395,6 +417,12 @@ namespace Satisvampory.Engine.Lists
             if (station.Role == StationRole.Brazier)
             {
                 if (final) FeedBrazier(station, sources);
+                return;
+            }
+            // A devourer has no recipe list: it salvages whatever it is given.
+            if (station.Role == StationRole.Devourer)
+            {
+                if (final) FeedDevourer(station, sources);
                 return;
             }
             var lists = _graph.For(station.Id);

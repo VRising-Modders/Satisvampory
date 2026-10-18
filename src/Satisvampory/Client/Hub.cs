@@ -290,9 +290,30 @@ namespace Satisvampory.Client
 
         // Its own method: on a Core without lone-modifier holds (Progenitor #102) only this call fails (and is caught).
         [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        void RegisterAltHold() =>
-            _ctx.Keybinds.RegisterHold("AdvancedTooltipHold", KeyChord.Alt, "Show advanced tooltip numbers while held",
+        void RegisterAltHold()
+        {
+            var handle = _ctx.Keybinds.RegisterHold(AltHoldId, KeyChord.Alt, "Show tooltip numbers (hold)",
                 onPressed: () => SetAltHeld(true), onReleased: () => SetAltHeld(false));
+            _altKey = () => handle.Chord.ToString();
+        }
+
+        internal const string AltHoldId = "AdvancedTooltipHold";
+
+        /// <summary>The hold key as the player bound it ("Alt"); empty when the Core has no holds.</summary>
+        Func<string> _altKey = () => "";
+
+        /// <summary>The line at the foot of a tooltip that says which key shows the numbers (none while they show).</summary>
+        VanillaRow? HoldHint()
+        {
+            if (Advanced) return null;
+            string key;
+            try { key = _altKey(); } catch (Exception) { key = ""; }
+            return key.Length == 0 || key == "None" ? null
+                : new VanillaRow($"Hold {key}: total, reserve, available and cap", LabelTone.Muted);
+        }
+
+        /// <summary>Numbers set under an ingredient line, indented beneath its name.</summary>
+        const string Indent = "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0";
 
         void SetAltHeld(bool held)
         {
@@ -332,7 +353,16 @@ namespace Satisvampory.Client
             _ctx.Track(body.OnPanel(e =>
             {
                 var seq = ++sequence;
-                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0 || !Advanced) { body.ClearRows(); needs.ClearRows(); ClearLines(); return; }
+                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); needs.ClearRows(); ClearLines(); return; }
+                if (!Advanced)
+                {
+                    body.ClearRows();
+                    ClearLines();
+                    var hint = HoldHint();
+                    if (hint == null) needs.ClearRows();
+                    else needs.SetRows(new List<VanillaRow> { hint.Value });
+                    return;
+                }
                 var t = e.Target;
                 var items = new List<int>();
                 if (t.ProductGuid != 0) items.Add(t.ProductGuid);
@@ -347,7 +377,7 @@ namespace Satisvampory.Client
                     var first = 0;
                     if (t.ProductGuid != 0)
                     {
-                        body.SetRows(new List<VanillaRow> { new VanillaRow($"Total {a.Island[0]:N0} · Reserve {a.Reserve[0]:N0} · {CapText(a.Cap[0])}", LabelTone.Muted) });
+                        body.SetRows(new List<VanillaRow> { new VanillaRow($"Total {a.Island[0]:N0} · Reserve {a.Reserve[0]:N0} · {CapText(a.Cap[0])}", LabelTone.Normal) });
                         first = 1;
                     }
                     var lines = new List<VanillaRow>();
@@ -359,9 +389,9 @@ namespace Satisvampory.Client
                         var numbers = $"Total {a.Island[i]:N0} · Reserve {a.Reserve[i]:N0} · Available {available:N0} · {CapText(a.Cap[i])}";
                         var line = i - first;
                         if (perLine != null && line < perLine.Length)
-                            perLine[line].SetRows(new List<VanillaRow> { new VanillaRow(numbers, LabelTone.Muted) });
+                            perLine[line].SetRows(new List<VanillaRow> { new VanillaRow(Indent + numbers, LabelTone.Normal) });
                         else
-                            lines.Add(new VanillaRow($"{Name(items[i])}: {numbers}", LabelTone.Muted));
+                            lines.Add(new VanillaRow($"{Name(items[i])}: {numbers}", LabelTone.Normal));
                     }
                     needs.SetRows(lines);
                 });
@@ -415,6 +445,7 @@ namespace Satisvampory.Client
                         var list = new List<string>();
                         if (c.Total > 0) list.Add($"In storage: {c.Total:N0} ({c.Chests} chest{(c.Chests == 1 ? "" : "s")})");
                         if (advanced) list.Add($"Total {c.Total:N0} · Reserve {c.Reserve:N0} · Available {Math.Max(0, c.Total - c.Reserve):N0} · {CapText(c.Cap)}");
+                        else if (HoldHint() is { } hint) list.Add(hint.Text);
                         lines = list.ToArray();
                     }
                     _storageCache[key] = (_clock.Elapsed.TotalSeconds, lines);

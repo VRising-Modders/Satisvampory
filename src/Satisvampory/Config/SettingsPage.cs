@@ -38,6 +38,8 @@ namespace Satisvampory.Config
                     page.Section("Keys");
                     foreach (var (id, label) in keys.Registered)
                         page.Keybind(id, label: label, help: "Unbound until you pick a key.");
+                    page.Keybind("AdvancedTooltipHold", label: "Show tooltip numbers (hold)",
+                        help: "While held, item and recipe tooltips show total, reserve, available and cap. Alt by default.");
                 }
 
                 page.Section("Server");

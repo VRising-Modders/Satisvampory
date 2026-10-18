@@ -437,8 +437,9 @@ namespace Satisvampory.Client
             // The connections as a table: a few blank rows even when empty, the row's own buttons at its end.
             _list = panel.DataTable("rows", new[]
             {
-                new UiTableColumn("name", _side == 0 ? "Pulls from" : "Sends to") { Hideable = false },
-                new UiTableColumn("details", "Details") { Width = 230 },
+                new UiTableColumn("name", "Connection") { Hideable = false },
+                new UiTableColumn("rule", "Rule") { Width = 100 },
+                new UiTableColumn("details", "Details") { Width = 200 },
                 new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 4 },
             }, new UiDataTableOptions
             {
@@ -511,17 +512,20 @@ namespace Satisvampory.Client
                 _add.Visible = !s.Deposit.Private;
                 _order.Value = (_side == 0 ? s.PullOrder : s.SendOrder).ToString();
                 var rows = _side == 0 ? s.Input : s.Output;
-                _list.SetRows(rows.Select((r, i) => new UiTableRow(i.ToString()) { BuildingPrefab = r.BuildingPrefab }
-                    .Text("name", r.Auto ? r.Name + " (automatic)" : r.Name)
-                    .Text("details", string.Join(" · ", new[] { r.Type, r.Where, r.Status }.Where(x => !string.IsNullOrEmpty(x))))
+                // Exceptions last (their order means nothing); the row id stays the list index the server knows.
+                var shown = rows.Select((r, i) => (r, i)).OrderBy(x => x.r.Kind == 3 ? 1 : 0).ThenBy(x => x.i).ToList();
+                _list.SetRows(shown.Select(x => (r: x.r, i: x.i, except: x.r.Kind == 3)).Select(x => new UiTableRow(x.i.ToString()) { BuildingPrefab = x.r.BuildingPrefab }
+                    .Text("name", x.except ? x.r.Name.Replace("Except ", "") : x.r.Auto ? x.r.Name + " (automatic)" : x.r.Name)
+                    .Text("rule", x.except ? "Never" : _side == 0 ? "Pull from" : "Send to", x.except ? LabelTone.Danger : LabelTone.Ok)
+                    .Text("details", string.Join(" · ", new[] { x.except ? (_side == 0 ? "never pulled from" : "never sent to") : x.r.Type, x.r.Where, x.r.Status }.Where(t => !string.IsNullOrEmpty(t))))
                     .Action("find", UiRowActionIcon.Locate,
-                        r.ContainerId.Length > 0 ? "Find this chest or station" : r.Kind == 1 ? "Open this belt in Belts" : "Mass Deposit has no place to find",
-                        r.ContainerId.Length > 0 || r.Kind == 1)
-                    // A link set on the other end is ordered there: no arrows here.
-                    .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && r.LinkOwner.Length == 0 && i > 0)
+                        x.r.ContainerId.Length > 0 ? "Find this chest or station" : x.r.Kind == 1 ? "Open this belt in Belts" : "Mass Deposit has no place to find",
+                        x.r.ContainerId.Length > 0 || x.r.Kind == 1)
+                    // A link set on the other end is ordered there, and an exception has no order: no arrows.
+                    .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && !x.except && x.r.LinkOwner.Length == 0 && x.i > 0)
                     .Action("down", UiRowActionIcon.Down, "Later in the list",
-                        s.CanEdit && r.LinkOwner.Length == 0 && i < rows.Count - 1 && rows[i + 1].LinkOwner.Length == 0)
-                    .Action("remove", UiRowActionIcon.Remove, "Remove", s.CanEdit)));
+                        s.CanEdit && !x.except && x.r.LinkOwner.Length == 0 && x.i < rows.Count - 1 && rows[x.i + 1].LinkOwner.Length == 0 && rows[x.i + 1].Kind != 3)
+                    .Action("remove", UiRowActionIcon.Remove, x.except ? "Remove this exception" : "Remove", s.CanEdit)));
                 var others = _side == 0 ? s.InputFromOthers : s.OutputFromOthers;
                 _others.Text = others.Count == 0 ? "" : (_side == 0 ? "Also pulled in by other lists:\n  " : "Also taken by other lists:\n  ") + string.Join("\n  ", others.Take(12));
                 _others.Visible = others.Count > 0;

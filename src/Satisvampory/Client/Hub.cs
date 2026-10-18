@@ -367,6 +367,11 @@ namespace Satisvampory.Client
         {
             var body = _recipeTip = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid + ".recipe");
             var needs = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipRequirements, _ctx.Owner, _ctx.Guid + ".recipe.req");
+            // The product's numbers go right under the title (Progenitor #113, anchor 8); an older Core refuses the
+            // anchor and they stay under the description.
+            var header = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, (VanillaPanelAnchor)8, _ctx.Owner, _ctx.Guid + ".recipe.head");
+            _ctx.Track(header);
+            var productRows = header.Enabled ? header : body;
             _ctx.Track(body);
             _ctx.Track(needs);
             // Per requirement line where the Core has it (Progenitor #99): each item's numbers right under its line.
@@ -378,10 +383,11 @@ namespace Satisvampory.Client
             _ctx.Track(body.OnPanel(e =>
             {
                 var seq = ++sequence;
-                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); needs.ClearRows(); ClearLines(); return; }
+                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); header.ClearRows(); needs.ClearRows(); ClearLines(); return; }
                 if (!Advanced)
                 {
                     body.ClearRows();
+                    header.ClearRows();
                     ClearLines();
                     var hint = HoldHint();
                     if (hint == null) needs.ClearRows();
@@ -402,7 +408,7 @@ namespace Satisvampory.Client
                     var first = 0;
                     if (t.ProductGuid != 0)
                     {
-                        body.SetRows(new List<VanillaRow> { new VanillaRow(Numbers(a.Island[0], a.Reserve[0], null, a.Cap[0], 0), LabelTone.Normal) });
+                        productRows.SetRows(new List<VanillaRow> { new VanillaRow(Numbers(a.Island[0], a.Reserve[0], null, a.Cap[0], 0), LabelTone.Normal) });
                         first = 1;
                     }
                     var lines = new List<VanillaRow>();

@@ -201,7 +201,9 @@ namespace Satisvampory.Server
         void RunIslandsCore(ServerSettings server)
         {
             var sharing = Sharing(server);
-            var castles = _ctx.Castles.All().Where(c => c.Enabled && !StressOwners.Is(c.Owner.PlatformId)).ToList();
+            // An unowned castle (no player, e.g. freshly generated or abandoned) has no island to run:
+            // grouped by owner they would all join one huge "owner 0" island and stall the tick.
+            var castles = _ctx.Castles.All().Where(c => c.Enabled && c.Owner.PlatformId != 0 && !StressOwners.Is(c.Owner.PlatformId)).ToList();
             SweepDestroyed(castles);
             WatchMaterialFacts(castles);
             var done = new HashSet<PlotId>();

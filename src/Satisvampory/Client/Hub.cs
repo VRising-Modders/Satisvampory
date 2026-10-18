@@ -168,11 +168,16 @@ namespace Satisvampory.Client
             var needs = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipRequirements, _ctx.Owner, _ctx.Guid + ".recipe.req");
             _ctx.Track(body);
             _ctx.Track(needs);
+            // Per requirement line where the Core has it (Progenitor #99): each item's numbers right under its line.
+            IVanillaAttachHandle[]? perLine = null;
+            try { perLine = AttachRequirementLines(); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: per-line tooltip rows off (Progenitor too old?): " + e.Message); }
+            void ClearLines() { if (perLine != null) foreach (var h in perLine) h.ClearRows(); }
             var sequence = 0;
             _ctx.Track(body.OnPanel(e =>
             {
                 var seq = ++sequence;
-                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0 || !Advanced) { body.ClearRows(); needs.ClearRows(); return; }
+                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0 || !Advanced) { body.ClearRows(); needs.ClearRows(); ClearLines(); return; }
                 var t = e.Target;
                 var items = new List<int>();
                 if (t.ProductGuid != 0) items.Add(t.ProductGuid);
@@ -191,15 +196,34 @@ namespace Satisvampory.Client
                         first = 1;
                     }
                     var lines = new List<VanillaRow>();
+                    ClearLines();
                     for (var i = first; i < items.Count && i < a.Island.Count; i++)
                     {
                         var reach = a.Reachable[i] >= 0 ? a.Reachable[i] : a.Island[i];
                         var available = Math.Max(0, reach - a.Reserve[i]);
-                        lines.Add(new VanillaRow($"{Name(items[i])}: Total {a.Island[i]:N0} · Reserve {a.Reserve[i]:N0} · Available {available:N0} · {CapText(a.Cap[i])}", LabelTone.Muted));
+                        var numbers = $"Total {a.Island[i]:N0} · Reserve {a.Reserve[i]:N0} · Available {available:N0} · {CapText(a.Cap[i])}";
+                        var line = i - first;
+                        if (perLine != null && line < perLine.Length)
+                            perLine[line].SetRows(new List<VanillaRow> { new VanillaRow(numbers, LabelTone.Muted) });
+                        else
+                            lines.Add(new VanillaRow($"{Name(items[i])}: {numbers}", LabelTone.Muted));
                     }
                     needs.SetRows(lines);
                 });
             }));
+        }
+
+        // Its own method: on a Core without per-line anchors only this call fails (and is caught).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        IVanillaAttachHandle[] AttachRequirementLines()
+        {
+            var handles = new IVanillaAttachHandle[6]; // the game's tooltip has room for six requirement lines
+            for (var i = 0; i < handles.Length; i++)
+            {
+                handles[i] = UiApi.AttachToRequirementLine(i, _ctx.Owner, _ctx.Guid + ".recipe.line" + i);
+                _ctx.Track(handles[i]);
+            }
+            return handles;
         }
 
         readonly Dictionary<int, (double At, string[] Lines)> _storageCache = new();

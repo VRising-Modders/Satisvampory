@@ -35,7 +35,7 @@ Rewritten 2026-10-13. It replaces an earlier, unpublished Flow Map design.
 
 ## What is out
 
-- **Autoloot / scoop.** It is a separate Progenitor mod, a port of GroundScoop with its settings and scoop key in the Progenitor UI. If both mods are loaded, the autoloot mod may ask Satisvampory for storage counts (bag caps counted against storage) through a small optional interface. Neither mod requires the other.
+- **Autoloot / scoop.** It is a separate Progenitor mod (Autoloot), with its settings, pickup filter and range ring in the Progenitor UI. Neither mod requires the other. When both run on a server, Satisvampory publishes a small optional interface (`Server/AutolootBridge.cs`, AppDomain key `satisvampory.autoloot.v1`): for a player's home island, an item's stored total and cap, the category keys, and each category's items. Autoloot uses it to stop at island caps (bags plus storage) and to offer categories in its filter. Satisvampory never calls Autoloot.
 - **Supply lend** (starter kit, build cover, heart upgrade staging). Sharing makes staging unnecessary: building and crafting read shared storage directly. Heart blood feed stays, now triggered by visiting a plot or logging in (`09-special-chests.md`).
 - **Chat commands.** None, for players or admins. Admin actions are Server settings rows and buttons (`10-settings.md`).
 - **`s#` / `r#` routing by name.** Read once by the 1.x importer (`12-protocol-persistence.md`), then ignored.

@@ -95,6 +95,8 @@ namespace Satisvampory.Server
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();
             new MaterialService(_ctx, this).Attach();
+            // Autoloot (a separate mod) reads island caps and categories through this, when both run.
+            new AutolootBridge(_ctx, this).Attach();
             try { var locks = new ChestLocks(_ctx); locks.Attach(); Locks = locks; }
             catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: chest passwords off (Progenitor too old?): " + e.Message); }
             // The Log lives with the world save, one key per castle: it survives reloads and restarts.

@@ -83,9 +83,6 @@ namespace Satisvampory.Server
             World.ProgenitorWorld.FailureLog = t => _ctx.Log.LogInfo(t);
             _ctx.Track(new OnDispose(() => World.ProgenitorWorld.FailureLog = null));
             _ctx.Track(new OnDispose(World.ProgenitorWorld.ForgetRows));
-            var like = new PluginContextLike(_ctx);
-            Labels.OwnerKeyOf = c => Stores.SettingsKey(like, c);
-            _ctx.Track(new OnDispose(() => Labels.OwnerKeyOf = null));
             _ctx.Requests.Handle<AdminReq, Net.TextReply>((u, q, i) => AdminActions.Run(_ctx, this, u, q));
             World.GameItems.World = _ctx.World;
             Ticker = new Ticker(_ctx, this);

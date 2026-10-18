@@ -11,6 +11,8 @@ namespace Satisvampory.Engine.Lists
         Container,
         Belt,
         MassDeposit,
+        /// <summary>"Except": this container is never pulled from (Input) or sent to (Output), whatever else the list names.</summary>
+        Exclude,
     }
 
     /// <summary>Optional per-row filter (spec 02). Empty include sets mean "anything".</summary>
@@ -195,6 +197,16 @@ namespace Satisvampory.Engine.Lists
 
         /// <summary>Expand an Input by default. Output callers must pass output: true.
         /// Supply owner for migration peer restrictions.</summary>
+        /// <summary>The containers <paramref name="owner"/>'s list on that side names as Except.</summary>
+        public HashSet<ContainerId> Excluded(ContainerId owner, bool output)
+        {
+            var set = new HashSet<ContainerId>();
+            if (Lists.TryGetValue(owner, out var l))
+                foreach (var e in output ? l.Output : l.Input)
+                    if (e.Kind == EntryKind.Exclude) set.Add(e.Container);
+            return set;
+        }
+
         public IEnumerable<ContainerId> Expand(ListEntry e, bool output = false, ContainerId? owner = null)
         {
             if (e.Kind == EntryKind.Container) return new[] { e.Container };
@@ -205,9 +217,11 @@ namespace Satisvampory.Engine.Lists
                     if (p.Value.Input.Contains(e) || p.Value.Output.Contains(e))
                     { owner = p.Key; output = p.Value.Output.Contains(e); break; }
             var self = owner;
+            var except = self == null ? null : Excluded(self.Value, output);
             return Connections(e.Belt, !output)
                 .Where(p => (e.BeltPeers == null || e.BeltPeers.Contains(p.Owner))
-                    && (p.Entry.BeltPeers == null || self == null || p.Entry.BeltPeers.Contains(self.Value)))
+                    && (p.Entry.BeltPeers == null || self == null || p.Entry.BeltPeers.Contains(self.Value))
+                    && (except == null || !except.Contains(p.Owner)))
                 .Select(p => p.Owner).Distinct();
         }
 
@@ -274,7 +288,15 @@ namespace Satisvampory.Engine.Lists
                         Add(new Edge(from, owner, ConnectionFilter(e, owner, false, from), owner, false, sequence));
                     }
             }
-            return order.Select(k => byPair[k]).ToList();
+            // Except entries win over everything else, on both ends: a receiver's Input exception and a sender's
+            // Output exception each drop the edge, whoever defined it.
+            var inExcept = new Dictionary<ContainerId, HashSet<ContainerId>>();
+            var outExcept = new Dictionary<ContainerId, HashSet<ContainerId>>();
+            HashSet<ContainerId> Ex(Dictionary<ContainerId, HashSet<ContainerId>> cache, ContainerId id, bool output) =>
+                cache.TryGetValue(id, out var x) ? x : cache[id] = Excluded(id, output);
+            return order.Select(k => byPair[k])
+                .Where(e => !Ex(inExcept, e.To, false).Contains(e.From) && !Ex(outExcept, e.From, true).Contains(e.To))
+                .ToList();
         }
 
         /// <summary>
@@ -288,8 +310,8 @@ namespace Satisvampory.Engine.Lists
             Lists.Remove(id);
             foreach (var (owner, l) in Lists)
             {
-                var n = l.Input.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id)
-                    + l.Output.RemoveAll(e => e.Kind == EntryKind.Container && e.Container == id);
+                var n = l.Input.RemoveAll(e => e.Kind is EntryKind.Container or EntryKind.Exclude && e.Container == id)
+                    + l.Output.RemoveAll(e => e.Kind is EntryKind.Container or EntryKind.Exclude && e.Container == id);
                 if (n > 0 && byContainer != null) byContainer[owner] = (byContainer.TryGetValue(owner, out var had) ? had : 0) + n;
                 removed += n;
             }

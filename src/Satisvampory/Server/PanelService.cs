@@ -537,7 +537,7 @@ namespace Satisvampory.Server
         RowMsg Row(Session s, ListEntry e, ListSide side, Engine.Lists.TickReport? report)
         {
             var graph = s.Island.State.Graph;
-            var row = new RowMsg { Kind = e.Kind switch { EntryKind.Belt => 1, EntryKind.MassDeposit => 2, _ => 0 }, FilterSpec = FromFilter(e.Filter), Auto = e.Auto };
+            var row = new RowMsg { Kind = e.Kind switch { EntryKind.Belt => 1, EntryKind.MassDeposit => 2, EntryKind.Exclude => 3, _ => 0 }, FilterSpec = FromFilter(e.Filter), Auto = e.Auto };
             row.Filter = e.Filter.IsAnything ? (side == ListSide.Input ? "anything" : "anything it accepts") : "filter: " + Describe(s.Catalog, e.Filter);
 
             IEnumerable<EngineId> ends;
@@ -553,6 +553,18 @@ namespace Satisvampory.Server
                     row.BuildingPrefab = t?.BuildingPrefab ?? 0;
                     ends = new[] { e.Container };
                     break;
+                }
+                case EntryKind.Exclude:
+                {
+                    var x = s.World.Find(e.Container);
+                    row.ContainerId = e.Container.Value.ToString("N");
+                    row.Name = "Except " + (x?.DisplayName ?? "(gone)");
+                    row.Where = x == null ? "" : PlotLabel(s.Island, x.Plot);
+                    row.Type = side == ListSide.Input ? "Never pulled from" : "Never sent to";
+                    row.BuildingPrefab = x?.BuildingPrefab ?? 0;
+                    row.Filter = "";
+                    row.Status = "";
+                    return row;
                 }
                 case EntryKind.Belt:
                 {
@@ -688,6 +700,7 @@ namespace Satisvampory.Server
                 1 when Guid.TryParse(r.BeltId, out var b) => new ListEntry { Kind = EntryKind.Belt, Belt = new BeltId(b), Filter = filter },
                 2 => new ListEntry { Kind = EntryKind.MassDeposit, Filter = filter },
                 0 when Guid.TryParse(r.ContainerId, out var c) => new ListEntry { Kind = EntryKind.Container, Container = new EngineId(c), Filter = filter },
+                3 when Guid.TryParse(r.ContainerId, out var x) => new ListEntry { Kind = EntryKind.Exclude, Container = new EngineId(x) },
                 _ => throw new RequestRefusedException("That row does not name a chest, belt or Mass Deposit."),
             };
         }

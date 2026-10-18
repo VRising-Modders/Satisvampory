@@ -92,7 +92,12 @@ namespace Satisvampory.Engine.Edits
             if (!InIsland(owner)) return EditResult.No("That container is outside your sharing island");
             var self = _world.Find(owner)!;
 
-            if (entry.Kind == EntryKind.Container)
+            if (entry.Kind == EntryKind.Exclude)
+            {
+                if (entry.Container == owner) return EditResult.No("A container cannot except itself");
+                if (_world.Find(entry.Container) == null) return EditResult.No("That container no longer exists");
+            }
+            else if (entry.Kind == EntryKind.Container)
             {
                 if (entry.Container == owner) return EditResult.No("A container cannot list itself");
                 var other = _world.Find(entry.Container);
@@ -329,7 +334,7 @@ namespace Satisvampory.Engine.Edits
         static bool Same(ListEntry a, ListEntry b) =>
             a.Kind == b.Kind && a.Kind switch
             {
-                EntryKind.Container => a.Container == b.Container,
+                EntryKind.Container or EntryKind.Exclude => a.Container == b.Container,
                 EntryKind.Belt => a.Belt == b.Belt,
                 _ => true,
             };

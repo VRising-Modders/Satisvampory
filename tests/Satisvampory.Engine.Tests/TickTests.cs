@@ -204,6 +204,29 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void Except_drops_a_container_from_a_belt_on_either_side()
+        {
+            Satisvampory.Engine.Lists.BeltOps.Create(_g, "Ore", out var belt);
+            var a = _w.Chest(Home, "a");
+            var b = _w.Chest(Home, "b");
+            var f = Furnace();
+            _w.Put(a, IronOre, 100).Put(a, Coal, 10).Put(b, IronOre, 100).Put(b, Coal, 10);
+            _g.For(a.Id).Output.Add(ListEntry.OfBelt(belt!.Id));
+            _g.For(b.Id).Output.Add(ListEntry.OfBelt(belt.Id));
+            _g.For(f.Id).Input.Add(ListEntry.OfBelt(belt.Id));
+            _g.For(f.Id).Input.Add(new ListEntry { Kind = EntryKind.Exclude, Container = b.Id });
+            Assert.DoesNotContain(_g.Edges(), e => e.From == b.Id && e.To == f.Id);
+            Assert.Contains(_g.Edges(), e => e.From == a.Id && e.To == f.Id);
+            Tick();
+            Assert.Equal(100, _w.Count(b.Id, IronOre));
+            Assert.True(_w.Count(a.Id, IronOre) < 100);
+
+            // Output side: a's Output except f.
+            _g.For(a.Id).Output.Add(new ListEntry { Kind = EntryKind.Exclude, Container = f.Id });
+            Assert.DoesNotContain(_g.Edges(), e => e.From == a.Id && e.To == f.Id);
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

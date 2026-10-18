@@ -410,8 +410,8 @@ namespace Satisvampory.Engine.Persistence
 
         static EntryDto ToDto(ListEntry e) => new()
         {
-            Kind = e.Kind switch { EntryKind.Belt => "belt", EntryKind.MassDeposit => "massDeposit", _ => "container" },
-            Container = e.Kind == EntryKind.Container ? Id(e.Container) : null,
+            Kind = e.Kind switch { EntryKind.Belt => "belt", EntryKind.MassDeposit => "massDeposit", EntryKind.Exclude => "exclude", _ => "container" },
+            Container = e.Kind is EntryKind.Container or EntryKind.Exclude ? Id(e.Container) : null,
             Belt = e.Kind == EntryKind.Belt ? e.Belt.Value.ToString("N") : null,
             Filter = e.Filter.IsAnything ? null : new FilterDto
             {
@@ -439,6 +439,8 @@ namespace Satisvampory.Engine.Persistence
             }
             switch (d.Kind)
             {
+                case "exclude":
+                    return ParseId(d.Container) is { } ex ? new ListEntry { Kind = EntryKind.Exclude, Container = ex, Sequence = d.Sequence } : null;
                 case "massDeposit":
                     return new ListEntry { Kind = EntryKind.MassDeposit, Filter = filter, Sequence = d.Sequence, Auto = d.Auto };
                 case "belt":

@@ -483,7 +483,8 @@ namespace Satisvampory.Engine.Lists
                     var rank = Reverse(item).Rank;
                     list = list.OrderBy(id => rank.TryGetValue(id, out var i) ? i : int.MaxValue).ToList();
                 }
-                return list.Where(id => (only == null || only.Contains(id)) && _inScope.Contains(id) && id != station.Id)
+                var except = _graph.Excluded(station.Id, false);
+                return list.Where(id => (only == null || only.Contains(id)) && _inScope.Contains(id) && id != station.Id && !except.Contains(id))
                     .Where(id => _world.Find(id) is { } c && c.Kind is NodeKind.Chest or NodeKind.Station
                         && !c.AutomationSuspended && c.Deposit.Special != SpecialKind.Skip && !_world.IsRaided(c.Plot))
                     .Where(id => massSources.Contains(id)
@@ -748,11 +749,12 @@ namespace Satisvampory.Engine.Lists
             {
                 var entry = lists.Output.FirstOrDefault(e => e.Kind == EntryKind.MassDeposit);
                 if (entry == null || !_inScope.Contains(id) || _world.Find(id)?.AutomationSuspended == true) continue;
+                var except = _graph.Excluded(id, true);
                 foreach (var stack in _world.Contents(id, PartOf(id)))
                 {
                     if (!entry.Filter.Allows(stack.Item, Catalog) || IsStableFeed(id, stack.Item)) continue;
                     var left = stack.Amount;
-                    foreach (var m in DepositPlanner.Plan(_ctx, stack.Item, left, id))
+                    foreach (var m in DepositPlanner.Plan(_ctx, stack.Item, left, id).Where(m => !except.Contains(m.To)))
                     {
                         if (left <= 0 || !Budget(id)) break;
                         left -= Move(id, PartOf(id), m.To, stack.Item, m.Amount, "mass deposit");

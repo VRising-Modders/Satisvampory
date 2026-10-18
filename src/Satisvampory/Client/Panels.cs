@@ -291,7 +291,7 @@ namespace Satisvampory.Client
 
         internal void Edit(EditListReq req) => Send<EditListReq, PanelMsg>(req, Apply);
 
-        internal void OpenPicker(int side) => _picker.Show(side);
+        internal void OpenPicker(int side, bool except = false) => _picker.Show(side, except);
 
         internal void OpenFilterPicker(DepositView into) => _filterPicker.Show(into);
 
@@ -420,7 +420,8 @@ namespace Satisvampory.Client
             _header = panel.Label("");
             // One Add menu: the chest/belt list, or clicking chests in the world.
             panel.BeginInline();
-            _add = panel.CompactDropdown("Add", new[] { "", "list", "pick" }, "", new[] { "Choose…", "Chests or belts…", "Pick in world" });
+            _add = panel.CompactDropdown("Add", new[] { "", "list", "pick", "except" }, "",
+                new[] { "Choose…", "Chests or belts…", "Pick in world", _side == 0 ? "Except a chest (never pull from)…" : "Except a chest (never send to)…" });
             panel.EndInline();
             ctx.Track(_add.OnChanged(v =>
             {
@@ -429,6 +430,7 @@ namespace Satisvampory.Client
                 try { _add.Value = ""; }
                 finally { _redrawing = false; }
                 if (v == "list") Owner.OpenPicker(_side);
+                else if (v == "except") Owner.OpenPicker(_side, except: true);
                 else if (v == "pick") PickInWorld();
             }));
 
@@ -534,11 +536,21 @@ namespace Satisvampory.Client
             }
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static object? LastWindow(SatisContext ctx) => ctx.Inventory.LastWindow;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void Reopen(SatisContext ctx, object window) =>
+            ctx.Inventory.ReopenLast((Progenitor.Inventory.ContainerWindowInfo)window);
+
         void PickInWorld()
         {
             var ctx = Owner.Ctx;
             Hide();
             Owner.HoldTarget = true;
+            // The chest window the player was in, to reopen it after the pick (Progenitor #110; none on older Cores).
+            object? window = null;
+            try { window = LastWindow(ctx); } catch (Exception) { }
             ctx.Hud.PickInWorld(result =>
             {
                 if (!result.IsCurrent || !result.HasNetworkId)
@@ -562,8 +574,10 @@ namespace Satisvampory.Client
                 });
             }, () =>
             {
-                // Back to the list as it is now (what the picks added), still on the same chest.
+                // Back in the chest window as it was, then the list as it is now (what the picks added).
                 Owner.HoldTarget = false;
+                if (window != null)
+                    try { Reopen(ctx, window); } catch (Exception) { }
                 Owner.Load(() => Show());
             }, new UiWorldPickOptions
             {
@@ -977,6 +991,7 @@ namespace Satisvampory.Client
     internal sealed class PickerView : View
     {
         int _side;
+        bool _except;
         IUiChecklist _list = null!;
         IUiLabel _note = null!;
 
@@ -1019,6 +1034,12 @@ namespace Satisvampory.Client
             {
                 foreach (var id in picked)
                 {
+                    // Except: chests and stations only; each becomes "never pull from / send to" on this list.
+                    if (_except)
+                    {
+                        if (id.StartsWith("c:")) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 0, Entry = new RowMsg { Kind = 3, ContainerId = id.Substring(2) } });
+                        continue;
+                    }
                     var row = id == "md" ? new RowMsg { Kind = 2 }
                         : id.StartsWith("b:") ? new RowMsg { Kind = 1, BeltId = id.Substring(2) }
                         : new RowMsg { Kind = 0, ContainerId = id.Substring(2) };
@@ -1050,11 +1071,14 @@ namespace Satisvampory.Client
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         static string? BuildingName(SatisContext ctx, int prefab) => ctx.Castles.BuildingDisplayName(prefab);
 
-        public void Show(int side)
+        public void Show(int side, bool except = false)
         {
             _side = side;
+            _except = except;
             _ = Panel;
-            _note.Text = side == 0 ? "Add to Input: where this pulls from." : "Add to Output: where this sends to.";
+            _note.Text = except
+                ? (side == 0 ? "Except: never pull from these, whatever belt names them." : "Except: never send to these, whatever belt names them.")
+                : side == 0 ? "Add to Input: where this pulls from." : "Add to Output: where this sends to.";
             Owner.Send<PickerReq, PickerReply>(new PickerReq { Target = Owner.Target(), Side = side }, r =>
             {
                 _list.SetSelected(Array.Empty<string>());
@@ -1073,7 +1097,8 @@ namespace Satisvampory.Client
                         _ => new[] { "common" },
                     },
                     BuildingPrefab = x.BuildingPrefab,
-                    DisabledReason = x.Refused ?? "",
+                    // Except takes any chest or station (a refused link can still be excepted); never a belt or Mass Deposit.
+                    DisabledReason = _except ? (x.Key.StartsWith("c:") ? "" : "Except names a chest or station") : x.Refused ?? "",
                 }
                 .Text("plot", x.Plot)
                 .Number("dist", x.Distance >= 0 ? x.Distance : null, x.Distance >= 0 ? null : "")

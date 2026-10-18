@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 using Satisvampory.Engine.Logging;
 using Satisvampory.Engine.Model;
+using Entry = Satisvampory.Engine.Logging.MoveLog.Entry;
 using Xunit;
 
 namespace Satisvampory.Engine.Tests
@@ -60,6 +61,26 @@ namespace Satisvampory.Engine.Tests
             Assert.Equal("Fangly", Assert.Single(log.Read(new[] { A, B }, 24, _ => true, 50)).Actor);
             _now = _now.AddHours(25);
             Assert.Empty(log.Read(new[] { A }, 24, _ => true, 50));
+        }
+
+        [Fact]
+        public void Saved_castles_restore_and_a_move_filed_under_two_castles_reads_once()
+        {
+            var log = Log();
+            Feed(log, 10, A, B);
+            Assert.Equal(2, log.TakeDirty().Count);
+            var savedA = log.CastleEntries(A);
+            var savedB = log.CastleEntries(B);
+
+            // A reload: a new log from what was saved (as copies, the way JSON gives them back).
+            Entry Copy(Entry e) => new Entry { Minute = e.Minute, Last = e.Last, Item = e.Item, Amount = e.Amount, Moves = e.Moves,
+                From = e.From, FromName = e.FromName, To = e.To, ToName = e.ToName, Why = e.Why, For = e.For };
+            var back = Log();
+            back.ImportCastle(A, savedA.Select(Copy));
+            back.ImportCastle(B, savedB.Select(Copy));
+            var e = Assert.Single(back.Read(new[] { A, B }, 24, _ => true, 50));
+            Assert.Equal(10, e.Amount);
+            Assert.Empty(back.TakeDirty());
         }
     }
 }

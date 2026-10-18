@@ -17,25 +17,25 @@ namespace Satisvampory.Engine.Logging
     {
         public sealed class Entry
         {
-            public long Minute;
-            public DateTime Last;
-            public int Item;
-            public int Amount;
-            public int Moves;
-            public Guid From;
-            public string FromName = "";
-            public string FromPlot = "";
-            public Guid To;
-            public string ToName = "";
-            public string ToPlot = "";
+            public long Minute { get; set; }
+            public DateTime Last { get; set; }
+            public int Item { get; set; }
+            public int Amount { get; set; }
+            public int Moves { get; set; }
+            public Guid From { get; set; }
+            public string FromName { get; set; } = "";
+            public string FromPlot { get; set; } = "";
+            public Guid To { get; set; }
+            public string ToName { get; set; } = "";
+            public string ToPlot { get; set; } = "";
             /// <summary>Plain words: "Station feed", "Input/Output", "Quick stash"...</summary>
-            public string Why = "";
+            public string Why { get; set; } = "";
             /// <summary>For a station feed: the product the recipe makes; 0 otherwise.</summary>
-            public int For;
+            public int For { get; set; }
             /// <summary>The player, for stash, tidy, Take and settings; empty for the conveyor.</summary>
-            public string Actor = "";
+            public string Actor { get; set; } = "";
             /// <summary>A settings change ("Filter saved: 3 allowed, 1 blocked"); empty for a move.</summary>
-            public string Detail = "";
+            public string Detail { get; set; } = "";
             public bool IsChange => Detail.Length > 0;
         }
 
@@ -64,6 +64,8 @@ namespace Satisvampory.Engine.Logging
                 e.Amount += amount;
                 e.Moves++;
                 e.Last = now;
+                if (fromPlot is { } fa) _dirty.Add(fa);
+                if (toPlot is { } tb) _dirty.Add(tb);
                 return;
             }
             e = new Entry
@@ -81,6 +83,7 @@ namespace Satisvampory.Engine.Logging
         {
             if (!_byCastle.TryGetValue(castle, out var list)) _byCastle[castle] = list = new List<Entry>();
             list.Add(e);
+            _dirty.Add(castle);
             if (list.Count > PerCastle) list.RemoveRange(0, PerCastle / 10);
         }
 
@@ -116,6 +119,43 @@ namespace Satisvampory.Engine.Logging
                 }
             }
             return result.OrderByDescending(e => e.Last).Take(max).ToList();
+        }
+
+        readonly HashSet<PlotId> _dirty = new();
+        readonly Dictionary<(long, int, Guid, Guid, string, int, string, string), Entry> _imported = new();
+
+        /// <summary>Castles with entries not yet saved; reading clears the set.</summary>
+        public List<PlotId> TakeDirty()
+        {
+            var d = _dirty.ToList();
+            _dirty.Clear();
+            return d;
+        }
+
+        /// <summary>A castle's entries of the last 24 hours, oldest first, for saving.</summary>
+        public List<Entry> CastleEntries(PlotId castle)
+        {
+            var cutoff = _now() - Keep;
+            return _byCastle.TryGetValue(castle, out var list) ? list.Where(e => e.Last >= cutoff).ToList() : new List<Entry>();
+        }
+
+        /// <summary>
+        /// A castle's saved entries, filed again. One move filed under two castles is saved under both and becomes
+        /// one entry again here, so an island read shows it once.
+        /// </summary>
+        public void ImportCastle(PlotId castle, IEnumerable<Entry>? saved)
+        {
+            if (saved == null) return;
+            var cutoff = _now() - Keep;
+            if (!_byCastle.TryGetValue(castle, out var list)) _byCastle[castle] = list = new List<Entry>();
+            foreach (var e in saved.Where(x => x != null && x.Last >= cutoff))
+            {
+                var key = (e.Minute, e.Item, e.From, e.To, e.Why ?? "", e.For, e.Actor ?? "", e.Detail ?? "");
+                if (!_imported.TryGetValue(key, out var one)) _imported[key] = one = e;
+                list.Add(one);
+            }
+            list.Sort((x, y) => x.Last.CompareTo(y.Last));
+            if (list.Count > PerCastle) list.RemoveRange(0, list.Count - PerCastle);
         }
 
         /// <summary>The conveyor's own words as a reader sees them.</summary>

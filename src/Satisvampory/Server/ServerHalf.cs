@@ -47,6 +47,25 @@ namespace Satisvampory.Server
         /// <summary>What Satisvampory moved, per castle, last 24 hours (the Log tab).</summary>
         internal MoveLog MoveLog { get; } = new();
 
+        const string LogKey = "log/";
+
+        void SaveLogLoop()
+        {
+            SaveLog();
+            Progenitor.Dev.MainThread.PostDelayed(60, SaveLogLoop, _ctx.Owner);
+        }
+
+        /// <summary>The castles with new Log entries, written to the mod's store (saved with the world).</summary>
+        void SaveLog()
+        {
+            try
+            {
+                foreach (var plot in MoveLog.TakeDirty())
+                    _ctx.Save.Set(LogKey + plot.Value, MoveLog.CastleEntries(plot));
+            }
+            catch (System.Exception e) { _ctx.Log.LogWarning("Satisvampory: log not saved: " + e.Message); }
+        }
+
         internal unsafe void Attach()
         {
             _active = this;
@@ -75,6 +94,15 @@ namespace Satisvampory.Server
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();
             new MaterialService(_ctx, this).Attach();
+            // The Log lives with the world save, one key per castle: it survives reloads and restarts.
+            _ctx.Track(_ctx.Save.WhenReady(store =>
+            {
+                foreach (var key in store.Keys)
+                    if (key.StartsWith(LogKey, System.StringComparison.Ordinal) && ulong.TryParse(key.Substring(LogKey.Length), out var plot))
+                        MoveLog.ImportCastle(new Engine.Model.PlotId(plot), store.Get<List<MoveLog.Entry>>(key));
+            }));
+            Progenitor.Dev.MainThread.PostDelayed(60, SaveLogLoop, _ctx.Owner);
+            _ctx.Track(new OnDispose(SaveLog));
             // Hand moves into the Log (Progenitor #108); an older Core logs none.
             try { new HandMoves(_ctx, this).Attach(); }
             catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: hand moves not logged (Progenitor too old?): " + e.Message); }

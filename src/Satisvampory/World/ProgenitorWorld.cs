@@ -134,7 +134,8 @@ namespace Satisvampory.World
 
         public void InitializeDefaults(Engine.Persistence.IslandState state)
         {
-            var infos = _nodes.Values.Select(n => n.Info).ToList();
+            // Stress-test castles (synthetic owners) get no automatic links while they are qualified.
+            var infos = _nodes.Values.Where(n => !Server.StressOwners.Is(n.Castle.Owner.PlatformId)).Select(n => n.Info).ToList();
             if (state.DefaultBeltMigrationDue)
             {
                 Engine.Lists.DefaultBelt.Initialize(state.Graph, Array.Empty<ContainerInfo>()); // the belt itself first

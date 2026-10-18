@@ -154,6 +154,7 @@ namespace Satisvampory.Server
         {
             _ctx = ctx;
             _half = half;
+            StressOwners.Bind(ctx);
         }
 
         double Now => _clock.Elapsed.TotalSeconds;
@@ -200,7 +201,7 @@ namespace Satisvampory.Server
         void RunIslandsCore(ServerSettings server)
         {
             var sharing = Sharing(server);
-            var castles = _ctx.Castles.All().Where(c => c.Enabled).ToList();
+            var castles = _ctx.Castles.All().Where(c => c.Enabled && !StressOwners.Is(c.Owner.PlatformId)).ToList();
             SweepDestroyed(castles);
             WatchMaterialFacts(castles);
             var done = new HashSet<PlotId>();

@@ -312,12 +312,12 @@ namespace Satisvampory.Client
             try { key = _altKey(); } catch (Exception) { key = ""; }
             if (key.Length == 0 || key == "None") return null;
             try { return KeyHintRow(); }
-            catch (Exception) { return new VanillaRow($"Hold {key}: total, reserve, available and cap", LabelTone.Muted); }
+            catch (Exception) { return new VanillaRow($"Hold {key}: Logistics", LabelTone.Muted); }
         }
 
         // The game's own key-hint look: "Hold [Alt] Total, reserve, available and cap" (Progenitor #114).
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        static VanillaRow KeyHintRow() => VanillaRow.KeyHint(AltHoldId, "Total, reserve, available and cap", hold: true);
+        static VanillaRow KeyHintRow() => VanillaRow.KeyHint(AltHoldId, "Logistics", hold: true);
 
         /// <summary>Numbers under an ingredient line, lined up with its name (Progenitor #114 indent; spaces before).</summary>
         static VanillaRow UnderLine(string numbers)

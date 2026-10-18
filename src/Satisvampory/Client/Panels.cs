@@ -177,6 +177,8 @@ namespace Satisvampory.Client
         /// </summary>
         internal bool HoldTarget { get; set; }
 
+        bool _noTabDisable;
+
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
 
@@ -223,9 +225,13 @@ namespace Satisvampory.Client
             _state = reply;
             _containerId = reply.ContainerId;
             // A private chest's Input and Output do not run: grey their tabs (Progenitor #106; older Cores keep the notice).
-            if (_nativeTabs != null)
+            if (_nativeTabs != null && !_noTabDisable)
                 try { SetListTabs(_nativeTabs, !reply.Deposit.Private); }
-                catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: tab disabling unavailable (Progenitor too old?): " + e.Message); }
+                catch (Exception e)
+                {
+                    _noTabDisable = true; // once per load
+                    _ctx.Log.LogInfo("Satisvampory: tab disabling unavailable (Progenitor too old?): " + e.Message);
+                }
             // Only open views: redrawing builds a view's panel, and a built panel shows.
             _input.RedrawIfOpen();
             _output.RedrawIfOpen();

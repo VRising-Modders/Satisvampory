@@ -487,10 +487,13 @@ namespace Satisvampory.Server
             foreach (var (owner, other) in graph.Lists)
             {
                 if (owner == c.Id) continue;
-                for (var j = 0; j < other.Output.Count; j++)
+                // Not when this end already names that container itself: one link, one row.
+                var ownIn = lists.Input.Any(e => e.Kind == EntryKind.Container && e.Container == owner);
+                var ownOut = lists.Output.Any(e => e.Kind == EntryKind.Container && e.Container == owner);
+                for (var j = 0; j < other.Output.Count && !ownIn; j++)
                     if (other.Output[j].Kind == EntryKind.Container && other.Output[j].Container == c.Id)
                         msg.Input.Add(LinkRow(s, owner, other.Output[j], 1, j, ListSide.Input, report));
-                for (var j = 0; j < other.Input.Count; j++)
+                for (var j = 0; j < other.Input.Count && !ownOut; j++)
                     if (other.Input[j].Kind == EntryKind.Container && other.Input[j].Container == c.Id)
                         msg.Output.Add(LinkRow(s, owner, other.Input[j], 0, j, ListSide.Output, report));
             }

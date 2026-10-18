@@ -364,6 +364,9 @@ namespace Satisvampory.Client
 
         internal void OpenPicker(int side, bool except = false) => _picker.Show(side, except);
 
+        /// <summary>Show a container as newly added on the Input (0) or Output (1) list.</summary>
+        internal void MarkAdded(int side, string containerId) => (side == 0 ? _input : _output).MarkAdded(containerId);
+
         internal void OpenFilterPicker(DepositView into) => _filterPicker.Show(into);
 
         internal void SelectTab(int tab)
@@ -471,6 +474,17 @@ namespace Satisvampory.Client
         IUiLabel _header = null!;
         IUiDropdown _order = null!;
         IUiToggle _salvageOnly = null!;
+
+        /// <summary>Containers this list just gained (picked, or added from the list), shown as new for a minute.</summary>
+        readonly Dictionary<string, float> _justAdded = new();
+
+        internal void MarkAdded(string containerId)
+        {
+            if (containerId.Length > 0) _justAdded[containerId] = UnityEngine.Time.realtimeSinceStartup;
+        }
+
+        bool IsNew(RowMsg r) =>
+            r.ContainerId.Length > 0 && _justAdded.TryGetValue(r.ContainerId, out var at) && UnityEngine.Time.realtimeSinceStartup - at < 60;
         IUiDataTable _list = null!;
         IUiLabel _loop = null!;
         IUiDropdown _loopMode = null!;
@@ -598,9 +612,10 @@ namespace Satisvampory.Client
                 // Exceptions last (their order means nothing); the row id stays the list index the server knows.
                 var shown = rows.Select((r, i) => (r, i)).OrderBy(x => x.r.Kind == 3 ? 1 : 0).ThenBy(x => x.i).ToList();
                 _list.SetRows(shown.Select(x => (r: x.r, i: x.i, except: x.r.Kind == 3)).Select(x => Arrows(new UiTableRow(x.i.ToString()) { BuildingPrefab = x.r.BuildingPrefab }
-                    .Text("name", x.except ? x.r.Name.Replace("Except ", "") : x.r.Auto ? x.r.Name + " (automatic)" : x.r.Name)
+                    .Text("name", x.except ? x.r.Name.Replace("Except ", "") : x.r.Auto ? x.r.Name + " (automatic)" : x.r.Name,
+                        IsNew(x.r) ? LabelTone.Pending : LabelTone.Normal)
                     .Text("rule", x.except ? "Never" : _side == 0 ? "Pull from" : "Send to", x.except ? LabelTone.Danger : LabelTone.Ok)
-                    .Text("details", string.Join(" · ", new[] { x.except ? (_side == 0 ? "never pulled from" : "never sent to") : x.r.Type, x.r.Where, x.r.Status }.Where(t => !string.IsNullOrEmpty(t))))
+                    .Text("details", string.Join(" · ", new[] { IsNew(x.r) ? "new" : "", x.except ? (_side == 0 ? "never pulled from" : "never sent to") : x.r.Type, x.r.Where, x.r.Status }.Where(t => !string.IsNullOrEmpty(t))))
                     .Action("find", UiRowActionIcon.Locate,
                         x.r.ContainerId.Length > 0 ? "Find this chest or station" : x.r.Kind == 1 ? "Open this belt in Belts" : "",
                         x.r.ContainerId.Length > 0 || x.r.Kind == 1)
@@ -666,6 +681,7 @@ namespace Satisvampory.Client
                     Owner.Apply(reply);
                     var rows = _side == 0 ? reply.Input : reply.Output;
                     var added = rows.LastOrDefault();
+                    if (added != null) MarkAdded(added.ContainerId);
                     var what = added == null ? "it" : $"{added.Name} · {added.Where}";
                     ctx.Hud.Notify($"Added {what} to {(_side == 0 ? "Input" : "Output")} of {reply.Name} · {reply.Where}.", kind: UiNoticeKind.Success, seconds: 4);
                 });
@@ -1145,12 +1161,17 @@ namespace Satisvampory.Client
                     // Except: chests and stations only; each becomes "never pull from / send to" on this list.
                     if (_except)
                     {
-                        if (id.StartsWith("c:")) Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 0, Entry = new RowMsg { Kind = 3, ContainerId = id.Substring(2) } });
+                        if (id.StartsWith("c:"))
+                        {
+                            Owner.MarkAdded(_side, id.Substring(2));
+                            Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 0, Entry = new RowMsg { Kind = 3, ContainerId = id.Substring(2) } });
+                        }
                         continue;
                     }
                     var row = id == "md" ? new RowMsg { Kind = 2 }
                         : id.StartsWith("b:") ? new RowMsg { Kind = 1, BeltId = id.Substring(2) }
                         : new RowMsg { Kind = 0, ContainerId = id.Substring(2) };
+                    Owner.MarkAdded(_side, row.ContainerId);
                     Owner.Edit(new EditListReq { Target = Owner.Target(), Side = _side, Op = 0, Entry = row });
                 }
                 Hide();

@@ -780,8 +780,8 @@ namespace Satisvampory.Server
 
         /// <summary>What a place is, in words the player knows from the game.</summary>
         /// <summary>
-        /// A hovered recipe's numbers: per item, the island total in storage, what the station's Inputs reach and
-        /// already hold, the reserve and the cap.
+        /// A hovered recipe's numbers: per item, the island total in storage, what the station's Inputs reach,
+        /// the reserve and the cap.
         /// </summary>
         RecipeInfoReply RecipeInfo(Session s, RecipeInfoReq q)
         {
@@ -807,7 +807,6 @@ namespace Satisvampory.Server
                 var item = new ItemId(guid);
                 reply.Island.Add(chests.Sum(c => (long)s.World.Count(c.Id, item)));
                 reply.Reachable.Add(reach == null ? -1 : chests.Where(c => reach.Contains(c.Id)).Sum(c => (long)s.World.Count(c.Id, item)));
-                reply.AtStation.Add(station == null ? -1 : s.World.Count(station.Id, item));
                 reply.Reserve.Add(s.Island.State.Rules.Reserve(item, s.Catalog));
                 reply.Cap.Add(s.Island.State.Rules.Cap(item, s.Catalog) ?? -1);
             }
@@ -897,7 +896,11 @@ namespace Satisvampory.Server
         StorageCountReply StorageCount(Session s, StorageCountReq q)
         {
             var item = new ItemId(q.Item);
-            var reply = new StorageCountReply();
+            var reply = new StorageCountReply
+            {
+                Reserve = s.Island.State.Rules.Reserve(item, s.Catalog),
+                Cap = s.Island.State.Rules.Cap(item, s.Catalog) ?? -1,
+            };
             foreach (var c in IslandScope.Chests(s.World, s.Island.Scope))
             {
                 var n = s.World.Count(c.Id, item);

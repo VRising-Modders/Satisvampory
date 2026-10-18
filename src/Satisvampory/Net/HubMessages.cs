@@ -367,8 +367,6 @@ namespace Satisvampory.Net
         [Field(1)] public List<long> Island = new();
         /// <summary>What the station's Inputs can reach; -1 without a station.</summary>
         [Field(2)] public List<long> Reachable = new();
-        /// <summary>Already in the station; -1 without a station.</summary>
-        [Field(3)] public List<int> AtStation = new();
         [Field(4)] public List<int> Reserve = new();
         /// <summary>-1: no cap.</summary>
         [Field(5)] public List<int> Cap = new();
@@ -404,6 +402,9 @@ namespace Satisvampory.Net
     {
         [Field(1)] public long Total;
         [Field(2)] public int Chests;
+        [Field(3)] public int Reserve;
+        /// <summary>-1: no cap.</summary>
+        [Field(4)] public int Cap = -1;
     }
 
     [ModMessage("sv.huntlog.get")]

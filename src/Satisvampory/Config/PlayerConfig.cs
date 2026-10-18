@@ -44,6 +44,7 @@ namespace Satisvampory.Config
             // Bits 10-12 were the heart top-up switches, now server settings (admin only).
             c.Flag(ctx, 14, "RepeatMyHunts", d.RepeatMyHunts, "Repeat my servants' hunts", "When a hunt from one of my castles comes back, send the servants out on it again (if the server allows repeat hunts).");
             c.Flag(ctx, 15, "LogMyDeposits", d.LogMyDeposits, "Show where my deposits go", "Stash, tidy and servant hunt news go to chat, listing each item and the chest it went to. Off: a short pop-up instead.");
+            c.Flag(ctx, 16, "AdvancedTooltipNumbers", d.AdvancedTooltipNumbers, "Advanced tooltip numbers", "Item and recipe tooltips always show total, reserve, available and cap.");
             c.Flag(ctx, 13, "ShowTermHints", d.ShowTermHints, "Show term hints (ⓘ)", "Small markers that explain Belt, Category and the rest.");
             var redistribution = ctx.Bind(Section, "ShowRedistribution", false, "Show the game redistribution tab beside Production, Input and Output.");
             redistribution.SettingChanged += (_, _) => c.Changed?.Invoke();
@@ -55,6 +56,7 @@ namespace Satisvampory.Config
         }
 
         public bool ShowRedistribution => Rows.Find(r => r.Entry.Definition.Key == "ShowRedistribution").Entry?.Value ?? false;
+        public bool AdvancedTooltipNumbers => Rows.Find(r => r.Entry.Definition.Key == "AdvancedTooltipNumbers").Entry?.Value ?? false;
         public bool AutoPinFind => Rows.Find(r => r.Entry.Definition.Key == "AutoPinFind").Entry?.Value ?? true;
 
         public uint Bits()
@@ -84,6 +86,7 @@ namespace Satisvampory.Config
                 RepeatMyHunts = On(14),
                 LogMyDeposits = On(15),
                 ShowTermHints = On(13),
+                AdvancedTooltipNumbers = On(16),
             };
         }
 

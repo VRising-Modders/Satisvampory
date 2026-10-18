@@ -19,6 +19,8 @@ namespace Satisvampory.Engine.Persistence
         /// <summary>The server log lists what my stash, tidy and servant loot moved, item by item and chest by chest.</summary>
         public bool LogMyDeposits { get; set; } = true;
         public bool ShowTermHints { get; set; } = true;
+        /// <summary>Item and recipe tooltips always show total, reserve, available and cap (client only).</summary>
+        public bool AdvancedTooltipNumbers { get; set; }
     }
 
     /// <summary>Castle page (spec 10), stored on the heart.</summary>

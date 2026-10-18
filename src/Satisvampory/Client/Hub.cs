@@ -148,12 +148,19 @@ namespace Satisvampory.Client
             else UiApi.Show(_storageMenu);
         }
 
-        readonly Dictionary<int, (double At, string Line)> _storageCache = new();
-
-        /// <summary>"In storage: 1,240 (3 chests)" on item tooltips while on a plot; cached ten seconds per item.</summary>
         /// <summary>
-        /// The game's recipe tooltip at a station or in the crafting tab: the product's island total, reserve and cap
-        /// under the description; per requirement its total, what this station's Inputs reach, reserve and cap.
+        /// Advanced tooltip numbers: the "Advanced tooltip numbers" setting is on (hold Alt is to come once
+        /// Progenitor can bind a lone modifier). Normal tooltips stay the game's own.
+        /// </summary>
+        bool Advanced => _player.AdvancedTooltipNumbers;
+
+        static string CapText(int cap) => cap < 0 ? "Cap none" : $"Cap {cap:N0}";
+
+        /// <summary>
+        /// The game's recipe tooltip at a station or in the crafting tab, advanced only: small gray lines with the
+        /// product's total, reserve and cap, and per requirement its total, reserve, available and cap. Total is
+        /// what the island stores; available is what this station's Inputs reach (the island without a
+        /// station) less the reserve.
         /// </summary>
         void AttachRecipeTooltip()
         {
@@ -165,7 +172,7 @@ namespace Satisvampory.Client
             _ctx.Track(body.OnPanel(e =>
             {
                 var seq = ++sequence;
-                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0) { body.ClearRows(); needs.ClearRows(); return; }
+                if (e.Change == VanillaPanelChange.Closed || e.Target.RecipeGuid == 0 || !Advanced) { body.ClearRows(); needs.ClearRows(); return; }
                 var t = e.Target;
                 var items = new List<int>();
                 if (t.ProductGuid != 0) items.Add(t.ProductGuid);
@@ -176,27 +183,31 @@ namespace Satisvampory.Client
                 {
                     if (seq != sequence || !r.Ok || r.Reply == null || !body.IsOpen) return;
                     var a = r.Reply;
-                    string Cap(int i) => a.Cap[i] < 0 ? "no cap" : $"cap {a.Cap[i]:N0}";
                     string Name(int guid) => ClientItems.NameOf(_ctx, guid) ?? "Item";
                     var first = 0;
                     if (t.ProductGuid != 0)
                     {
-                        body.SetRows(new List<VanillaRow> { new VanillaRow($"{Name(t.ProductGuid)}: {a.Island[0]:N0} stored in {a.Scope} · reserve {a.Reserve[0]:N0} · {Cap(0)}", LabelTone.Normal) });
+                        body.SetRows(new List<VanillaRow> { new VanillaRow($"Total {a.Island[0]:N0} · Reserve {a.Reserve[0]:N0} · {CapText(a.Cap[0])}", LabelTone.Muted) });
                         first = 1;
                     }
                     var lines = new List<VanillaRow>();
                     for (var i = first; i < items.Count && i < a.Island.Count; i++)
                     {
-                        var line = $"{Name(items[i])}: {a.Island[i]:N0} stored";
-                        if (a.Reachable[i] >= 0) line += $" · {a.Reachable[i]:N0} reachable · {a.AtStation[i]:N0} here";
-                        line += $" · reserve {a.Reserve[i]:N0} · {Cap(i)}";
-                        lines.Add(new VanillaRow(line, LabelTone.Normal));
+                        var reach = a.Reachable[i] >= 0 ? a.Reachable[i] : a.Island[i];
+                        var available = Math.Max(0, reach - a.Reserve[i]);
+                        lines.Add(new VanillaRow($"{Name(items[i])}: Total {a.Island[i]:N0} · Reserve {a.Reserve[i]:N0} · Available {available:N0} · {CapText(a.Cap[i])}", LabelTone.Muted));
                     }
                     needs.SetRows(lines);
                 });
             }));
         }
 
+        readonly Dictionary<int, (double At, string[] Lines)> _storageCache = new();
+
+        /// <summary>
+        /// Item tooltips while on a plot: "In storage: 1,240 (3 chests)", and with advanced numbers the reserve,
+        /// available and cap too. Cached ten seconds per item.
+        /// </summary>
         void AttachTooltip()
         {
             var tip = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid);
@@ -209,17 +220,26 @@ namespace Satisvampory.Client
                     return;
                 }
                 var item = e.Target.ItemGuid;
+                var advanced = Advanced;
+                var key = advanced ? ~item : item;
                 var now = _clock.Elapsed.TotalSeconds;
-                if (_storageCache.TryGetValue(item, out var hit) && now - hit.At < 10)
+                if (_storageCache.TryGetValue(key, out var hit) && now - hit.At < 10)
                 {
-                    tip.SetRows(hit.Line.Length == 0 ? Array.Empty<string>() : new[] { hit.Line });
+                    tip.SetRows(hit.Lines);
                     return;
                 }
                 _ctx.Requests.Send<StorageCountReq, StorageCountReply>(new StorageCountReq { Item = item }, r =>
                 {
-                    var line = r.Ok && r.Reply != null && r.Reply.Total > 0 ? $"In storage: {r.Reply.Total:N0} ({r.Reply.Chests} chest{(r.Reply.Chests == 1 ? "" : "s")})" : "";
-                    _storageCache[item] = (_clock.Elapsed.TotalSeconds, line);
-                    if (tip.IsOpen && tip.Target.ItemGuid == item) tip.SetRows(line.Length == 0 ? Array.Empty<string>() : new[] { line });
+                    var lines = Array.Empty<string>();
+                    if (r.Ok && r.Reply is { } c)
+                    {
+                        var list = new List<string>();
+                        if (c.Total > 0) list.Add($"In storage: {c.Total:N0} ({c.Chests} chest{(c.Chests == 1 ? "" : "s")})");
+                        if (advanced) list.Add($"Total {c.Total:N0} · Reserve {c.Reserve:N0} · Available {Math.Max(0, c.Total - c.Reserve):N0} · {CapText(c.Cap)}");
+                        lines = list.ToArray();
+                    }
+                    _storageCache[key] = (_clock.Elapsed.TotalSeconds, lines);
+                    if (tip.IsOpen && tip.Target.ItemGuid == item) tip.SetRows(lines);
                 });
             }));
         }

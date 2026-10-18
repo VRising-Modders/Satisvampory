@@ -65,9 +65,36 @@ namespace Satisvampory.Client
                 LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, kind => kind == VanillaPanelKind.PrisonCell);
             }
             else LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
-            LogButton(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge);
-            Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
-            Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: only items you send out of the heart", () => Open(_output));
+            HeartButtons();
+        }
+
+        IUiButton? _heartLog;
+
+        /// <summary>
+        /// The heart has no tab row and no rename pencil: one column at its right edge with Settings (this castle's
+        /// page in the Satisvampory window) and the Log.
+        /// </summary>
+        void HeartButtons()
+        {
+            var handle = UiApi.AttachToVanilla(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, _ctx.Owner, _ctx.Guid);
+            _ctx.Track(handle);
+            FollowTarget(handle, null);
+            var settings = handle.Button("Settings");
+            _ctx.Track(settings.Tooltip("This castle's Satisvampory settings.", "Settings"));
+            _ctx.Track(settings.OnClick(() => OpenHub?.Invoke(Hub.CastleTab)));
+            IUiButton log;
+            try { log = handle.Button("Log", VanillaButtonIcon.Drawn("log")); }
+            catch (Exception) { log = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll)); }
+            _heartLog = log;
+            log.Visible = _logShown;
+            _ctx.Track(log.Tooltip("What moved in and out of this heart, and who changed its settings.", "Log"));
+            _ctx.Track(log.OnClick(() =>
+            {
+                if (!_hasTarget) return;
+                void Go() { if (_state != null) OpenLog?.Invoke(_state.ContainerId, _state.Name); }
+                if (_state != null) Go();
+                else Load(Go);
+            }));
         }
 
         void Tabs(VanillaUiSite site, string[] captions)
@@ -147,6 +174,7 @@ namespace Satisvampory.Client
                 _logShown = value;
                 // A button shown only on some windows comes back on its next panel event.
                 foreach (var (h, filtered) in _logButtons) h.Visible = value && !filtered;
+                if (_heartLog != null) _heartLog.Visible = value;
             }
         }
 
@@ -189,6 +217,12 @@ namespace Satisvampory.Client
             var button = handle.Button(caption);
             _ctx.Track(button.OnClick(onClick));
             _ctx.Track(button.Tooltip(tip, caption));
+            FollowTarget(handle, showFor);
+        }
+
+        /// <summary>The window this handle sits on becomes the panels' target (and closing it drops the target).</summary>
+        void FollowTarget(IVanillaAttachHandle handle, Func<VanillaPanelKind, bool>? showFor)
+        {
             _ctx.Track(handle.OnPanel(e =>
             {
                 if (e.Change == VanillaPanelChange.Closed)

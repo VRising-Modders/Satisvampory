@@ -38,6 +38,10 @@ namespace Satisvampory.Server
         {
             _ctx.Events.On<ServantsReturned>(OnReturned);
             _ctx.Requests.Handle<GetHuntLogReq, HuntLogReply>((u, q, i) => HuntLog(u));
+            // Players who get Satisvampory's hunt blocks in chat don't also need the game's one line per servant
+            // ("X has returned…", "Hunt in Y started.", "X was killed…"); everyone else keeps them.
+            try { SuppressGameLines(); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: game hunt lines stay (Progenitor too old?): " + e.Message); }
             _ctx.Track(new OnDispose(() => _stopped = true));
             Progenitor.Dev.MainThread.PostDelayed(SentPollSeconds, PollSent, _ctx.Owner);
         }
@@ -571,6 +575,17 @@ namespace Satisvampory.Server
             var lines = text.Split('\n');
             ServerActions.Report(_ctx, _half, lines[0], lines.Skip(1).Select(l => l.Trim()).ToList(), ClanOnlineAccounts(castle), ForLog);
             ToastIfChatOff(castle, text);
+        }
+
+        // Its own method: on a Core without the API only this call fails (and is caught), not Attach.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        void SuppressGameLines() => _ctx.Track(_ctx.Servants.SuppressGameNotices((user, kind) => ShowsHuntBlocks(user)));
+
+        bool ShowsHuntBlocks(Entity user)
+        {
+            var em = _ctx.World!.EntityManager;
+            if (!em.Exists(user) || !em.HasComponent<User>(user)) return false;
+            return _half.PlayerFor(em.GetComponentData<User>(user).PlatformId).LogMyDeposits;
         }
 
         /// <summary>Online users of the castle's clan, or its owner when clanless.</summary>

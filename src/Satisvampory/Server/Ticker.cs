@@ -628,7 +628,7 @@ namespace Satisvampory.Server
                     if (!HeartFeed.CooledDown(_heartFed, plot, Now)) continue;
                     var castle = all.First(c => ProgenitorWorld.PlotOf(c) == plot);
                     _heartFed[plot] = Now;
-                    try { TopUp(castle, all, server); }
+                    try { TopUp(castle, all, server, UserName(userEntity)); }
                     catch (Exception e) { _ctx.Log.LogError($"Satisvampory: heart top-up failed on plot {plot}: {e.Message}"); }
                 }
             }
@@ -639,7 +639,13 @@ namespace Satisvampory.Server
         }
 
         /// <summary>Fill one heart's unlocked pads from its own island, worst-stored first, keeping reserve.</summary>
-        void TopUp(ICastleHandle castle, List<ICastleHandle> all, ServerSettings server)
+        string UserName(Entity user)
+        {
+            var em = _ctx.World!.EntityManager;
+            return em.Exists(user) && em.HasComponent<ProjectM.Network.User>(user) ? em.GetComponentData<ProjectM.Network.User>(user).CharacterName.ToString() : "";
+        }
+
+        void TopUp(ICastleHandle castle, List<ICastleHandle> all, ServerSettings server, string actor = "")
         {
             var (key, members) = IslandOf(castle, all, Sharing(server));
             var state = Stores.Load(_ctx.Save, key, ProgenitorWorld.ContainerIds(members, cachedRows: true));
@@ -662,8 +668,16 @@ namespace Satisvampory.Server
             var sources = ConveyorTick.HeartSources(world, deposit, state.Graph, new Engine.Model.ContainerId(castle.HeartId.Value), blood)
                 .Select(id => (id, world.Count(id, blood))).ToList();
             var total = members.SelectMany(c => world.ContainersOn(ProgenitorWorld.PlotOf(c))).Where(c => c.Shared).Sum(c => (long)world.Count(c.Id, blood));
+            var names = ServerActions.PlotNames(_ctx.Save, members);
             foreach (var (from, amount) in HeartFeed.Plan(heart, sources, total, state.Rules.Reserve(blood, deposit.Catalog)))
-                world.Transfer(from, InvPart.Main, heartId, blood, amount);
+            {
+                var moved = world.Transfer(from, InvPart.Main, heartId, blood, amount);
+                if (moved <= 0) continue;
+                // Into the Log as "Castle heart (Plot 1)": filed under both castles, the visitor named.
+                var src = world.Find(from);
+                _half.MoveLog.Add(src?.Plot, plot, blood.Guid, moved, from.Value, src?.DisplayName ?? "a chest", src == null ? "" : names(src.Plot),
+                    castle.HeartId.Value, "Castle heart", names(plot), "Heart top-up", 0, actor);
+            }
         }
     }
 }

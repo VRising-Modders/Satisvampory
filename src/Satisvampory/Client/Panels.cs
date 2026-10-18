@@ -111,8 +111,9 @@ namespace Satisvampory.Client
                 HideAll();
                 if (_afterReopen is { } back)
                 {
+                    // The game sends more than one event while the window opens; let it settle, then hand back.
                     _afterReopen = null;
-                    Load(() => Progenitor.Dev.MainThread.PostDelayed(0.1, back, _ctx.Owner));
+                    Progenitor.Dev.MainThread.PostDelayed(0.35, () => { if (_hasTarget) back(); }, _ctx.Owner);
                 }
             }
         }
@@ -240,6 +241,15 @@ namespace Satisvampory.Client
         }
 
         bool _noTabDisable;
+
+        /// <summary>Select the Input (0) or Output (1) tab of the open window, load it, then run <paramref name="then"/>.</summary>
+        internal void ShowListTab(int side, Action then)
+        {
+            var view = side == 0 ? _input : _output;
+            if (_nativeTabs != null && _nativeTabs.Selected != side + 1) _nativeTabs.Selected = side + 1; // shows that view
+            else Open(view);
+            Progenitor.Dev.MainThread.PostDelayed(0.25, then, _ctx.Owner);
+        }
 
         /// <summary>The player's open container window now (Progenitor #110), or null.</summary>
         internal static object? SnapshotWindow(SatisContext ctx)
@@ -1135,7 +1145,11 @@ namespace Satisvampory.Client
                 Owner.PreviewContainer(id.Substring(2), () =>
                 {
                     Owner.HoldTarget = false;
-                    Owner.AfterReopen(window, () => { _list.Resume(); base.Show(); });
+                    Owner.AfterReopen(window, () =>
+                    {
+                        // Back on the tab the Add came from, with the list on top as it was.
+                        Owner.ShowListTab(_side, () => { _list.Resume(); base.Show(); });
+                    });
                 });
             }));
         }

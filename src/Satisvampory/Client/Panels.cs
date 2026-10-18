@@ -56,8 +56,10 @@ namespace Satisvampory.Client
             Site(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: where this station's products go", () => Open(_output),
                 kind => kind == VanillaPanelKind.UnitStation);
             // A small Log button in the title row of every chest and station: the hub's Log on this one.
-            LogButton(VanillaUiSite.ContainerPanel);
-            LogButton(VanillaUiSite.StationPanel);
+            LogButton(VanillaUiSite.ContainerPanel, VanillaPanelAnchor.BesideRename);
+            // Stations and the heart take buttons only on their edges for now (the title row is asked of Progenitor).
+            LogButton(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge);
+            LogButton(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge);
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: only items you send out of the heart", () => Open(_output));
         }
@@ -118,9 +120,9 @@ namespace Satisvampory.Client
 
         const int ResearchScroll = 2065714452;
 
-        void LogButton(VanillaUiSite site)
+        void LogButton(VanillaUiSite site, VanillaPanelAnchor anchor)
         {
-            var handle = UiApi.AttachToVanilla(site, VanillaPanelAnchor.BesideRename, _ctx.Owner, _ctx.Guid + ".log");
+            var handle = UiApi.AttachToVanilla(site, anchor, _ctx.Owner, _ctx.Guid + ".log");
             _ctx.Track(handle);
             // The game's Research Scroll icon (a parchment) as the face; the caption is its tooltip.
             var button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll));

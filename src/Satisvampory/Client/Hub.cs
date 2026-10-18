@@ -218,6 +218,8 @@ namespace Satisvampory.Client
             _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
             // Needs Progenitor's recipe tooltip site (#89); an older Core leaves it off.
+            try { RegisterAltHold(); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: hold Alt for tooltip numbers off (Progenitor too old?): " + e.Message); }
             try { AttachRecipeTooltip(); }
             catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: recipe tooltip numbers off (Progenitor too old?): " + e.Message); }
             _ctx.Events.On<InventorySortUsed>(OnSort);
@@ -256,10 +258,34 @@ namespace Satisvampory.Client
         }
 
         /// <summary>
-        /// Advanced tooltip numbers: the "Advanced tooltip numbers" setting is on (hold Alt is to come once
-        /// Progenitor can bind a lone modifier). Normal tooltips stay the game's own.
+        /// Advanced tooltip numbers: the "Advanced tooltip numbers" setting is on, or Alt is held (the game's own
+        /// advanced-tooltip key). Normal tooltips stay the game's own.
         /// </summary>
-        bool Advanced => _player.AdvancedTooltipNumbers;
+        bool Advanced => _player.AdvancedTooltipNumbers || _altHeld;
+
+        bool _altHeld;
+        IVanillaAttachHandle? _recipeTip, _itemTip;
+
+        // Its own method: on a Core without lone-modifier holds (Progenitor #102) only this call fails (and is caught).
+        [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        void RegisterAltHold() =>
+            _ctx.Keybinds.RegisterHold("AdvancedTooltipHold", KeyChord.Alt, "Show advanced tooltip numbers while held",
+                onPressed: () => SetAltHeld(true), onReleased: () => SetAltHeld(false));
+
+        void SetAltHeld(bool held)
+        {
+            if (_altHeld == held) return;
+            _altHeld = held;
+            try { RefreshTooltips(); }
+            catch (Exception) { } // an older Core: the next hover shows the change
+        }
+
+        [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        void RefreshTooltips()
+        {
+            _recipeTip?.Refresh();
+            _itemTip?.Refresh();
+        }
 
         static string CapText(int cap) => cap < 0 ? "Cap none" : $"Cap {cap:N0}";
 
@@ -271,7 +297,7 @@ namespace Satisvampory.Client
         /// </summary>
         void AttachRecipeTooltip()
         {
-            var body = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid + ".recipe");
+            var body = _recipeTip = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid + ".recipe");
             var needs = UiApi.AttachToVanilla(VanillaUiSite.RecipeTooltip, VanillaPanelAnchor.TooltipRequirements, _ctx.Owner, _ctx.Guid + ".recipe.req");
             _ctx.Track(body);
             _ctx.Track(needs);
@@ -341,7 +367,7 @@ namespace Satisvampory.Client
         /// </summary>
         void AttachTooltip()
         {
-            var tip = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid);
+            var tip = _itemTip = UiApi.AttachToVanilla(VanillaUiSite.InventoryTooltip, VanillaPanelAnchor.TooltipBody, _ctx.Owner, _ctx.Guid);
             _ctx.Track(tip);
             _ctx.Track(tip.OnPanel(e =>
             {
@@ -1634,7 +1660,7 @@ namespace Satisvampory.Client
                 {
                     ++_previewSequence; _preview?.Dispose(); EndFindPreview();
                 }
-                else if (_previewPanel != null && _previewPanel.Visible) _previewContents.Visible = true;
+                else if (_previewPanel != null && _previewPanel.Visible) { _previewContents.Visible = true; DockPreview(false); }
             };
             WatchChestWindow(window);
         }
@@ -1644,6 +1670,7 @@ namespace Satisvampory.Client
             if (_chestWindow != window) return;
             if (window.State == Progenitor.Inventory.ContainerPreviewState.Open)
             {
+                DockPreview(true);
                 // The game's window shows the contents beside the view (Progenitor 2026.10.93+); hold the view
                 // until the player closes it.
                 _previewContents.Visible = false;
@@ -1722,6 +1749,7 @@ namespace Satisvampory.Client
                     _previewPanel.EndInline();
                 }
                 _previewTitle.Text = reply.Name;
+                DockPreview(false); // a strip only once the game's chest window is open
                 // A plain chest opens in the game's own window on the right; the list stays for stations and
                 // whenever the game cannot (another game window open, an older Progenitor, PvP rules).
                 _previewContents.Visible = true;
@@ -1740,11 +1768,14 @@ namespace Satisvampory.Client
                     if (sequence != _previewSequence || !_previewPanel.Visible) { EndFindPreview(); return; }
                     try
                     {
-                        _preview = _ctx.Camera.Preview(new Progenitor.Units.UnitVec3(reply.X, reply.Y + 0.7f, reply.Z), reply.Yaw,
-                            new Progenitor.Cameras.CameraPreviewOptions
-                            {
-                                Seconds = 5, Ended = _ => EndFindPreview(), CompressedHeight = reply.FloorHeight,
-                            });
+                        var options = new Progenitor.Cameras.CameraPreviewOptions
+                        {
+                            Seconds = 5, Ended = _ => EndFindPreview(), CompressedHeight = reply.FloorHeight,
+                        };
+                        // The player's own top-down distance and pitch, the game's station framing (Progenitor #100).
+                        try { MatchPlayerCamera(options); }
+                        catch (Exception) { }
+                        _preview = _ctx.Camera.Preview(new Progenitor.Units.UnitVec3(reply.X, reply.Y + 0.7f, reply.Z), reply.Yaw, options);
                         WatchPreview();
                     }
                     catch (Exception e)
@@ -1754,6 +1785,27 @@ namespace Satisvampory.Client
                     }
                 }, _ctx.Owner);
             });
+        }
+
+        [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void MatchPlayerCamera(Progenitor.Cameras.CameraPreviewOptions options) => options.MatchPlayerCamera = true;
+
+        /// <summary>
+        /// With the game's chest window open (inventory left, chest right), the preview is a small strip under the gap
+        /// between them; otherwise it sits at the left edge with its contents list (Progenitor #104 docks).
+        /// </summary>
+        void DockPreview(bool strip)
+        {
+            if (_previewPanel == null) return;
+            try { DockPreviewCore(_previewPanel, strip); }
+            catch (Exception) { _previewPanel.Dock(UiDock.Left); }
+        }
+
+        [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void DockPreviewCore(IUiPanel panel, bool strip)
+        {
+            if (strip) panel.Dock(UiDock.Bottom, new UiDockOptions { Align = UiDockAlign.Center, Width = 420 });
+            else panel.Dock(UiDock.Left);
         }
 
         void WatchPreview()

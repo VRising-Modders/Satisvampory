@@ -184,6 +184,26 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void What_a_devourer_will_not_eat_goes_back_and_is_not_fed_again()
+        {
+            var dev = _w.Chest(Home, "The Devourer", kind: NodeKind.Station);
+            dev.Role = StationRole.Devourer;
+            var salvage = _w.Chest(Home, "Salvage");
+            _w.Put(salvage, Sword, 1);
+            _g.For(dev.Id).Input.Add(ListEntry.Of(salvage.Id, _g.NextSequence()));
+            Tick(0);
+            Assert.Equal(1, _w.Count(dev.Id, Sword));
+            // The game passes it through unsalvaged: input to output.
+            var inDev = _w.Count(dev.Id, Sword);
+            _w.Put(dev, Sword, -inDev).Put(dev, Sword, 1, InvPart.Output);
+            var report = Tick(1);
+            Assert.Equal(1, _w.Count(salvage.Id, Sword));
+            Assert.Contains(report.Moves, m => m.Why == "devourer returns");
+            Tick(2);
+            Assert.Equal(1, _w.Count(salvage.Id, Sword)); // not fed again
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

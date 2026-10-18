@@ -37,6 +37,9 @@ namespace Satisvampory.Engine.Lists
         /// </summary>
         public Dictionary<ContainerId, Starved> StarvedStations { get; } = new();
 
+        /// <summary>Items a devourer gave back unsalvaged: never fed to it again (this server run).</summary>
+        public HashSet<(ContainerId Devourer, ItemId Item)> DevourerRefuses { get; } = new();
+
         /// <summary>Where station feeding starts next tick, so a time-limited island feeds every station in turn.</summary>
         public int StationCursor { get; set; }
 
@@ -388,11 +391,24 @@ namespace Satisvampory.Engine.Lists
             foreach (var (owner, other) in _graph.Lists)
                 if (owner != station.Id && other.Output.Any(e => !e.Auto && e.Kind == EntryKind.Container && e.Container == station.Id))
                     chosen.Add(owner);
+            // What came out unchanged (the game would not salvage it) goes back where it came from, and is not fed
+            // again. If that chest will not take it, the devourer's own Output (Mass Deposit) has it.
+            foreach (var stack in _world.Contents(station.Id, InvPart.Output).ToList())
+            {
+                if (!_state.FedFrom.TryGetValue((station.Id, stack.Item), out var home)) continue;
+                _state.DevourerRefuses.Add((station.Id, stack.Item));
+                if (Budget(station.Id)) Move(station.Id, InvPart.Output, home, stack.Item, stack.Amount, "devourer returns");
+            }
             foreach (var src in sources.Where(chosen.Contains))
                 foreach (var stack in _world.Contents(src, PartOf(src)).ToList())
                 {
+                    if (_state.DevourerRefuses.Contains((station.Id, stack.Item))) continue;
                     if (!Budget(src)) return;
-                    if (Move(src, PartOf(src), station.Id, stack.Item, stack.Amount, "salvage feed") > 0) _pulledInto.Add(station.Id);
+                    if (Move(src, PartOf(src), station.Id, stack.Item, stack.Amount, "salvage feed") > 0)
+                    {
+                        _pulledInto.Add(station.Id);
+                        _state.FedFrom[(station.Id, stack.Item)] = src;
+                    }
                 }
         }
 

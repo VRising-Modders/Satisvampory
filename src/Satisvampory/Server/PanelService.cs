@@ -228,6 +228,7 @@ namespace Satisvampory.Server
             {
                 reply.Categories.Add(cat);
                 reply.CategoryCounts.Add(s.Catalog.Members(cat).Sum(i => stock.TryGetValue(i, out var n) ? n : 0));
+                reply.CategoryIcons.Add(IconOf(s.Catalog, cat, stock));
             }
             return reply;
         }
@@ -271,6 +272,15 @@ namespace Satisvampory.Server
                 7 => $"{side}: removed a link set on another chest",
                 _ => "",
             };
+        }
+
+        /// <summary>A category's icon: the member the island holds most of, else its first member.</summary>
+        static int IconOf(ItemCatalog catalog, string category, IReadOnlyDictionary<ItemId, long>? stock)
+        {
+            var members = catalog.Members(category).Where(i => !catalog.IsRecipe(i)).ToList();
+            if (members.Count == 0) return 0;
+            var best = stock == null ? members[0] : members.OrderByDescending(i => stock.TryGetValue(i, out var n) ? n : 0).First();
+            return best.Guid;
         }
 
         PickerReply PickerRows(Session s, PickerReq r)
@@ -457,9 +467,9 @@ namespace Satisvampory.Server
             msg.Deposit.Special = (int)d.Special;
             msg.Deposit.Private = d.Private;
             foreach (var (item, adj) in d.ItemPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item), Adjust = adj });
-            foreach (var (cat, adj) in d.CategoryPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Adjust = adj });
+            foreach (var (cat, adj) in d.CategoryPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Adjust = adj, Icon = IconOf(s.Catalog, cat, null) });
             foreach (var item in d.BannedItems) msg.Deposit.Bans.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item) });
-            foreach (var cat in d.BannedCategories) msg.Deposit.Bans.Add(new PriorityMsg { Category = cat, Label = "Category " + cat });
+            foreach (var cat in d.BannedCategories) msg.Deposit.Bans.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Icon = IconOf(s.Catalog, cat, null) });
             string NameOf(Engine.Model.ContainerId id) => s.World.Find(id) is { } x ? $"{x.DisplayName} · {PlotLabel(s.Island, x.Plot)}" : "a chest";
             // Direct links from the other end are rows now; belt-made ones are covered by the belt's own row.
 

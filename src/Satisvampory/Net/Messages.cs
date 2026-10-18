@@ -73,6 +73,8 @@ namespace Satisvampory.Net
         [Field(3)] public string Label = "";
         /// <summary>Priority 1 to 99 (higher wins); unused on a block.</summary>
         [Field(4)] public int Adjust;
+        /// <summary>A category's icon: its most-stored item (0: none).</summary>
+        [Field(5)] public int Icon;
     }
 
     /// <summary>A chest's deposit settings (spec 01).</summary>
@@ -208,6 +210,8 @@ namespace Satisvampory.Net
         [Field(3)] public List<string> Categories = new();
         /// <summary>In step with <see cref="Categories"/>.</summary>
         [Field(4)] public List<long> CategoryCounts = new();
+        /// <summary>In step with <see cref="Categories"/>: the icon item (the most stored member, else the first).</summary>
+        [Field(5)] public List<int> CategoryIcons = new();
     }
 
     [ModMessage("sv.picker.get")]

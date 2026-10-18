@@ -1156,7 +1156,7 @@ namespace Satisvampory.Client
 
         IUiDataTable _findMatches = null!;
         IUiDataTable _findTable = null!;
-        bool _findClan, _findPartial = true;
+        bool _findClan, _findPartial = true, _findScopeForced;
         IUiDropdown _findScope = null!;
         int _findKind;
         IUiLocatePing? _findPin;
@@ -1194,12 +1194,27 @@ namespace Satisvampory.Client
             Track(_findText.OnChanged(_ => QueueFind()));
             Track(_findText.ActionButton("Find", _ => RunFind()));
             p.BeginInline();
-            var scope = _findScope = FindControl(p.CompactDropdown("Scope", new[] { "here", "clan" }, "here", new[] { "This plot", "All clan plots" }));
-            Track(scope.OnChanged(value => { _findClan = value == "clan"; RunFind(); }));
-            var matching = FindControl(p.CompactDropdown("Match", new[] { "partial", "exact" }, "partial", new[] { "Partial name", "Full name" }));
-            Track(matching.OnChanged(value => { _findPartial = value == "partial"; RunFind(); }));
-            var kind = FindControl(p.CompactDropdown("Show", new[] { "0", "1", "2" }, "0", new[] { "All results", "Containers only", "Items only" }));
-            Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); RunFind(); }));
+            // The player's choices are kept in the mod's config, so they survive a hot reload and a restart.
+            var savedScope = _ctx.Bind("Find", "Scope", "here", "Find: search this plot (here) or all clan plots (clan).");
+            var savedMatch = _ctx.Bind("Find", "Match", "partial", "Find: partial or exact name match.");
+            var savedShow = _ctx.Bind("Find", "Show", "0", "Find: 0 all results, 1 containers only, 2 items only.");
+            if (savedScope.Value is not ("here" or "clan")) savedScope.Value = "here";
+            if (savedMatch.Value is not ("partial" or "exact")) savedMatch.Value = "partial";
+            if (savedShow.Value is not ("0" or "1" or "2")) savedShow.Value = "0";
+            _findClan = savedScope.Value == "clan";
+            _findPartial = savedMatch.Value == "partial";
+            int.TryParse(savedShow.Value, out _findKind);
+            var scope = _findScope = FindControl(p.CompactDropdown("Scope", new[] { "here", "clan" }, savedScope.Value, new[] { "This plot", "All clan plots" }));
+            Track(scope.OnChanged(value =>
+            {
+                _findClan = value == "clan";
+                if (!_findScopeForced) savedScope.Value = value;
+                RunFind();
+            }));
+            var matching = FindControl(p.CompactDropdown("Match", new[] { "partial", "exact" }, savedMatch.Value, new[] { "Partial name", "Full name" }));
+            Track(matching.OnChanged(value => { _findPartial = value == "partial"; savedMatch.Value = value; RunFind(); }));
+            var kind = FindControl(p.CompactDropdown("Show", new[] { "0", "1", "2" }, savedShow.Value, new[] { "All results", "Containers only", "Items only" }));
+            Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); savedShow.Value = value; RunFind(); }));
             p.EndInline();
             _findResult = FindControl(p.Label("Search, choose a match, then choose its location."));
             _findMatches = FindControl(p.DataTable("find.matches", new[]
@@ -1313,7 +1328,9 @@ namespace Satisvampory.Client
                 if (_panel == null || !_panel.Visible) return;
                 _findText.Value = chestName;
                 _findClan = true; // the chest may be on another plot of the island
-                _findScope.Value = "clan";
+                _findScopeForced = true; // for this search only: the player's saved scope stays
+                try { _findScope.Value = "clan"; }
+                finally { _findScopeForced = false; }
                 RunFind();
             }, _ctx.Owner);
         }

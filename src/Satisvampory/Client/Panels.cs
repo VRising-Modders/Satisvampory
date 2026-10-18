@@ -126,6 +126,9 @@ namespace Satisvampory.Client
 
         const int ResearchScroll = 2065714452;
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static VanillaButtonIcon LogIcon() => VanillaButtonIcon.Sprite("Stunlock_Icon_TraderType_Books", "chest");
+
         readonly List<(IVanillaAttachHandle Handle, bool Filtered)> _logButtons = new();
         bool _logShown = true;
 
@@ -155,8 +158,11 @@ namespace Satisvampory.Client
                 {
                     if (e.Change != VanillaPanelChange.Closed) handle.Visible = _logShown && showFor(e.Target.Kind);
                 }));
-            // The game's Research Scroll icon (a parchment) as the face; the caption is its tooltip.
-            var button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll));
+            // A flat UI icon from the game (its traders' books), matching the rename pencil beside it; the caption is
+            // its tooltip. The Research Scroll item icon where the Core has no sprite faces.
+            IUiButton button;
+            try { button = handle.Button("Log", LogIcon()); }
+            catch (Exception) { button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll)); }
             _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings (last 24 hours).", "Log"));
             _ctx.Track(button.OnClick(() =>
             {

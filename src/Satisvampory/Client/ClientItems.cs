@@ -130,7 +130,7 @@ namespace Satisvampory.Client
                 var map = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (var e in entries)
                 {
-                    if (string.IsNullOrWhiteSpace(e.DisplayName)) continue;
+                    if (string.IsNullOrWhiteSpace(e.DisplayName) || Engine.Model.CatalogBuilder.IsStandIn(e.PrefabName)) continue;
                     map.TryAdd(NameFold.Fold(e.DisplayName!), e.PrefabGuid);
                 }
                 _byName = map;

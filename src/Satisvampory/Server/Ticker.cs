@@ -134,7 +134,7 @@ namespace Satisvampory.Server
         int _lastIslands, _lastMoves;
 
         internal string Diagnostics(ServerHalf half) =>
-            $"Last tick {_lastTickMs:0.0} ms · {_lastIslands} islands · {_lastMoves} moves · {_recent.Values.Sum(l => l.Count)} moves kept for status · "
+            $"Last tick {_lastTickMs:0.0} ms over {_lastSlices} frames · {_lastIslands} islands · {_lastMoves} moves · {_recent.Values.Sum(l => l.Count)} moves kept for status · "
             + $"{_missingSince.Count} chests waiting to be forgotten · catalog {half.Catalog.ItemCount} items";
 
         internal TickReport? LastReport(string islandKey) => _lastReports.TryGetValue(islandKey, out var r) ? r : null;
@@ -170,6 +170,25 @@ namespace Satisvampory.Server
 
         // ---------------- conveyor ----------------
 
+        /// <summary>
+        /// The most main-thread time one frame gives the conveyor. A tick's islands are worked through in
+        /// slices of about this long, one per frame, so many castles never stall the server in one frame.
+        /// </summary>
+        internal const double SliceMs = 25;
+
+        /// <summary>One tick's pass over every island, possibly spread over several frames.</summary>
+        sealed class Cycle
+        {
+            public ServerSettings Server = null!;
+            public SharingState Sharing = null!;
+            public List<ICastleHandle> Castles = null!;
+            public HashSet<PlotId> Done = new();
+            public int Start, Next, Budget, Slices;
+            public double SpentMs;
+        }
+
+        Cycle? _cycle;
+
         void Tick()
         {
             if (_stopped) return;
@@ -177,7 +196,7 @@ namespace Satisvampory.Server
             {
                 _half.Catalog.Refresh(_ctx);
                 var server = _half.Config.Snapshot();
-                if (server.AllowLogistics) RunIslands(server);
+                if (server.AllowLogistics && BeginCycle(server)) { Slice(); return; }
             }
             catch (Exception e)
             {
@@ -186,54 +205,74 @@ namespace Satisvampory.Server
             if (!_stopped) MainThread.PostDelayed(TickSeconds, Tick, _ctx.Owner);
         }
 
-        void RunIslands(ServerSettings server)
+        bool BeginCycle(ServerSettings server)
         {
-            var watch = Stopwatch.StartNew();
-            _lastIslands = 0;
-            var startBudget = server.MovesPerTick;
-            try { RunIslandsCore(server); }
-            finally
-            {
-                _lastTickMs = watch.Elapsed.TotalMilliseconds;
-                _maxTickMsSinceLog = Math.Max(_maxTickMsSinceLog, _lastTickMs);
-            }
-        }
-
-        void RunIslandsCore(ServerSettings server)
-        {
-            var sharing = Sharing(server);
             // An unowned castle (no player, e.g. freshly generated or abandoned) has no island to run:
             // grouped by owner they would all join one huge "owner 0" island and stall the tick.
             var castles = _ctx.Castles.All().Where(c => c.Enabled && c.Owner.PlatformId != 0 && !StressOwners.Is(c.Owner.PlatformId)).ToList();
             SweepDestroyed(castles);
             WatchMaterialFacts(castles);
-            var done = new HashSet<PlotId>();
-            var budget = server.MovesPerTick;
-            if (castles.Count == 0) return;
-            // Start somewhere new each tick so islands late in the list are not starved of budget.
-            var start = _rotate++ % castles.Count;
-
-            for (var n = 0; n < castles.Count && budget > 0; n++)
+            if (castles.Count == 0) return false;
+            _lastIslands = 0;
+            _cycle = new Cycle
             {
-                var castle = castles[(start + n) % castles.Count];
-                var plot = ProgenitorWorld.PlotOf(castle);
-                if (done.Contains(plot)) continue;
+                Server = server, Sharing = Sharing(server), Castles = castles, Budget = server.MovesPerTick,
+                // Start somewhere new each tick so islands late in the list are not starved of budget.
+                Start = _rotate++ % castles.Count,
+            };
+            return true;
+        }
 
-                var (key, members) = IslandOf(castle, castles, sharing);
-                foreach (var m in members) done.Add(ProgenitorWorld.PlotOf(m));
-                try
+        /// <summary>Islands until this frame's slice is spent; the rest next frame; the next tick once all are done.</summary>
+        void Slice()
+        {
+            if (_stopped) return;
+            var c = _cycle;
+            if (c == null) { MainThread.PostDelayed(TickSeconds, Tick, _ctx.Owner); return; }
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                while (c.Next < c.Castles.Count && c.Budget > 0)
                 {
-                    var used = RunIsland(server, key, members, plot, budget);
-                    budget -= used;
-                    _lastIslands++;
-                    _lastMoves = server.MovesPerTick - budget;
-                }
-                catch (Exception e)
-                {
-                    _ctx.Log.LogError($"Satisvampory: island {key} failed this tick: {e.Message}");
+                    var castle = c.Castles[(c.Start + c.Next++) % c.Castles.Count];
+                    var plot = ProgenitorWorld.PlotOf(castle);
+                    if (c.Done.Contains(plot) || !castle.Enabled) continue;
+                    var (key, members) = IslandOf(castle, c.Castles, c.Sharing);
+                    foreach (var m in members) c.Done.Add(ProgenitorWorld.PlotOf(m));
+                    try
+                    {
+                        c.Budget -= RunIsland(c.Server, key, members, plot, c.Budget, SliceMs - watch.Elapsed.TotalMilliseconds);
+                        _lastIslands++;
+                        _lastMoves = c.Server.MovesPerTick - c.Budget;
+                    }
+                    catch (Exception e)
+                    {
+                        _ctx.Log.LogError($"Satisvampory: island {key} failed this tick: {e.Message}");
+                    }
+                    if (watch.Elapsed.TotalMilliseconds >= SliceMs) break;
                 }
             }
+            catch (Exception e)
+            {
+                _ctx.Log.LogError("Satisvampory: conveyor slice failed: " + e);
+                c.Next = c.Castles.Count;
+            }
+            var ms = watch.Elapsed.TotalMilliseconds;
+            c.SpentMs += ms;
+            c.Slices++;
+            _maxTickMsSinceLog = Math.Max(_maxTickMsSinceLog, ms);
+            if (c.Next < c.Castles.Count && c.Budget > 0)
+            {
+                MainThread.PostDelayed(0.02, Slice, _ctx.Owner); // the next frame or so
+                return;
+            }
+            _lastTickMs = c.SpentMs;
+            _lastSlices = c.Slices;
+            _cycle = null;
+            MainThread.PostDelayed(TickSeconds, Tick, _ctx.Owner);
         }
+
+        int _lastSlices;
 
         // ---------------- idle skip ----------------
 
@@ -301,7 +340,7 @@ namespace Satisvampory.Server
         }
 
         /// <summary>One island's specials and conveyor tick; returns the moves it made.</summary>
-        int RunIsland(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget)
+        int RunIsland(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget, double timeLeftMs = SliceMs)
         {
             // Skip the whole tick when nothing it reads changed since a tick that did nothing: no settings
             // or structure change, the same inventories, and no timer waiting (leftovers, loops).
@@ -321,7 +360,7 @@ namespace Satisvampory.Server
                 _skippedMsSinceLog += check.Elapsed.TotalMilliseconds;
                 return 0;
             }
-            var moved = RunIslandFull(server, key, members, plot, budget, reads, out var pending);
+            var moved = RunIslandFull(server, key, members, plot, budget, reads, timeLeftMs, out var pending);
             idle.Layout = layout;
             // Moves change inventories; read them again so the next tick compares against the result.
             idle.Inventory = moved > 0 ? InventoryFingerprint(new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, members, _ => null, cachedRows: true), plots) : inventory;
@@ -331,13 +370,13 @@ namespace Satisvampory.Server
         }
 
         int RunIslandFull(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget,
-            IReadOnlyDictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]> reads, out bool pending)
+            IReadOnlyDictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]> reads, double timeLeftMs, out bool pending)
         {
             pending = false;
             var phases = Stopwatch.StartNew();
             var marks = new List<string>();
             void Mark(string name) { marks.Add($"{name} {phases.Elapsed.TotalMilliseconds:0}"); }
-            try { return RunIslandFullCore(server, key, members, plot, budget, reads, out pending, Mark); }
+            try { return RunIslandFullCore(server, key, members, plot, budget, reads, timeLeftMs, out pending, Mark); }
             finally
             {
                 if (phases.Elapsed.TotalMilliseconds > 100)
@@ -346,7 +385,7 @@ namespace Satisvampory.Server
         }
 
         int RunIslandFullCore(ServerSettings server, string key, List<ICastleHandle> members, PlotId plot, int budget,
-            IReadOnlyDictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]> reads, out bool pending, Action<string> Mark)
+            IReadOnlyDictionary<(Engine.Model.ContainerId, InvPart), Engine.Model.ItemStack[]> reads, double timeLeftMs, out bool pending, Action<string> Mark)
         {
             pending = false;
             {
@@ -391,6 +430,8 @@ namespace Satisvampory.Server
                     LoopMovesPerTick = server.LoopMovesPerTick,
                     LoopsAllowed = server.AllowLoops,
                     StationsToClear = state.StationsToClear,
+                    // What is left of this frame's slice (at least a little, so a big island always makes progress).
+                    StationTimeBudgetMs = Math.Max(8, timeLeftMs),
                 }).Run(Now);
                 Mark("conveyor");
                 foreach (var (phase, ms) in report.Timings) Mark("  " + phase + "@" + ms.ToString("0"));
@@ -420,7 +461,7 @@ namespace Satisvampory.Server
                 _moveRecordsSinceLog += report.Moves.Count;
                 if (Now - _lastMoveLog >= 60 && _listIslandTicks > 0)
                 {
-                    _ctx.Log.LogInfo($"Satisvampory: lists moved {_movedSinceLog:N0} items in {_moveRecordsSinceLog} moves in the last {Now - _lastMoveLog:0} s ({_listIslandTicks} island ticks with lists, {_skippedSinceLog} idle ticks skipped at {(_skippedSinceLog == 0 ? 0 : _skippedMsSinceLog / _skippedSinceLog):0.0} ms each, slowest tick {_maxTickMsSinceLog:0} ms)"
+                    _ctx.Log.LogInfo($"Satisvampory: lists moved {_movedSinceLog:N0} items in {_moveRecordsSinceLog} moves in the last {Now - _lastMoveLog:0} s ({_listIslandTicks} island ticks with lists, {_skippedSinceLog} idle ticks skipped at {(_skippedSinceLog == 0 ? 0 : _skippedMsSinceLog / _skippedSinceLog):0.0} ms each, slowest frame slice {_maxTickMsSinceLog:0} ms)"
                         + (_diagSinceLog.Count == 0 ? "" : "; waiting: " + string.Join(", ", _diagSinceLog.Select(kv => $"{kv.Key} x{kv.Value}"))));
                     _diagSinceLog.Clear();
                     _listIslandTicks = 0;

@@ -138,13 +138,20 @@ namespace Satisvampory.Engine.Model
             ("ot", "Onyx Tear"),
         };
 
+        /// <summary>
+        /// The game's recipe stand-ins ("FakeItem_FeedPrisoner_SageFish" is the prison's Feed Prisoner recipe,
+        /// "FakeItem_AnyFish" a recipe's "any fish"): never stored, so never an item to find, filter or count.
+        /// </summary>
+        public static bool IsStandIn(string? prefabName) =>
+            prefabName != null && prefabName.StartsWith("FakeItem_", StringComparison.Ordinal);
+
         public static ItemCatalog Build(IEnumerable<GameItem> items)
         {
             var catalog = new ItemCatalog();
             var kept = new List<GameItem>();
             foreach (var i in items)
             {
-                if (i.Guid == 0 || Flag(i, GameItemCategory.Locked)) continue;
+                if (i.Guid == 0 || Flag(i, GameItemCategory.Locked) || IsStandIn(i.PrefabName)) continue;
                 var name = DisplayNameOf(i);
                 if (name.Length == 0) continue;
                 catalog.AddItem(new ItemId(i.Guid), name, i.MaxStack > 0 ? i.MaxStack : 1);

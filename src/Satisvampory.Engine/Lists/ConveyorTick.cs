@@ -30,6 +30,24 @@ namespace Satisvampory.Engine.Lists
         /// under the caller's <see cref="TickOptions.LayoutSignature"/>, so an island whose lists
         /// did not change does not rebuild every supplier-to-receiver pair of its belts.
         /// </summary>
+        /// <summary>
+        /// Stations that got nothing because what they need is not there (not enough, reserve, no source): skipped
+        /// until <see cref="Starved.NextTry"/> (5, 10, 20, 40, then 60 s), or at once when the island's stock of any
+        /// input changes, the station's own contents change, or it has leftovers waiting.
+        /// </summary>
+        public Dictionary<ContainerId, Starved> StarvedStations { get; } = new();
+
+        /// <summary>Where station feeding starts next tick, so a time-limited island feeds every station in turn.</summary>
+        public int StationCursor { get; set; }
+
+        public sealed class Starved
+        {
+            public long Supply;
+            public long Held;
+            public double NextTry;
+            public double Delay;
+        }
+
         internal long CachedLayout;
         internal List<Edge>? CachedEdges;
         internal List<ContainerId>? CachedOutOfScope;
@@ -63,6 +81,12 @@ namespace Satisvampory.Engine.Lists
         public bool LoopsAllowed { get; init; } = true;
         public double LeftoverGraceSeconds { get; init; } = 30;
         public int FeedCrafts { get; init; } = StationPlanner.DefaultFeedCrafts;
+
+        /// <summary>
+        /// Milliseconds station feeding may take this tick; once spent, the rest of the stations wait for the
+        /// next tick (which starts after the last one fed). Infinite by default.
+        /// </summary>
+        public double StationTimeBudgetMs { get; init; } = double.PositiveInfinity;
 
         /// <summary>A hash of everything edges and loops depend on (lists, belts, scope); 0 disables the cache.</summary>
         public long LayoutSignature { get; init; }
@@ -141,6 +165,9 @@ namespace Satisvampory.Engine.Lists
         readonly TickReport _report = new();
         readonly Dictionary<PlotId, int> _plotMoves = new();
         readonly Dictionary<ItemId, long> _islandTotals = new();
+        bool _totalsBuilt;
+        readonly HashSet<ContainerId> _pulledInto = new();
+        readonly HashSet<ContainerId> _starvedNow = new();
         readonly HashSet<ContainerId> _inScope;
         int _moves;
 
@@ -258,17 +285,93 @@ namespace Satisvampory.Engine.Lists
             }
             stations.RemoveAll(s => s.AutomationSuspended);
 
+            // Start where the last time-limited tick stopped, so every station gets its turn.
+            if (stations.Count > 1)
+            {
+                var k = _state.StationCursor % stations.Count;
+                stations = stations.Skip(k).Concat(stations.Take(k)).ToList();
+            }
+            var all = stations.Count;
+            // Starved stations wait out their backoff unless something they depend on changed.
+            stations.RemoveAll(s => Waiting(s, now));
+            foreach (var gone in _state.StarvedStations.Keys.Where(id => _world.Find(id) == null).ToList()) _state.StarvedStations.Remove(gone);
+
             // Topology is unchanged during this synchronous pass. Build source lists once.
             var incoming = edges.ToLookup(e => e.To);
             var sourceLists = stations.ToDictionary(s => s.Id, s => Sources(s, incoming[s.Id].ToList()));
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var reached = stations.Count; // stations that got every round this tick
             // Fair share in whole crafts: round k feeds every station up to k crafts.
             for (var round = 1; round <= _opt.FeedCrafts && Budget(); round++)
-                foreach (var st in stations)
+            {
+                for (var i = 0; i < stations.Count; i++)
                 {
+                    if (i >= reached) break;
+                    if (clock.Elapsed.TotalMilliseconds > _opt.StationTimeBudgetMs) { reached = i; _report.Diag(stations[i].Id, "time-budget"); break; }
+                    var st = stations[i];
                     var depth = st.Role == StationRole.UnitSpawner ? Math.Min(_opt.FeedCrafts, SpecialJobs.SpawnerFeedCrafts) : _opt.FeedCrafts;
                     if (round > depth || (st.Role == StationRole.Workstation && round != depth)) continue;
                     FeedStation(st, sourceLists[st.Id], round, now, final: round == depth);
                 }
+            }
+            _state.StationCursor = reached >= stations.Count ? 0 : _state.StationCursor + reached;
+            foreach (var st in stations.Take(reached)) Backoff(st, now);
+        }
+
+        /// <summary>Still inside its backoff, with nothing it depends on changed.</summary>
+        bool Waiting(ContainerInfo station, double now)
+        {
+            if (!_state.StarvedStations.TryGetValue(station.Id, out var s)) return false;
+            if (now >= s.NextTry || _state.LeftoverSince.Keys.Any(k => k.Station == station.Id)
+                || s.Supply != Supply(station) || s.Held != Held(station))
+                return false;
+            _report.Diag(station.Id, "waiting-supply");
+            return true;
+        }
+
+        /// <summary>After a station's full feed: starved with nothing pulled backs off (doubling to 60 s); fed clears it.</summary>
+        void Backoff(ContainerInfo station, double now)
+        {
+            if (!_starvedNow.Contains(station.Id) || _pulledInto.Contains(station.Id))
+            {
+                _state.StarvedStations.Remove(station.Id);
+                return;
+            }
+            var delay = _state.StarvedStations.TryGetValue(station.Id, out var was) ? Math.Min(60, was.Delay * 2) : 5;
+            _state.StarvedStations[station.Id] = new TickState.Starved
+            {
+                Supply = Supply(station), Held = Held(station), NextTry = now + delay, Delay = delay,
+            };
+        }
+
+        /// <summary>
+        /// What a starved station depends on: its recipes and their switches, the island's stock, reserve and cap of
+        /// every input and product. A change to any of them ends the backoff.
+        /// </summary>
+        long Supply(ContainerInfo station)
+        {
+            unchecked
+            {
+                long h = 17;
+                foreach (var r in _world.Recipes(station.Id))
+                {
+                    h = h * 31 + r.Id * 2 + (r.Enabled ? 1 : 0);
+                    if (!r.Enabled) continue;
+                    foreach (var item in r.Inputs.Concat(r.Outputs).Select(i => i.Item))
+                        h = h * 31 + item.Guid * 7919L + IslandTotal(item) * 3 + _rules.Reserve(item, Catalog) * 5 + (_rules.Cap(item, Catalog) ?? -1) * 7;
+                }
+                return h;
+            }
+        }
+
+        long Held(ContainerInfo station)
+        {
+            unchecked
+            {
+                long h = 23;
+                foreach (var s in _world.Contents(station.Id)) h = h * 31 + s.Item.Guid * 7919L + s.Amount;
+                return h;
+            }
         }
 
         /// <summary>Source chests for a station's inputs, in pull order.</summary>
@@ -384,6 +487,7 @@ namespace Satisvampory.Engine.Lists
                     var moved = Move(src, PartOf(src), station.Id, item, left, "station feed", ProductFor(recipes, plan, item));
                     if (moved > 0)
                     {
+                        _pulledInto.Add(station.Id);
                         _state.FedFrom[(station.Id, item)] = src;
                         _islandTotals[item] = IslandTotal(item) - moved;
                     }
@@ -397,6 +501,7 @@ namespace Satisvampory.Engine.Lists
             if (capped.Count > 0) _report.Diag(station.Id, "cap");
             foreach (var r in recipes.Where(r => r.Enabled && plan.Crafts.TryGetValue(r.Id, out var c) && c == 0))
             {
+                _starvedNow.Add(station.Id);
                 if (!plan.Missing.TryGetValue(r.Id, out var short1)) { _report.Diag(station.Id, "no-source"); continue; }
                 // Stock is there but the reserve holds it back (spec 02 "reserve").
                 var inSources = PullFrom(short1).Sum(id => SourceCount(id, short1));
@@ -663,10 +768,15 @@ namespace Satisvampory.Engine.Lists
 
         long IslandTotal(ItemId item)
         {
-            if (_islandTotals.TryGetValue(item, out var t)) return t;
-            t = Scope.Chests(_world, _ctx.Scope).Sum(c => (long)_world.Count(c.Id, item));
-            _islandTotals[item] = t;
-            return t;
+            if (!_totalsBuilt)
+            {
+                // One pass over the island's shared chests for every item, not one pass per item asked.
+                _totalsBuilt = true;
+                foreach (var c in Scope.Chests(_world, _ctx.Scope))
+                    foreach (var s in _world.Contents(c.Id))
+                        _islandTotals[s.Item] = (_islandTotals.TryGetValue(s.Item, out var n) ? n : 0) + s.Amount;
+            }
+            return _islandTotals.TryGetValue(item, out var t) ? t : 0;
         }
 
         bool Budget() => _moves < _opt.MovesPerTick;

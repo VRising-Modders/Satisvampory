@@ -32,6 +32,18 @@ namespace Satisvampory.Engine.Tests
         });
 
         [Fact]
+        public void Recipe_stand_ins_are_not_items()
+        {
+            var c = CatalogBuilder.Build(new[]
+            {
+                new GameItem(736318803, "Item_Ingredient_Fish_SageFish_T02", "Sage Fish", 10, 0, 0),
+                new GameItem(172410251, "FakeItem_FeedPrisoner_SageFish", "Feed Prisoner", 1, 0, 1),
+            });
+            Assert.True(c.TryResolveItem("Sage Fish", out _));
+            Assert.DoesNotContain(new ItemId(172410251), c.AllItems);
+        }
+
+        [Fact]
         public void Flags_and_name_families_place_items()
         {
             var c = Build();

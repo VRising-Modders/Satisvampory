@@ -122,6 +122,52 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void A_starved_station_backs_off_and_wakes_when_stock_arrives()
+        {
+            var f = Furnace();
+            var ore = _w.Chest(Home, "Ore in");
+            _w.Put(ore, IronOre, 5);
+            _g.For(f.Id).Input.Add(ListEntry.Of(ore.Id));
+            Assert.Contains("not-enough", Tick(0).Diagnostics[f.Id]);
+            // Nothing changed: it is not planned again inside its backoff.
+            Assert.Contains("waiting-supply", Tick(2).Diagnostics[f.Id]);
+            // Ore arrives: planned at once, fed, and out of the backoff.
+            _w.Put(ore, IronOre, 500).Put(ore, Coal, 50);
+            var report = Tick(3);
+            Assert.DoesNotContain("waiting-supply", report.Diagnostics.TryGetValue(f.Id, out var d) ? d : new List<string>());
+            Assert.True(_w.Count(f.Id, IronOre) > 0);
+            Assert.False(_state.StarvedStations.ContainsKey(f.Id));
+        }
+
+        [Fact]
+        public void The_backoff_doubles_and_runs_out()
+        {
+            var f = Furnace();
+            var ore = _w.Chest(Home, "Ore in");
+            _w.Put(ore, IronOre, 5);
+            _g.For(f.Id).Input.Add(ListEntry.Of(ore.Id));
+            Tick(0);
+            Assert.Equal(5, _state.StarvedStations[f.Id].Delay);
+            Assert.Contains("not-enough", Tick(6).Diagnostics[f.Id]); // past 5 s: tried again
+            Assert.Equal(10, _state.StarvedStations[f.Id].Delay);
+        }
+
+        [Fact]
+        public void A_spent_time_budget_leaves_the_rest_for_the_next_tick_in_turn()
+        {
+            var ore = _w.Chest(Home, "Ore in");
+            _w.Put(ore, IronOre, 5000).Put(ore, Coal, 500);
+            var furnaces = Enumerable.Range(0, 3).Select(_ => Furnace()).ToList();
+            foreach (var f in furnaces) _g.For(f.Id).Input.Add(ListEntry.Of(ore.Id));
+            var opt = new TickOptions { MovesPerPlot = 1000, MovesPerTick = 1000, StationTimeBudgetMs = -1 };
+            var first = Tick(0, opt: opt);
+            Assert.Contains(furnaces, f => first.Diagnostics.TryGetValue(f.Id, out var d) && d.Contains("time-budget"));
+            Assert.All(furnaces, f => Assert.Equal(0, _w.Count(f.Id, IronOre)));
+            Tick(1); // no limit: everyone fed
+            Assert.All(furnaces, f => Assert.True(_w.Count(f.Id, IronOre) > 0));
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

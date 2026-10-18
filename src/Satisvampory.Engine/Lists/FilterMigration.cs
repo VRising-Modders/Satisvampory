@@ -58,8 +58,8 @@ namespace Satisvampory.Engine.Lists
             var lists = f.Items.Count + f.Categories.Count > 0;
             // A receiver that took anything now takes only what its links named.
             if (lists && d.Takes == Takes.Anything && d.ItemPriority.Count == 0 && d.CategoryPriority.Count == 0) d.Takes = Takes.OnlyListed;
-            foreach (var item in f.Items) d.ItemPriority.TryAdd(item, 0);
-            foreach (var cat in f.Categories) d.CategoryPriority.TryAdd(cat, 0);
+            foreach (var item in f.Items) d.ItemPriority.TryAdd(item, DepositOptions.DefaultEntryPriority);
+            foreach (var cat in f.Categories) d.CategoryPriority.TryAdd(cat, DepositOptions.DefaultEntryPriority);
             foreach (var item in f.ExcludeItems) d.BannedItems.Add(item);
             foreach (var cat in f.ExcludeCategories) d.BannedCategories.Add(cat);
         }

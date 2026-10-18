@@ -610,7 +610,7 @@ namespace Satisvampory.Server
             var heart = new HeartInfo(plot, fuel.UnlockedSlots, fuel.FuelQuantity, true, true);
             var sources = ConveyorTick.HeartSources(world, deposit, state.Graph, new Engine.Model.ContainerId(castle.HeartId.Value), blood)
                 .Select(id => (id, world.Count(id, blood))).ToList();
-            var total = members.SelectMany(c => world.ContainersOn(ProgenitorWorld.PlotOf(c))).Where(c => c.Kind == NodeKind.Chest).Sum(c => (long)world.Count(c.Id, blood));
+            var total = members.SelectMany(c => world.ContainersOn(ProgenitorWorld.PlotOf(c))).Where(c => c.Shared).Sum(c => (long)world.Count(c.Id, blood));
             foreach (var (from, amount) in HeartFeed.Plan(heart, sources, total, state.Rules.Reserve(blood, deposit.Catalog)))
                 world.Transfer(from, InvPart.Main, heartId, blood, amount);
         }

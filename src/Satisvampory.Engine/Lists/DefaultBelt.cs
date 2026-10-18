@@ -28,7 +28,7 @@ namespace Satisvampory.Engine.Lists
                 var lists = graph.For(c.Id);
                 lists.KeepEmpty = true;
                 if (c.Deposit.Special != SpecialKind.None) continue;
-                if (c.Kind == NodeKind.Chest)
+                if (c.Shared)
                     lists.Output.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
                 else if (c.Kind == NodeKind.Station && c.Role is StationRole.None or StationRole.Refinement or StationRole.Workstation)
                 {
@@ -74,7 +74,7 @@ namespace Satisvampory.Engine.Lists
             {
                 if (!graph.Lists.TryGetValue(c.Id, out var lists) || c.Kind == NodeKind.Heart || !c.DefaultBeltEligible) continue;
                 if (c.Deposit.Special != SpecialKind.None) continue;
-                if (c.Kind == NodeKind.Chest && !lists.Output.Any(IsEntry))
+                if (c.Shared && !lists.Output.Any(IsEntry))
                 {
                     lists.Output.Add(ListEntry.OfBelt(Id, graph.NextSequence()));
                     changed.Add(c.Id);

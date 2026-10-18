@@ -114,14 +114,15 @@ namespace Satisvampory.Config
             ("Input", "Where this chest or station pulls items from."),
             ("Output", "Where this chest or station sends items to."),
             ("Mass Deposit", "Where each item belongs, decided by each chest's deposit settings (what it takes, at what priority), never by its name. Quick stash, tidy and servant loot use it. \"Push: Mass Deposit\" in an Output sends items home every tick; \"Pull: reverse Mass Deposit\" in an Input takes them from wherever they are stored worst."),
-            ("Deposit settings", "A chest's gear: what it takes (anything, only what's listed, nothing), its priority, its bans."),
+            ("Deposit settings", "A chest's Filter: what it takes (anything not blocked, only allowed items, nothing), and each listed item or category allowed at a priority or blocked."),
+            ("Private chest", "Out of every shared castle and clan inventory: deposits, belts, crafting, Find and totals skip it, and its Input and Output do not run."),
             ("Island", "All the castles whose chests you can use from where you stand. It follows castle share and clan share."),
             ("Castle share", "Your own castles act as one: craft at one, use chests at another."),
             ("Clan share", "Every castle of every clan member taking part acts as one."),
             ("Reserve", "How many of an item stations and crafting leave untouched."),
             ("Cap", "Stations stop making an item once the island holds this many."),
             ("Loop", "Chests that feed each other in a circle. You choose whether it runs once or keeps items evenly spread."),
-            ("Priority", "A chest's number for an item in its deposit settings: higher wins."),
+            ("Priority", "1 to 99 on a Filter entry: when Mass Deposit picks a home for an item, the chest with the highest priority for it wins. Unlisted items count as 0."),
             ("Try it", "Ask \"what if n of X\" and see where it would go or come from, in order, and which chests would not be used and why. Nothing moves."),
         };
 

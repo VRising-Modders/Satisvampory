@@ -42,6 +42,12 @@ namespace Satisvampory.Engine.Model
 
         public DepositOptions Deposit { get; } = new DepositOptions();
 
+        /// <summary>
+        /// A chest the island shares: deposits, crafting, pulls, Find and totals use it. A private chest is
+        /// still a chest, but only its own panel sees it.
+        /// </summary>
+        public bool Shared => Kind == NodeKind.Chest && !Deposit.Private;
+
         /// <summary>May receive automatic Default Belt connections. Does not remove or override configured lists.</summary>
         public bool DefaultBeltEligible { get; set; } = true;
 
@@ -79,6 +85,20 @@ namespace Satisvampory.Engine.Model
     {
         public const int MinPriority = -10;
         public const int MaxPriority = 10;
+
+        /// <summary>A Filter entry's priority (the item and category lists): 1 to 99, higher wins; 50 when unset.</summary>
+        public const int MinEntryPriority = 1;
+        public const int MaxEntryPriority = 99;
+        public const int DefaultEntryPriority = 50;
+
+        public static int ClampEntry(int priority) =>
+            priority < MinEntryPriority ? MinEntryPriority : priority > MaxEntryPriority ? MaxEntryPriority : priority;
+
+        /// <summary>
+        /// Private: out of every shared island use (deposits, crafting, belts, Find, totals); its Input and
+        /// Output lists do not run.
+        /// </summary>
+        public bool Private { get; set; }
 
         int _base;
 

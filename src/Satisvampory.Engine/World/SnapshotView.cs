@@ -68,6 +68,6 @@ namespace Satisvampory.Engine.World
 
         /// <summary>Every item held in a main inventory on these plots' chests, read once each.</summary>
         public HashSet<ItemId> ItemsIn(IEnumerable<PlotId> plots) =>
-            new(plots.SelectMany(ContainersOn).Where(c => c.Kind == NodeKind.Chest).SelectMany(c => Contents(c.Id)).Select(s => s.Item));
+            new(plots.SelectMany(ContainersOn).Where(c => c.Shared).SelectMany(c => Contents(c.Id)).Select(s => s.Item));
     }
 }

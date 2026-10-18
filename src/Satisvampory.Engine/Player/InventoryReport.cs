@@ -79,7 +79,7 @@ namespace Satisvampory.Engine.Player
             foreach (var plot in island)
                 foreach (var c in world.ContainersOn(plot))
                 {
-                    if (c.Kind == NodeKind.Chest)
+                    if (c.Shared)
                     {
                         foreach (var s in world.Contents(c.Id))
                         {

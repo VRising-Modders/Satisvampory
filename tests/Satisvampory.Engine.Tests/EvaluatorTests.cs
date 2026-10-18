@@ -35,7 +35,7 @@ namespace Satisvampory.Engine.Tests
 
             var e = Evaluator.Push(Ctx(), IronOre, 150);
             Assert.Equal(new[] { (best.Id, 100), (second.Id, 50) }, e.Steps.Select(s => (s.Id, s.Amount)));
-            Assert.Equal("Category ore +3 on base 0", e.Steps[0].Why);
+            Assert.Equal("Category ore, priority 3", e.Steps[0].Why);
             Assert.Equal("Plot 2", e.Steps[1].Plot);
             Assert.Equal(0, e.Short);
             Assert.Equal("Not needed: better homes took it all", Reason(e, general));

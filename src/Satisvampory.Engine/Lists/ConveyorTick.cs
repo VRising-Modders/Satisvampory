@@ -155,7 +155,8 @@ namespace Satisvampory.Engine.Lists
             _rules = rules;
             _state = state;
             _opt = options ?? new TickOptions();
-            _inScope = new HashSet<ContainerId>(ctx.Scope.SelectMany(world.ContainersOn).Select(c => c.Id));
+            // A private chest is out of the island: no list runs to, from or on it.
+            _inScope = new HashSet<ContainerId>(ctx.Scope.SelectMany(world.ContainersOn).Where(c => !c.Deposit.Private).Select(c => c.Id));
         }
 
         ItemCatalog Catalog => _ctx.Catalog;

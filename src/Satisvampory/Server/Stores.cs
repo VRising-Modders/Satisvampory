@@ -118,7 +118,7 @@ namespace Satisvampory.Server
         static bool IsDefault(ContainerDto d) =>
             !d.KeepEmpty && d.Input.Count == 0 && d.Output.Count == 0 && d.PullOrder == "ListOrder" && d.SendOrder == "FillInOrder"
             && d.Takes == "Anything" && d.BasePriority == 0 && d.ItemPriority.Count == 0 && d.CategoryPriority.Count == 0
-            && d.BannedItems.Count == 0 && d.BannedCategories.Count == 0 && d.Special == "None";
+            && d.BannedItems.Count == 0 && d.BannedCategories.Count == 0 && d.Special == "None" && !d.Private;
     }
 
     /// <summary>One container's saved record.</summary>

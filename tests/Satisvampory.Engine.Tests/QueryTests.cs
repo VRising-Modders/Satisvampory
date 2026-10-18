@@ -134,11 +134,11 @@ namespace Satisvampory.Engine.Tests
             var p = Preview.For(ctx, IronOre);
             Assert.Equal(exact, p.Best!.Chest);
             Assert.Equal(general, p.RunnerUp!.Chest);
-            Assert.Equal("Iron Ore +1 on base 0", p.Why);
+            Assert.Equal("Iron Ore, priority 1", p.Why);
             Assert.Equal(exact.Id, p.NextStackGoesTo);
 
             exact.Deposit.BasePriority = 2;
-            Assert.Equal("Iron Ore +1 on base 2", Preview.For(ctx, IronOre).Why);
+            Assert.Equal("Iron Ore, priority 3", Preview.For(ctx, IronOre).Why);
 
             var script = AdvancedScript.Compile("for \"Iron Ore\": first general", _cat);
             var ruled = new DepositContext(_cat, _w, new[] { Home }, Home) { Script = script };

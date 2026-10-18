@@ -86,7 +86,7 @@ namespace Satisvampory.Engine.Tests
             var a = _w.Chest(Home, "a").OnlyCategory("ore", 5).OnlyItem(IronOre, -1);
             Assert.Equal(-1, DepositScore.Score(a, IronOre, _cat));
             Assert.Equal(5, DepositScore.Score(a, CopperOre, _cat));
-            Assert.Equal("Iron Ore −1 on base 0", DepositScore.Explain(a, IronOre, _cat));
+            Assert.Equal("Iron Ore, priority -1", DepositScore.Explain(a, IronOre, _cat));
 
             var b = _w.Chest(Home, "b");
             b.Deposit.BannedCategories.Add("ore");
@@ -95,6 +95,25 @@ namespace Satisvampory.Engine.Tests
             var none = _w.Chest(Home, "n");
             none.Deposit.Takes = Takes.Nothing;
             Assert.DoesNotContain(DepositRanker.Rank(Ctx(), Coal).InOrder, c => c.Chest == none);
+        }
+
+        [Fact]
+        public void A_private_chest_is_never_a_home_and_v12_converts_old_priorities()
+        {
+            var shared = _w.Chest(Home, "shared");
+            var mine = _w.Chest(Home, "mine").OnlyItem(IronOre, 99);
+            mine.Deposit.Private = true;
+            var order = DepositRanker.Rank(Ctx(), IronOre).InOrder.Select(c => c.Chest).ToList();
+            Assert.Contains(shared, order);
+            Assert.DoesNotContain(mine, order);
+
+            var old = new DepositOptions { BasePriority = 2 };
+            old.ItemPriority[IronOre] = 3;
+            old.CategoryPriority["ore"] = -20;
+            Persistence.SaveCodec.ToEntryPriorities(old);
+            Assert.Equal(75, old.ItemPriority[IronOre]);
+            Assert.Equal(DepositOptions.MinEntryPriority, old.CategoryPriority["ore"]);
+            Assert.Equal(0, old.BasePriority);
         }
 
         [Fact]

@@ -71,6 +71,7 @@ namespace Satisvampory.Net
         [Field(1)] public int Item;
         [Field(2)] public string Category = "";
         [Field(3)] public string Label = "";
+        /// <summary>Priority 1 to 99 (higher wins); unused on a block.</summary>
         [Field(4)] public int Adjust;
     }
 
@@ -88,6 +89,8 @@ namespace Satisvampory.Net
         [Field(6)] public List<string> Belts = new();
         /// <summary>Belt ids, same order as <see cref="Belts"/>.</summary>
         [Field(7)] public List<string> BeltIds = new();
+        /// <summary>Out of every shared island use; its Input and Output do not run.</summary>
+        [Field(8)] public bool Private;
     }
 
     /// <summary>Everything one container's panels show.</summary>
@@ -187,6 +190,24 @@ namespace Satisvampory.Net
     {
         [Field(1)] public TargetMsg Target = new();
         [Field(2)] public DepositMsg Deposit = new();
+    }
+
+    /// <summary>The Filter tab's Add picker: every item and category, with how many the island stores.</summary>
+    [ModMessage("sv.filter.picker")]
+    public sealed class FilterPickerReq
+    {
+        [Field(1)] public TargetMsg Target = new();
+    }
+
+    [ModMessage("sv.filter.picker.reply")]
+    public sealed class FilterPickerReply
+    {
+        [Field(1)] public List<int> Items = new();
+        /// <summary>In step with <see cref="Items"/>.</summary>
+        [Field(2)] public List<long> ItemCounts = new();
+        [Field(3)] public List<string> Categories = new();
+        /// <summary>In step with <see cref="Categories"/>.</summary>
+        [Field(4)] public List<long> CategoryCounts = new();
     }
 
     [ModMessage("sv.picker.get")]

@@ -288,7 +288,7 @@ namespace Satisvampory.Engine.Ui
             var result = new FindResult { Ambiguous = ambiguous };
             result.Categories.AddRange(categories);
 
-            var chests = island.SelectMany(world.ContainersOn).Where(c => c.Kind is NodeKind.Chest or NodeKind.Station).ToList();
+            var chests = island.SelectMany(world.ContainersOn).Where(c => c.Shared || c.Kind == NodeKind.Station).ToList();
             var contents = chests.ToDictionary(c => c.Id, c => c.Role == StationRole.Refinement
                 ? world.Contents(c.Id).Concat(world.Contents(c.Id, InvPart.Output)).ToArray()
                 : world.Contents(c.Id).ToArray());

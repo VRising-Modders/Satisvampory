@@ -71,8 +71,8 @@ namespace Satisvampory.Engine.World
             return result;
         }
 
-        /// <summary>Every container (stations excluded) on the given plots.</summary>
+        /// <summary>Every shared chest (stations and private chests excluded) on the given plots.</summary>
         public static IEnumerable<ContainerInfo> Chests(IWorldView world, IEnumerable<PlotId> plots) =>
-            plots.SelectMany(world.ContainersOn).Where(c => c.Kind == NodeKind.Chest);
+            plots.SelectMany(world.ContainersOn).Where(c => c.Shared);
     }
 }

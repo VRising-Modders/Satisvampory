@@ -47,13 +47,13 @@ namespace Satisvampory.Engine.Deposit
         public static int Score(ContainerInfo chest, ItemId item, ItemCatalog catalog) =>
             chest.Deposit.BasePriority + (Entry(chest, item, catalog)?.Adjust ?? 0);
 
-        /// <summary>Plain words for the preview: "Category ore +3 on base 2".</summary>
+        /// <summary>Plain words for the preview: "Category ore, priority 60".</summary>
         public static string Explain(ContainerInfo chest, ItemId item, ItemCatalog catalog)
         {
             var b = chest.Deposit.BasePriority;
             if (Entry(chest, item, catalog) is { } e)
-                return $"{e.Source} {(e.Adjust >= 0 ? "+" : "−")}{Math.Abs(e.Adjust)} on base {b}";
-            return $"takes anything, base {b}";
+                return $"{e.Source}, priority {e.Adjust + b}";
+            return b == 0 ? "takes anything" : $"takes anything, priority {b}";
         }
     }
 }

@@ -27,8 +27,8 @@ namespace Satisvampory.Client
                 "Castle settings, Mass Deposit, belts and categories, the island inventory and Find live here. Hover a word with a small ⓘ to read what it means."),
             (ListsTip, "Input and Output",
                 "Input is where this pulls from; Output is where it sends to. Add chests or belts, drag to reorder. Stations pull only whole crafts."),
-            (DepositTip, "Accepts",
-                "These decide where Mass Deposit puts things: what this chest takes, its priority and its bans. The chest's name never matters."),
+            (DepositTip, "Filter",
+                "What this chest takes from belts and automatic deposits. Allow items or categories at a priority of 1 to 99 (higher wins when Mass Deposit picks a home) or block them. The chest's name never matters."),
             (MassDepositTip, "Mass Deposit",
                 "Stash sends each item to the chest whose deposit settings rate it highest. Overrides and rules here change that for the whole island; Try it shows what would happen without moving anything."),
             (BeltsTip, "Belts and categories",
@@ -38,6 +38,11 @@ namespace Satisvampory.Client
             (InventoryTip, "Inventory",
                 "Everything on your island. Click a header to sort, Shift-click to add a second key. Edit Reserve or Cap in place; clear a cell to go back to the default."),
         };
+
+        /// <summary>A category key ("ore", "blood essence") as a heading: "Ore", "Blood Essence".</summary>
+        internal static string TitleCase(string text) =>
+            string.Join(" ", (text ?? "").Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => char.ToUpperInvariant(w[0]) + w.Substring(1)));
 
         internal static void Attach(SatisContext ctx, PlayerConfig player)
         {

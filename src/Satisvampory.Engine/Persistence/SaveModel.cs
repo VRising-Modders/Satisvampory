@@ -50,6 +50,7 @@ namespace Satisvampory.Engine.Persistence
         public List<int> BannedItems { get; set; } = new();
         public List<string> BannedCategories { get; set; } = new();
         public string Special { get; set; } = nameof(SpecialKind.None);
+        public bool Private { get; set; }
     }
 
     public sealed class BeltDto
@@ -98,7 +99,7 @@ namespace Satisvampory.Engine.Persistence
         /// 9: factories with no Output send their products to storage by Mass Deposit (DefaultBelt.AddFactoryOutputs).
         /// 10: the same for Devourers.
         /// 11: the same for Devourers known by their salvage-station prefab, replacing a chest's leftover Default Belt Output.</summary>
-        public const int CurrentVersion = 11;
+        public const int CurrentVersion = 12;
 
         // Missing versions in typed store reads are legacy; Capture explicitly writes the current version.
         public int Version { get; set; } = 1;
@@ -238,10 +239,23 @@ namespace Satisvampory.Engine.Persistence
                     dto.BannedItems = d.BannedItems.Select(i => i.Guid).ToList();
                     dto.BannedCategories = d.BannedCategories.ToList();
                     dto.Special = d.Special.ToString();
+                    dto.Private = d.Private;
                 }
                 save.Containers[Id(id)] = dto;
             }
             return save;
+        }
+
+        /// <summary>
+        /// v12: priorities moved from a base of -10..10 plus per-entry -10..10 to one 1..99 number per entry
+        /// (50 neutral, 5 per old step). The base folds into each entry and then reads 0.
+        /// </summary>
+        internal static void ToEntryPriorities(DepositOptions d)
+        {
+            int Convert(int adjust) => DepositOptions.ClampEntry(DepositOptions.DefaultEntryPriority + (d.BasePriority + adjust) * 5);
+            foreach (var k in d.ItemPriority.Keys.ToList()) d.ItemPriority[k] = Convert(d.ItemPriority[k]);
+            foreach (var k in d.CategoryPriority.Keys.ToList()) d.CategoryPriority[k] = Convert(d.CategoryPriority[k]);
+            d.BasePriority = 0;
         }
 
         // ---------------- save → engine ----------------
@@ -299,6 +313,8 @@ namespace Satisvampory.Engine.Persistence
                 foreach (var i in dto.BannedItems ?? new()) d.BannedItems.Add(new ItemId(i));
                 foreach (var c in dto.BannedCategories ?? new()) d.BannedCategories.Add(c);
                 d.Special = Enum.TryParse<SpecialKind>(dto.Special, out var sk) ? sk : SpecialKind.None;
+                d.Private = dto.Private;
+                if (save.Version < 12) ToEntryPriorities(d);
                 state.Deposit[id] = d;
             }
 

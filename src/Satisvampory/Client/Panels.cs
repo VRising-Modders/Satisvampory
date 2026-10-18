@@ -27,6 +27,7 @@ namespace Satisvampory.Client
         readonly ListView _output;
         readonly DepositView _deposit;
         readonly PickerView _picker;
+        readonly FilterPickerView _filterPicker;
         IVanillaPanelTabs? _nativeTabs;
 
         internal Panels(SatisContext ctx, Satisvampory.Config.PlayerConfig player)
@@ -37,6 +38,7 @@ namespace Satisvampory.Client
             _output = new ListView(this, 1);
             _deposit = new DepositView(this);
             _picker = new PickerView(this);
+            _filterPicker = new FilterPickerView(this);
         }
 
         internal SatisContext Ctx => _ctx;
@@ -45,7 +47,7 @@ namespace Satisvampory.Client
 
         internal void Attach()
         {
-            Tabs(VanillaUiSite.ContainerPanel, new[] { "Inventory", "Input", "Output", "Accepts" });
+            Tabs(VanillaUiSite.ContainerPanel, new[] { "Inventory", "Input", "Output", "Filter" });
             Tabs(VanillaUiSite.StationPanel, new[] { "Production", "Input", "Output" });
             // Unit stations (tomb, vermin nest, Nether Gate) have no tab row, so no Input/Output tabs:
             // they get edge buttons, shown only on those windows.
@@ -199,6 +201,8 @@ namespace Satisvampory.Client
 
         internal void OpenPicker(int side) => _picker.Show(side);
 
+        internal void OpenFilterPicker(DepositView into) => _filterPicker.Show(into);
+
         internal void SelectTab(int tab)
         {
             if (tab == 0) { _openVersion++; HideAll(); return; } // The game's inventory/production remains authoritative.
@@ -220,6 +224,7 @@ namespace Satisvampory.Client
             _output.Hide();
             _deposit.Hide();
             _picker.Hide();
+            _filterPicker.Hide();
         }
     }
 
@@ -407,7 +412,9 @@ namespace Satisvampory.Client
             _redrawing = true;
             try
             {
-                _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "");
+                _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "")
+                    + (s.Deposit.Private ? "\nPrivate chest: Input and Output are off. Turn Private off on the Filter tab to use them." : "");
+                _add.Visible = !s.Deposit.Private;
                 _order.Value = (_side == 0 ? s.PullOrder : s.SendOrder).ToString();
                 var rows = _side == 0 ? s.Input : s.Output;
                 _list.SetRows(rows.Select((r, i) => new UiTableRow(i.ToString()) { BuildingPrefab = r.BuildingPrefab }
@@ -472,70 +479,128 @@ namespace Satisvampory.Client
     }
 
     /// <summary>A chest's deposit settings (spec 01).</summary>
+    /// <summary>
+    /// The Filter tab: what this chest takes from belts and automatic deposits. Each listed item or
+    /// category is Allowed at a priority of 1 to 99 (higher wins with Mass Deposit) or Blocked. Private
+    /// takes the chest out of every shared island use.
+    /// </summary>
     internal sealed class DepositView : View
     {
         protected override string? TipId => Help.DepositTip;
 
+        sealed class Entry
+        {
+            public int Item;
+            public string Category = "";
+            public string Label = "";
+            public bool Blocked;
+            public int Priority = Satisvampory.Engine.Model.DepositOptions.DefaultEntryPriority;
+            public string Key => Item != 0 ? "i:" + Item : "c:" + Category;
+        }
+
         IUiLabel _header = null!;
         IUiLabel _restriction = null!;
         IUiDropdown _takes = null!;
-        IUiNumber _base = null!;
-        IUiOrderedList _entries = null!;
-        IUiInput _entryName = null!;
-        IUiNumber _entryAdjust = null!;
-        IUiDropdown _special = null!;
+        IUiDataTable _entries = null!;
+        IUiDropdown _batchRule = null!;
+        IUiNumber _batchPriority = null!;
+        IUiButton _batchApply = null!;
+        IUiToggle _private = null!;
+        IUiLabel _privateNote = null!;
         IUiButton _empty = null!;
         float _emptyArmedAt = -10;
-        IUiToggle _advanced = null!;
-        IUiButton _ban = null!;
-        DepositMsg _draft = new();
-        bool _dirty;
+        readonly List<Entry> _list = new();
+        readonly HashSet<string> _selected = new();
+        int _special;
+        bool _dirty, _redrawing;
         string _draftFor = "";
 
         public DepositView(Panels owner) : base(owner)
         {
         }
 
-        protected override string Title => "Logistics";
+        protected override string Title => "Filter";
         protected override int NavigationTab => 3;
 
         static readonly string[] TakesValues = { "0", "1", "2" };
-        static readonly string[] TakesLabels = { "Anything", "Only what's listed", "Nothing" };
-        static readonly string[] SpecialValues = { "0", "1", "2", "3", "4", "5", "6" };
-        static readonly string[] SpecialLabels = { "None", "Overflow", "Skip", "Salvage", "Spawner", "Trash", "Spoils" };
+        static readonly string[] TakesLabels = { "Anything not blocked", "Only allowed items", "Nothing" };
+
+        internal IReadOnlyCollection<string> ListedKeys => _list.Select(e => e.Key).ToList();
 
         protected override void Build(IUiPanel panel)
         {
             var ctx = Owner.Ctx;
             _header = panel.Label("");
-            panel.Label("Items accepted from belts and automatic deposits. Manual deposits are unaffected.");
+            panel.Label("What belts and automatic deposits may put here. Manual deposits are unaffected.");
             _restriction = panel.Label("");
-            _takes = panel.Dropdown("Accepts", TakesValues, "0", TakesLabels);
-            ctx.Track(_takes.Term("Accepts"));
-            _advanced = panel.Toggle("Advanced settings", false);
-            ctx.Track(_advanced.OnChanged(_ => ShowAdvanced()));
-            _base = panel.Number("Base priority", 0, -10, 10);
-            _entries = panel.OrderedList("entries", Array.Empty<UiListItem>(), new UiOrderedListOptions
+            _takes = panel.Dropdown("Takes", TakesValues, "0", TakesLabels);
+            ctx.Track(_takes.OnChanged(_ => { if (!_redrawing) _dirty = true; }));
+            ctx.Track(panel.Button("+ Add items or categories…").OnClick(() => Owner.OpenFilterPicker(this)));
+
+            _entries = panel.DataTable("filter.entries", new[]
             {
-                Reorder = false,
-                EmptyText = "No allowed items. Add an item or category.",
+                new UiTableColumn("name", "Item or category") { Hideable = false },
+                new UiTableColumn("type", "Type") { Width = 120 },
+                new UiTableColumn("rule", "Rule") { Width = 110 },
+                new UiTableColumn("priority", "Priority", UiTableColumnKind.Number) { Editable = true, Format = "0", Width = 100, Term = "Priority" },
+                new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 2 },
+            }, new UiDataTableOptions
+            {
+                VisibleRows = 8, MinRows = 6, Selectable = true, MultiSelect = true, ColumnChooser = false, TotalRow = false,
+                Sort = new[] { new UiTableSortKey("priority", false) },
+                EmptyText = "Nothing listed. Add items or categories.",
             });
-            ctx.Track(_entries.OnRemove(item =>
+            ctx.Track(_entries.OnSelectionChanged(ids =>
             {
-                var parts = item.Id.Split(':');
-                var list = parts[0] == "p" ? _draft.Priorities : _draft.Bans;
-                var i = int.Parse(parts[1]);
-                if (i >= 0 && i < list.Count) list.RemoveAt(i);
+                _selected.Clear();
+                foreach (var id in ids) _selected.Add(id);
+                _batchApply.Interactable = _selected.Count > 0 && (Owner.State?.CanEdit ?? false);
+            }));
+            ctx.Track(_entries.OnRowAction((id, action) =>
+            {
+                var e = _list.FirstOrDefault(x => x.Key == id);
+                if (e == null) return;
+                if (action == "rule") e.Blocked = !e.Blocked;
+                else if (action == "remove") { _list.Remove(e); _selected.Remove(id); }
                 _dirty = true;
                 DrawEntries();
             }));
-            _entryName = panel.Input("Item or category", "");
-            _entryAdjust = panel.Number("Priority change", 0, -10, 10);
-            ctx.Track(panel.Button("+ Add item or category").OnClick(() => AddEntry(ban: false)));
-            _ban = panel.Button("+ Never deposit here");
-            ctx.Track(_ban.OnClick(() => AddEntry(ban: true)));
-            _special = panel.Dropdown("Special kind", SpecialValues, "0", SpecialLabels);
-            ShowAdvanced();
+            ctx.Track(_entries.OnEdit(edit =>
+            {
+                var e = _list.FirstOrDefault(x => x.Key == edit.RowId);
+                if (e == null || edit.NewValue is not { } v) { edit.Reject("Type a priority from 1 to 99."); return; }
+                if (e.Blocked) { edit.Reject("A blocked entry has no priority."); return; }
+                var p = (int)Math.Round(v);
+                if (p < 1 || p > 99) { edit.Reject("Type a priority from 1 to 99."); return; }
+                e.Priority = p;
+                _dirty = true;
+                edit.Resolve();
+            }));
+
+            // Set several at once: select rows (new picks arrive selected), choose, Apply.
+            panel.BeginInline();
+            _batchRule = panel.CompactDropdown("Selected", new[] { "allow", "block" }, "allow", new[] { "Allowed", "Blocked" });
+            _batchPriority = panel.Number("Priority", Satisvampory.Engine.Model.DepositOptions.DefaultEntryPriority, 1, 99);
+            _batchApply = panel.Button("Apply to selected");
+            panel.EndInline();
+            ctx.Track(_batchApply.OnClick(() =>
+            {
+                var block = _batchRule.Value == "block";
+                var p = (int)Math.Round(_batchPriority.Value);
+                foreach (var e in _list.Where(x => _selected.Contains(x.Key)))
+                {
+                    e.Blocked = block;
+                    if (!block) e.Priority = Math.Clamp(p, 1, 99);
+                }
+                _dirty = true;
+                DrawEntries();
+            }));
+
+            _private = panel.Toggle("Private chest", false);
+            ctx.Track(_private.Term("Private chest"));
+            ctx.Track(_private.OnChanged(_ => { if (_redrawing) return; _dirty = true; ShowPrivate(); }));
+            _privateNote = panel.Label("Out of every shared castle and clan inventory: no deposits, belts, crafting or Find. Input and Output are off.");
+
             ctx.Track(panel.Button("Save").OnClick(Save));
             _empty = panel.Button("Empty trash");
             ctx.Track(_empty.OnClick(() =>
@@ -554,8 +619,6 @@ namespace Satisvampory.Client
                     ctx.Hud.Notify("Trash emptied.", kind: UiNoticeKind.Success, seconds: 3);
                 });
             }));
-
-
         }
 
         public override void Redraw()
@@ -569,71 +632,175 @@ namespace Satisvampory.Client
             _draftFor = s.ContainerId;
             _restriction.Text = s.NativeRestriction;
             var d = s.Deposit;
-            _draft = new DepositMsg
-            {
-                Takes = d.Takes,
-                BasePriority = d.BasePriority,
-                Special = d.Special,
-                Priorities = d.Priorities.ToList(),
-                Bans = d.Bans.ToList(),
-                Belts = d.Belts.ToList(),
-            };
+            _list.Clear();
+            foreach (var p in d.Priorities)
+                _list.Add(new Entry { Item = p.Item, Category = p.Item != 0 ? "" : p.Category, Label = p.Label, Priority = Math.Clamp(p.Adjust, 1, 99) });
+            foreach (var b in d.Bans)
+                _list.Add(new Entry { Item = b.Item, Category = b.Item != 0 ? "" : b.Category, Label = b.Label, Blocked = true });
+            _special = d.Special;
             _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "");
-            _takes.Value = d.Takes.ToString();
-            _base.Value = d.BasePriority;
-            _special.Value = d.Special.ToString();
+            _redrawing = true;
+            try
+            {
+                _takes.Value = d.Takes.ToString();
+                _private.Value = d.Private;
+            }
+            finally { _redrawing = false; }
             _empty.Visible = d.Special == (int)Satisvampory.Engine.Model.SpecialKind.Trash && s.CanEdit;
+            _selected.Clear();
+            _batchApply.Interactable = false;
+            ShowPrivate();
             DrawEntries();
         }
 
-        void ShowAdvanced()
-        {
-            _base.Visible = _entryAdjust.Visible = _special.Visible = _ban.Visible = _advanced.Value;
-        }
+        void ShowPrivate() => _privateNote.Visible = _private.Value;
+
+        string Name(Entry e) =>
+            e.Item != 0 ? ClientItems.NameOf(Owner.Ctx, e.Item, e.Label) : Help.TitleCase(e.Category);
 
         void DrawEntries()
         {
-            var items = new List<UiListItem>();
-            for (var i = 0; i < _draft.Priorities.Count; i++)
-            {
-                var p = _draft.Priorities[i];
-                items.Add(new UiListItem("p:" + i, p.Item != 0 ? ClientItems.NameOf(Owner.Ctx, p.Item, p.Label) : p.Label.Length > 0 ? p.Label : p.Category) { Badge = (p.Adjust >= 0 ? "+" : "−") + Math.Abs(p.Adjust) });
-            }
-            for (var i = 0; i < _draft.Bans.Count; i++)
-            {
-                var b = _draft.Bans[i];
-                items.Add(new UiListItem("b:" + i, b.Item != 0 ? ClientItems.NameOf(Owner.Ctx, b.Item, b.Label) : b.Label.Length > 0 ? b.Label : b.Category) { Badge = "Never" });
-            }
-            _entries.SetItems(items);
+            var canEdit = Owner.State?.CanEdit ?? false;
+            _entries.SetRows(_list.Select(e => new UiTableRow(e.Key) { ItemPrefab = e.Item }
+                .Text("name", Name(e))
+                .Text("type", e.Item != 0 ? "Item" : "Category")
+                .Text("rule", e.Blocked ? "Blocked" : "Allowed", e.Blocked ? LabelTone.Danger : LabelTone.Ok)
+                .Number("priority", e.Blocked ? null : e.Priority, e.Blocked ? "—" : null)
+                .Action("rule", UiRowActionIcon.Check, e.Blocked ? "Allow it" : "Block it", canEdit)
+                .Action("remove", UiRowActionIcon.Remove, "Remove from the list", canEdit)));
+            _entries.SetSelected(_selected.ToArray());
         }
 
-        void AddEntry(bool ban)
+        /// <summary>From the picker: new entries arrive Allowed at 50 and selected, ready for Apply to selected.</summary>
+        internal void AddPicked(IEnumerable<string> keys)
         {
-            var name = _entryName.Value.Trim();
-            if (name.Length == 0) return;
-            var resolved = ClientItems.Resolve(Owner.Ctx, name);
-            var entry = int.TryParse(resolved, out var guid)
-                ? new PriorityMsg { Item = guid, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) }
-                : new PriorityMsg { Category = name, Label = name, Adjust = (int)Math.Round(_entryAdjust.Value) };
-            (ban ? _draft.Bans : _draft.Priorities).Add(entry);
+            _selected.Clear();
+            foreach (var key in keys)
+            {
+                if (_list.Any(x => x.Key == key)) { _selected.Add(key); continue; }
+                var e = key.StartsWith("i:") && int.TryParse(key.Substring(2), out var guid)
+                    ? new Entry { Item = guid, Label = ClientItems.NameOf(Owner.Ctx, guid) ?? key }
+                    : new Entry { Category = key.Substring(2), Label = key.Substring(2) };
+                _list.Add(e);
+                _selected.Add(e.Key);
+            }
             _dirty = true;
-            _entryName.Value = string.Empty;
+            _batchApply.Interactable = _selected.Count > 0 && (Owner.State?.CanEdit ?? false);
+            Show();
             DrawEntries();
         }
 
         void Save()
         {
-            _draft.Takes = int.TryParse(_takes.Value, out var t) ? t : 0;
-            _draft.BasePriority = (int)Math.Round(_base.Value);
-            _draft.Special = int.TryParse(_special.Value, out var sp) ? sp : 0;
-            Owner.Send<SetDepositReq, PanelMsg>(new SetDepositReq { Target = Owner.Target(), Deposit = _draft }, reply =>
+            var draft = new DepositMsg
+            {
+                Takes = int.TryParse(_takes.Value, out var t) ? t : 0,
+                Special = _special,
+                Private = _private.Value,
+            };
+            foreach (var e in _list)
+            {
+                var m = new PriorityMsg { Item = e.Item, Category = e.Category, Label = e.Label, Adjust = e.Priority };
+                (e.Blocked ? draft.Bans : draft.Priorities).Add(m);
+            }
+            Owner.Send<SetDepositReq, PanelMsg>(new SetDepositReq { Target = Owner.Target(), Deposit = draft }, reply =>
             {
                 _dirty = false;
                 Owner.Apply(reply);
-                Owner.Ctx.Hud.Notify("Accepts settings saved.", kind: UiNoticeKind.Success, seconds: 3);
+                Owner.Ctx.Hud.Notify("Filter saved.", kind: UiNoticeKind.Success, seconds: 3);
+            });
+        }
+    }
+
+    /// <summary>The Filter tab's Add picker: items and categories with icons and stored counts, several at once.</summary>
+    internal sealed class FilterPickerView : View
+    {
+        IUiChecklist _list = null!;
+        DepositView? _into;
+
+        public FilterPickerView(Panels owner) : base(owner)
+        {
+        }
+
+        protected override string Title => "Add to Filter";
+
+        protected override void Build(IUiPanel panel)
+        {
+            var ctx = Owner.Ctx;
+            panel.GameWindow(900);
+            _list = panel.Checklist("filter.pick", Array.Empty<UiChecklistEntry>(), new UiChecklistOptions
+            {
+                Placeholder = "Search items or categories",
+                Columns = new[]
+                {
+                    new UiTableColumn("type", "Type") { Width = 130 },
+                    new UiTableColumn("count", "Stored", UiTableColumnKind.Number) { Format = "#,0", Width = 130 },
+                },
+                Sort = new[] { new UiTableSortKey("count", false) },
+                Filters = new[]
+                {
+                    new UiChecklistFilter("stored", "In storage"),
+                    new UiChecklistFilter("items", "Items"),
+                    new UiChecklistFilter("categories", "Categories"),
+                },
+                DefaultFilter = "stored",
+                AllFilterLabel = "Everything",
+                ConfirmFormat = "Add {0}",
+                FillHeight = true,
+                EmptyText = "Nothing matches.",
+            });
+            ctx.Track(_list.OnConfirmed(picked =>
+            {
+                var into = _into;
+                Hide();
+                into?.AddPicked(picked);
+            }));
+            ctx.Track(_list.OnCancelled(() => { var into = _into; Hide(); into?.Show(); }));
+        }
+
+        public void Show(DepositView into)
+        {
+            _into = into;
+            _ = Panel;
+            Owner.Send<FilterPickerReq, FilterPickerReply>(new FilterPickerReq { Target = Owner.Target() }, r =>
+            {
+                var listed = new HashSet<string>(into.ListedKeys);
+                var entries = new List<UiChecklistEntry>();
+                for (var i = 0; i < r.Categories.Count; i++)
+                {
+                    var key = "c:" + r.Categories[i];
+                    var n = i < r.CategoryCounts.Count ? r.CategoryCounts[i] : 0;
+                    entries.Add(new UiChecklistEntry(key, Help.TitleCase(r.Categories[i]))
+                    {
+                        Filters = n > 0 ? new[] { "categories", "stored" } : new[] { "categories" },
+                        Keywords = new[] { "category" },
+                        DisabledReason = listed.Contains(key) ? "Already listed" : "",
+                    }.Text("type", "Category").Number("count", n));
+                }
+                for (var i = 0; i < r.Items.Count; i++)
+                {
+                    // Only items the game names: the catalog also holds internal stand-ins.
+                    if (ClientItems.NameOf(Owner.Ctx, r.Items[i]) is not { Length: > 0 } name) continue;
+                    var key = "i:" + r.Items[i];
+                    var n = i < r.ItemCounts.Count ? r.ItemCounts[i] : 0;
+                    entries.Add(new UiChecklistEntry(key, name)
+                    {
+                        ItemPrefab = r.Items[i],
+                        Filters = n > 0 ? new[] { "items", "stored" } : new[] { "items" },
+                        DisabledReason = listed.Contains(key) ? "Already listed" : "",
+                    }.Text("type", "Item").Number("count", n));
+                }
+                _list.SetSelected(Array.Empty<string>());
+                _list.Query = "";
+                _list.SetEntries(entries);
+                into.Hide();
+                base.Show();
             });
         }
 
+        public override void Redraw()
+        {
+        }
     }
 
     /// <summary>The Add… picker for an Input or Output list.</summary>

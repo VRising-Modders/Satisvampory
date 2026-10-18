@@ -174,6 +174,7 @@ namespace Satisvampory.Engine.Edits
             to.BasePriority = from.BasePriority;
             to.Takes = from.Takes;
             to.Special = from.Special;
+            to.Private = from.Private;
             to.ItemPriority.Clear();
             foreach (var kv in from.ItemPriority) to.ItemPriority[kv.Key] = kv.Value;
             to.CategoryPriority.Clear();

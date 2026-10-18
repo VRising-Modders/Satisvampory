@@ -313,7 +313,7 @@ namespace Satisvampory.Server
             if (!Guid.TryParse(q.ContainerId, out var g)) throw new RequestRefusedException("That chest is gone.");
             var id = new Engine.Model.ContainerId(g);
             if (s.World.Find(id) == null) throw new RequestRefusedException("That chest is not on this island.");
-            var p = Math.Clamp(q.Priority, DepositOptions.MinPriority, DepositOptions.MaxPriority);
+            var p = DepositOptions.ClampEntry(q.Priority);
             var key = q.Key ?? "";
             Must(s.Edits.SetDepositOptions(s.Role, id, d =>
             {
@@ -433,7 +433,7 @@ namespace Satisvampory.Server
             var edits = s.Island.State.Categories;
             var stock = new Dictionary<ItemId, long>();
             foreach (var plot in s.Island.Scope)
-                foreach (var c in s.World.ContainersOn(plot).Where(c => c.Kind == NodeKind.Chest))
+                foreach (var c in s.World.ContainersOn(plot).Where(c => c.Shared))
                     foreach (var st in s.World.Contents(c.Id))
                         stock[st.Item] = (stock.TryGetValue(st.Item, out var have) ? have : 0) + st.Amount;
             string NameOfContainer(Engine.Model.ContainerId id) => s.World.Find(id) is { } x ? $"{x.DisplayName} · {Label(s.Island, x.Plot)}" : "a chest";
@@ -594,7 +594,7 @@ namespace Satisvampory.Server
             // Per item and plot: count, chests, and the chest holding the most (spec 15, row expand).
             var byPlot = new Dictionary<ItemId, Dictionary<PlotId, (long Count, int Chests, string Top, long TopCount)>>();
             foreach (var plot in s.Island.Scope)
-                foreach (var c in s.World.ContainersOn(plot).Where(c => c.Kind == NodeKind.Chest))
+                foreach (var c in s.World.ContainersOn(plot).Where(c => c.Shared))
                     foreach (var st in s.World.Contents(c.Id))
                     {
                         if (!byPlot.TryGetValue(st.Item, out var pp)) byPlot[st.Item] = pp = new();
@@ -793,7 +793,7 @@ namespace Satisvampory.Server
             ContainerInfo? station = null;
             if (q.Target.NetIndex != 0 || q.Target.NetGeneration != 0 || q.Target.ContainerId.Length > 0)
                 station = TargetResolver.Resolve(_ctx, q.Target, out _) is { } sid ? s.World.Find(sid) : null;
-            var chests = s.Island.Scope.SelectMany(p => s.World.ContainersOn(p)).Where(c => c.Kind == NodeKind.Chest).ToList();
+            var chests = s.Island.Scope.SelectMany(p => s.World.ContainersOn(p)).Where(c => c.Shared).ToList();
             HashSet<ContainerId>? reach = null;
             if (station != null)
             {

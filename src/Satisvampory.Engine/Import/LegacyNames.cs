@@ -194,7 +194,7 @@ namespace Satisvampory.Engine.Import
                 if (held.Count > 0)
                 {
                     chest.Deposit.Takes = Takes.OnlyListed;
-                    foreach (var i in held) chest.Deposit.ItemPriority[i] = 0;
+                    foreach (var i in held) chest.Deposit.ItemPriority[i] = DepositOptions.DefaultEntryPriority;
                 }
             }
         }
@@ -221,20 +221,20 @@ namespace Satisvampory.Engine.Import
             if (catalog.TryResolveItem(name, out var item))
             {
                 o.Takes = Takes.OnlyListed;
-                o.ItemPriority[item] = 0;
+                o.ItemPriority[item] = DepositOptions.DefaultEntryPriority;
                 return;
             }
             if (catalog.TryResolveCategory(name, out var whole))
             {
                 o.Takes = Takes.OnlyListed;
-                o.CategoryPriority[whole] = 0;
+                o.CategoryPriority[whole] = DepositOptions.DefaultEntryPriority;
                 return;
             }
             var found = false;
             foreach (var word in name.Split(' '))
                 if (catalog.TryResolveCategory(word, out var cat))
                 {
-                    o.CategoryPriority[cat] = 0;
+                    o.CategoryPriority[cat] = DepositOptions.DefaultEntryPriority;
                     found = true;
                 }
             if (found) { o.Takes = Takes.OnlyListed; return; }
@@ -242,7 +242,7 @@ namespace Satisvampory.Engine.Import
             o.Takes = Takes.OnlyListed;
             if (world != null)
                 foreach (var s in world.Contents(c.Id))
-                    o.ItemPriority[s.Item] = 0;
+                    o.ItemPriority[s.Item] = DepositOptions.DefaultEntryPriority;
             if (o.ItemPriority.Count == 0)
                 report.Unmapped.Add($"{c.DisplayName}: name matches no item or category and the chest is empty; it takes nothing until set");
         }

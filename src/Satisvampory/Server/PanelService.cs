@@ -43,6 +43,7 @@ namespace Satisvampory.Server
             _ctx.Requests.Handle<TakeFromRowReq, TextReply>((u, q, i) => With(u, q.Target, sess => TakeFromRow(u, sess, q)));
             _ctx.Requests.Handle<SetDepositReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetDeposit(s, r)));
             _ctx.Requests.Handle<PickerReq, PickerReply>((u, r, i) => With(u, r.Target, s => PickerRows(s, r)));
+            _ctx.Requests.Handle<FilterPickerReq, FilterPickerReply>((u, r, i) => With(u, r.Target, s => FilterPicker(s)));
             _ctx.Requests.Handle<TryItReq, TryItReply>((u, r, i) => With(u, r.Target, s => TryIt(s, r)));
             _ctx.Requests.Handle<SetRecipesReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetRecipes(s, r)));
             _ctx.Requests.Handle<SetLoopReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetLoop(s, r)));
@@ -182,18 +183,19 @@ namespace Satisvampory.Server
         {
             var m = r.Deposit;
             if (m.Belts is { Count: > 0 } || m.BeltIds is { Count: > 0 })
-                throw new RequestRefusedException("Accepts does not edit belt membership. Use Input, Output or Manage belts.");
+                throw new RequestRefusedException("Filter does not edit belt membership. Use Input, Output or Manage belts.");
             Must(s.Edits.SetDepositOptions(s.Role, s.Container.Id, d =>
             {
                 d.Takes = (Takes)Math.Clamp(m.Takes, 0, 2);
-                d.BasePriority = Math.Clamp(m.BasePriority, -10, 10);
+                d.BasePriority = 0; // retired: each Filter entry carries its own 1..99 priority
+                d.Private = m.Private;
                 d.Special = Enum.IsDefined(typeof(SpecialKind), m.Special) ? (SpecialKind)m.Special : SpecialKind.None;
                 d.ItemPriority.Clear();
                 d.CategoryPriority.Clear();
                 foreach (var p in m.Priorities)
-                    if (p.Item != 0) d.ItemPriority[new ItemId(p.Item)] = Math.Clamp(p.Adjust, -10, 10);
-                    else if (s.Catalog.TryResolveCategory(p.Category, out var c)) d.CategoryPriority[c] = Math.Clamp(p.Adjust, -10, 10);
-                    else if (TryItem(s.Catalog, p.Category, out var named)) d.ItemPriority[named] = Math.Clamp(p.Adjust, -10, 10);
+                    if (p.Item != 0) d.ItemPriority[new ItemId(p.Item)] = DepositOptions.ClampEntry(p.Adjust);
+                    else if (s.Catalog.TryResolveCategory(p.Category, out var c)) d.CategoryPriority[c] = DepositOptions.ClampEntry(p.Adjust);
+                    else if (TryItem(s.Catalog, p.Category, out var named)) d.ItemPriority[named] = DepositOptions.ClampEntry(p.Adjust);
                     else throw new RequestRefusedException($"No item or category called \"{p.Category}\".");
                 d.BannedItems.Clear();
                 d.BannedCategories.Clear();
@@ -205,6 +207,27 @@ namespace Satisvampory.Server
             }));
             Save(s);
             return Panel(s);
+        }
+
+        /// <summary>Every item and category for the Filter picker, with the island's stored count (shared chests).</summary>
+        FilterPickerReply FilterPicker(Session s)
+        {
+            var stock = new Dictionary<ItemId, long>();
+            foreach (var c in Engine.World.Scope.Chests(s.World, s.Island.Scope))
+                foreach (var st in s.World.Contents(c.Id))
+                    stock[st.Item] = (stock.TryGetValue(st.Item, out var n) ? n : 0) + st.Amount;
+            var reply = new FilterPickerReply();
+            foreach (var item in s.Catalog.AllItems)
+            {
+                reply.Items.Add(item.Guid);
+                reply.ItemCounts.Add(stock.TryGetValue(item, out var n) ? n : 0);
+            }
+            foreach (var cat in s.Catalog.CategoryNames.OrderBy(x => x))
+            {
+                reply.Categories.Add(cat);
+                reply.CategoryCounts.Add(s.Catalog.Members(cat).Sum(i => stock.TryGetValue(i, out var n) ? n : 0));
+            }
+            return reply;
         }
 
         PickerReply PickerRows(Session s, PickerReq r)
@@ -389,6 +412,7 @@ namespace Satisvampory.Server
             msg.Deposit.Takes = (int)d.Takes;
             msg.Deposit.BasePriority = d.BasePriority;
             msg.Deposit.Special = (int)d.Special;
+            msg.Deposit.Private = d.Private;
             foreach (var (item, adj) in d.ItemPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item), Adjust = adj });
             foreach (var (cat, adj) in d.CategoryPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Adjust = adj });
             foreach (var item in d.BannedItems) msg.Deposit.Bans.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item) });

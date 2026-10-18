@@ -55,6 +55,9 @@ namespace Satisvampory.Client
                 kind => kind == VanillaPanelKind.UnitStation);
             Site(VanillaUiSite.StationPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: where this station's products go", () => Open(_output),
                 kind => kind == VanillaPanelKind.UnitStation);
+            // A small Log button in the title row of every chest and station: the hub's Log on this one.
+            LogButton(VanillaUiSite.ContainerPanel);
+            LogButton(VanillaUiSite.StationPanel);
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.LeftEdge, "Input", "Input: where this heart's blood comes from", () => Open(_input));
             Site(VanillaUiSite.CastleHeartPanel, VanillaPanelAnchor.RightEdge, "Output", "Output: only items you send out of the heart", () => Open(_output));
         }
@@ -101,6 +104,21 @@ namespace Satisvampory.Client
 
         internal void Mount(IUiPanel panel) => _nativeTabs?.Mount(panel);
 
+        void LogButton(VanillaUiSite site)
+        {
+            var handle = UiApi.AttachToVanilla(site, VanillaPanelAnchor.BesideRename, _ctx.Owner, _ctx.Guid + ".log");
+            _ctx.Track(handle);
+            var button = handle.Button("Log");
+            _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings (last 24 hours).", "Log"));
+            _ctx.Track(button.OnClick(() =>
+            {
+                if (!_hasTarget) return;
+                void Go() { if (_state != null) OpenLog?.Invoke(_state.ContainerId, _state.Name); }
+                if (_state != null) Go();
+                else Load(Go);
+            }));
+        }
+
         void Site(VanillaUiSite site, VanillaPanelAnchor anchor, string caption, string tip, Action onClick,
             Func<VanillaPanelKind, bool>? showFor = null)
         {
@@ -139,6 +157,9 @@ namespace Satisvampory.Client
 
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
+
+        /// <summary>Open the hub's Log on one chest or station (id, name).</summary>
+        internal Action<string, string>? OpenLog { get; set; }
 
         /// <summary>Open the hub's Find on one chest or station (id, name).</summary>
         internal Action<string, string>? FindContainer { get; set; }

@@ -326,6 +326,7 @@ namespace Satisvampory.Server
             var left = states.SelectMany(st => world.Contents(st.Inventory)).GroupBy(x => x.Item).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
             // One line per item: what came home and where it went.
             var plotNames = ServerActions.PlotNames(_ctx.Save, members);
+            ServerActions.LogMoves(_half, world, plotNames, moves.Select(m => (m.From, m.To, m.Item, m.Amount, default(ItemId))), "Servant loot", "", "Servants' bags");
             detail = ServerActions.MoveLines(world, home.Catalog, plotNames,
                 moves.Select(m => (m.To, m.Item, m.Amount)), left, "the servants' bags", ServerActions.ChestLinks(_ctx, world, plotNames));
             if (left.Count > 0)

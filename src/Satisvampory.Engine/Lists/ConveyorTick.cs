@@ -10,7 +10,8 @@ using Satisvampory.Engine.World;
 
 namespace Satisvampory.Engine.Lists
 {
-    public sealed record MoveRecord(ContainerId From, ContainerId To, ItemId Item, int Amount, string Why);
+    /// <summary>One move. <paramref name="For"/>: a station feed's product (the recipe it feeds), else none.</summary>
+    public sealed record MoveRecord(ContainerId From, ContainerId To, ItemId Item, int Amount, string Why, ItemId For = default);
 
     /// <summary>State that lives across ticks for one island.</summary>
     public sealed class TickState
@@ -380,7 +381,7 @@ namespace Satisvampory.Engine.Lists
                 foreach (var src in PullFrom(item))
                 {
                     if (left <= 0 || !Budget(src)) break;
-                    var moved = Move(src, PartOf(src), station.Id, item, left, "station feed");
+                    var moved = Move(src, PartOf(src), station.Id, item, left, "station feed", ProductFor(recipes, plan, item));
                     if (moved > 0)
                     {
                         _state.FedFrom[(station.Id, item)] = src;
@@ -677,7 +678,16 @@ namespace Satisvampory.Engine.Lists
             return !_plotMoves.TryGetValue(plot, out var n) || n < _opt.MovesPerPlot;
         }
 
-        int Move(ContainerId from, InvPart part, ContainerId to, ItemId item, int amount, string why)
+        /// <summary>What a pulled item is for: the first product of a fed recipe that uses it.</summary>
+        static ItemId ProductFor(IEnumerable<Recipe> recipes, StationPlan plan, ItemId item)
+        {
+            var r = recipes.Where(x => x.Inputs.Any(i => i.Item == item))
+                .OrderByDescending(x => plan.Crafts.TryGetValue(x.Id, out var c) ? c : 0)
+                .FirstOrDefault();
+            return r != null && r.Outputs.Count > 0 ? r.Outputs[0].Item : default;
+        }
+
+        int Move(ContainerId from, InvPart part, ContainerId to, ItemId item, int amount, string why, ItemId forProduct = default)
         {
             if (amount <= 0 || from == to) return 0;
             if (!_inScope.Contains(from) || !_inScope.Contains(to)) return 0;
@@ -705,7 +715,7 @@ namespace Satisvampory.Engine.Lists
             _moves++;
             var plot = _world.Find(from)?.Plot ?? default;
             _plotMoves[plot] = (_plotMoves.TryGetValue(plot, out var n) ? n : 0) + 1;
-            _report.Moves.Add(new MoveRecord(from, to, item, moved, why));
+            _report.Moves.Add(new MoveRecord(from, to, item, moved, why, forProduct));
             return moved;
         }
         /// <summary>

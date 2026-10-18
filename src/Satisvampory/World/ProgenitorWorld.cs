@@ -25,6 +25,8 @@ namespace Satisvampory.World
             public InventoryRef Main;
             public InventoryRef Output;
             public ICastleHandle Castle = null!;
+            /// <summary>A player's or servant's bag added for one action, not a castle container.</summary>
+            public bool Bag;
             public Unity.Entities.Entity Entity;
             public float Facing;
             /// <summary>Which source slots a move may draw from; a player's bag skips the action bar.</summary>
@@ -194,12 +196,15 @@ namespace Satisvampory.World
         /// is never a home or a source for anything but the action that registered it.
         /// </summary>
         /// <param name="player">A player's bag: moves out of it never touch the action bar (slots 0-7).</param>
+        public bool IsBag(EngineId id) => _nodes.TryGetValue(id, out var n) && n.Bag;
+
         public EngineId AddBag(InventoryRef bag, bool player = false)
         {
             var id = EngineId.New();
             _nodes[id] = new Node
             {
                 Info = new ContainerInfo(id, default, NodeKind.Chest, "bag"),
+                Bag = true,
                 Main = bag,
                 Output = default,
                 SourceSlots = player ? InventorySlotFilter.SkipActionBar : InventorySlotFilter.All,

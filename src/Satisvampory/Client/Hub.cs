@@ -21,7 +21,7 @@ namespace Satisvampory.Client
     /// </summary>
     internal sealed class Hub
     {
-        public const int CastleTab = 0, MassDepositTab = 1, BeltsTab = 2, InventoryTab = 3, FindTab = 4, HuntLogTab = 5;
+        public const int CastleTab = 0, MassDepositTab = 1, BeltsTab = 2, InventoryTab = 3, FindTab = 4, HuntLogTab = 5, LogTab = 6;
 
         readonly SatisContext _ctx;
         readonly PlayerConfig _player;
@@ -81,6 +81,113 @@ namespace Satisvampory.Client
         IUiInput _findText = null!, _pullAmount = null!;
         IUiLabel _findResult = null!;
         IUiLabel _huntLog = null!;
+
+        // ---------------- Log ----------------
+
+        IUiLabel _logFor = null!;
+        IUiButton _logClear = null!;
+        IUiInput _logItem = null!;
+        IUiInput _logPlayer = null!;
+        IUiDropdown _logKind = null!;
+        IUiDropdown _logHours = null!;
+        IUiDataTable _logTable = null!;
+        string _logContainer = "", _logContainerName = "";
+        List<LogRowMsg> _logRows = new();
+        int _logSeq;
+
+        void BuildLog(IUiPanel p)
+        {
+            p.BeginInline();
+            _logFor = _tabs.Add(LogTab, p.Label("All chests and stations"));
+            _logClear = _tabs.Add(LogTab, p.Button("Show all"));
+            p.EndInline();
+            Track(_logClear.OnClick(() => { _logContainer = _logContainerName = ""; RunLog(); }));
+            p.BeginInline();
+            _logItem = _tabs.Add(LogTab, p.Input("Item or category", ""));
+            _logPlayer = _tabs.Add(LogTab, p.Input("Player", ""));
+            _logKind = _tabs.Add(LogTab, p.CompactDropdown("Show", new[] { "0", "1", "2" }, "0", new[] { "Moves and changes", "Moves", "Setting changes" }));
+            _logHours = _tabs.Add(LogTab, p.CompactDropdown("Last", new[] { "1", "6", "24" }, "24", new[] { "Hour", "6 hours", "24 hours" }));
+            Track(_tabs.Add(LogTab, p.Button("Refresh")).OnClick(RunLog));
+            p.EndInline();
+            Track(_logItem.OnSubmitted(_ => RunLog()));
+            Track(_logPlayer.OnSubmitted(_ => RunLog()));
+            Track(_logKind.OnChanged(_ => RunLog()));
+            Track(_logHours.OnChanged(_ => RunLog()));
+            _logTable = _tabs.Add(LogTab, p.DataTable("log.rows", new[]
+            {
+                new UiTableColumn("time", "Time") { Width = 90, Sortable = false },
+                new UiTableColumn("what", "What") { Hideable = false, Sortable = false },
+                new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Width = 110, Format = "#,0", Sortable = false },
+                new UiTableColumn("from", "From") { Width = 260, Sortable = false },
+                new UiTableColumn("to", "To") { Width = 260, Sortable = false },
+                new UiTableColumn("why", "Why") { Width = 230, Sortable = false },
+                new UiTableColumn("player", "Player") { Width = 150, Sortable = false },
+                new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 2 },
+            }, new UiDataTableOptions
+            {
+                VisibleRows = 14, MinRows = 8, Selectable = false, ColumnChooser = false, TotalRow = false, Sort = Array.Empty<UiTableSortKey>(),
+                EmptyText = "Nothing logged for this filter yet. Moves and setting changes stay for 24 hours.",
+            }));
+            Track(_logTable.OnRowAction((id, action) =>
+            {
+                if (!int.TryParse(id, out var i) || i < 0 || i >= _logRows.Count) return;
+                var r = _logRows[i];
+                if (action == "from" && r.From.Length > 0) FindContainer(r.From, r.FromName);
+                else if (action == "to" && r.To.Length > 0) FindContainer(r.To, r.ToName);
+            }));
+        }
+
+        /// <summary>The Log tab on one chest or station (the small Log button on its window).</summary>
+        internal void OpenLog(string containerId, string name)
+        {
+            _logContainer = containerId;
+            _logContainerName = name;
+            _ = Panel;
+            _logItem.Value = "";
+            _logPlayer.Value = "";
+            Open(LogTab);
+        }
+
+        void RunLog()
+        {
+            if (_panel == null) return;
+            _logFor.Text = _logContainer.Length > 0 ? "Only " + _logContainerName : "All chests and stations";
+            _logClear.Visible = _logContainer.Length > 0;
+            var text = _logItem.Value.Trim();
+            var seq = ++_logSeq;
+            Send<LogReq, LogReply>(new LogReq
+            {
+                ContainerId = _logContainer,
+                Item = text,
+                ClientItems = text.Length > 0 ? ClientItems.Matching(_ctx, text, true, 30) : new List<int>(),
+                Player = _logPlayer.Value.Trim(),
+                Kind = int.TryParse(_logKind.Value, out var k) ? k : 0,
+                Hours = int.TryParse(_logHours.Value, out var h) ? h : 24,
+            }, reply =>
+            {
+                if (seq != _logSeq) return;
+                _logRows = reply.Rows;
+                string Name(int guid) => ClientItems.NameOf(_ctx, guid) ?? "Item";
+                string End(string name, string plot) => name.Length == 0 ? "" : plot.Length > 0 ? $"{name} ({plot})" : name;
+                _logTable.SetRows(reply.Rows.Select((r, i) =>
+                {
+                    var change = r.Detail.Length > 0;
+                    var time = DateTimeOffset.FromUnixTimeSeconds(r.At).ToLocalTime().ToString("HH:mm");
+                    var why = r.For != 0 ? $"{r.Why}, for {Name(r.For)}" : r.Why;
+                    if (r.Moves > 1) why += $" (×{r.Moves} moves)";
+                    return new UiTableRow(i.ToString()) { ItemPrefab = change ? 0 : r.Item }
+                        .Text("time", time)
+                        .Text("what", change ? r.Detail : Name(r.Item), change ? LabelTone.Muted : LabelTone.Normal)
+                        .Number("amount", change ? null : r.Amount, change ? "" : null)
+                        .Text("from", End(r.FromName, r.FromPlot))
+                        .Text("to", End(r.ToName, r.ToPlot))
+                        .Text("why", why)
+                        .Text("player", r.Actor)
+                        .Action("from", UiRowActionIcon.Locate, "Find " + (change ? "this chest or station" : "where it came from"), r.From.Length > 0)
+                        .Action("to", UiRowActionIcon.Chest, "Find where it went", r.To.Length > 0);
+                }));
+            });
+        }
         FindReply? _lastFind;
 
         internal Hub(SatisContext ctx, PlayerConfig player)
@@ -358,6 +465,7 @@ namespace Satisvampory.Client
                 case BeltsTab: Send<GetBeltsReq, BeltsMsg>(new GetBeltsReq(), DrawBelts); break;
                 case InventoryTab: LoadInventory(); break;
                 case FindTab: ShowFindStage(_findAtLocations); break;
+                case LogTab: RunLog(); break;
                 case HuntLogTab:
                     Send<GetHuntLogReq, HuntLogReply>(new GetHuntLogReq(), r =>
                         _huntLog.Text = (r.Lines.Count == 0 ? "No hunts in the last 72 hours." : ClientItems.Missions(_ctx, string.Join("\n", r.Lines.Take(40))))
@@ -405,7 +513,7 @@ namespace Satisvampory.Client
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
                 p.Footer = VersionFooter;
-                _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" }, new UiTabsOptions());
+                _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts", "Log" }, new UiTabsOptions());
                 _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
@@ -413,6 +521,7 @@ namespace Satisvampory.Client
                 BuildInventory(p);
                 BuildFind(p);
                 _huntLog = _tabs.Add(HuntLogTab, p.Label(""));
+                BuildLog(p);
                 // A new panel draws at once; only Open shows the hub, so a redraw from a reply (Tidy) stays hidden.
                 UiApi.Hide(p);
                 return p;

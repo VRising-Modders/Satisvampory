@@ -407,6 +407,51 @@ namespace Satisvampory.Net
         [Field(4)] public int Cap = -1;
     }
 
+    /// <summary>The Log tab: what Satisvampory moved and who changed what, for the reader's island.</summary>
+    [ModMessage("sv.log.get")]
+    public sealed class LogReq
+    {
+        /// <summary>A chest or station (either end of a move, or the one changed); empty for all.</summary>
+        [Field(1)] public string ContainerId = "";
+        /// <summary>Item name/alias, or "category &lt;name&gt;"; empty for all.</summary>
+        [Field(2)] public string Item = "";
+        /// <summary>Items whose game name (known only on the client) matches <see cref="Item"/>.</summary>
+        [Field(3)] public List<int> ClientItems = new();
+        [Field(4)] public string Player = "";
+        /// <summary>0 moves and changes, 1 moves only, 2 changes only.</summary>
+        [Field(5)] public int Kind;
+        /// <summary>1 to 24.</summary>
+        [Field(6)] public int Hours = 24;
+    }
+
+    [ModMessage("sv.log.row")]
+    public sealed class LogRowMsg
+    {
+        /// <summary>Unix seconds (UTC) of the last move in the entry.</summary>
+        [Field(1)] public long At;
+        [Field(2)] public int Item;
+        [Field(3)] public int Amount;
+        [Field(4)] public int Moves;
+        [Field(5)] public string From = "";
+        [Field(6)] public string FromName = "";
+        [Field(7)] public string FromPlot = "";
+        [Field(8)] public string To = "";
+        [Field(9)] public string ToName = "";
+        [Field(10)] public string ToPlot = "";
+        [Field(11)] public string Why = "";
+        /// <summary>A station feed's product.</summary>
+        [Field(12)] public int For;
+        [Field(13)] public string Actor = "";
+        /// <summary>A settings change; empty for a move.</summary>
+        [Field(14)] public string Detail = "";
+    }
+
+    [ModMessage("sv.log")]
+    public sealed class LogReply
+    {
+        [Field(1)] public List<LogRowMsg> Rows = new();
+    }
+
     [ModMessage("sv.huntlog.get")]
     public sealed class GetHuntLogReq
     {

@@ -247,10 +247,33 @@ namespace Satisvampory.Server
             return lines;
         }
 
+        /// <summary>
+        /// Moves into the Log: each end's name and plot label as they are now. A bag (player or servant) is not a
+        /// container: <paramref name="bagName"/> names that end.
+        /// </summary>
+        internal static void LogMoves(ServerHalf half, ProgenitorWorld world, Func<PlotId, string> plotName,
+            IEnumerable<(ContainerId From, ContainerId To, ItemId Item, int Amount, ItemId For)> moves, string why, string actor = "", string bagName = "")
+        {
+            foreach (var m in moves)
+            {
+                var f = world.Find(m.From);
+                var t = world.Find(m.To);
+                // A bag is filed under nothing of its own; the container end decides the castle.
+                half.MoveLog.Add(
+                    f != null && !world.IsBag(m.From) ? f.Plot : null, t != null && !world.IsBag(m.To) ? t.Plot : null,
+                    m.Item.Guid, m.Amount,
+                    m.From.Value, f == null || world.IsBag(m.From) ? bagName : f.DisplayName, f == null || world.IsBag(m.From) ? "" : plotName(f.Plot),
+                    m.To.Value, t == null || world.IsBag(m.To) ? bagName : t.DisplayName, t == null || world.IsBag(m.To) ? "" : plotName(t.Plot),
+                    why, m.For.Guid, actor);
+            }
+        }
+
         static void ReportAction(SatisContext ctx, ServerHalf half, string verb, Entity userEntity, User user, ProgenitorWorld world, ItemCatalog catalog, Island island, ActionResult r)
         {
             if (r.Moves.Count == 0 && r.Left.Count == 0) return;
             var names = PlotNames(ctx.Save, island.Castles);
+            LogMoves(half, world, names, r.Moves.Select(m => (m.From, m.To, m.Item, m.Amount, default(ItemId))),
+                verb == "Tidied" ? "Tidy" : "Quick stash", user.CharacterName.ToString(), user.CharacterName + "'s bag");
             var lines = MoveLines(world, catalog, names, r.Moves.Select(m => (m.To, m.Item, m.Amount)), r.Left, "your bag", ChestLinks(ctx, world, names));
             Report(ctx, half, $"{verb} {r.Items:N0} items:", lines, new[] { (userEntity, user.PlatformId) });
         }

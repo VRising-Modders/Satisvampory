@@ -440,6 +440,12 @@ namespace Satisvampory.Server
                     }
                     else if (!ls.Stalled && was) _stalled.Remove((key, loopKey));
                 }
+                if (report.Moves.Count > 0)
+                {
+                    var names = ServerActions.PlotNames(_ctx.Save, members);
+                    foreach (var g in report.Moves.GroupBy(m => m.Why))
+                        ServerActions.LogMoves(_half, world, names, g.Select(m => (m.From, m.To, m.Item, m.Amount, m.For)), MoveLog.Why(g.Key));
+                }
                 if (!_recent.TryGetValue(key, out var recent)) _recent[key] = recent = new List<(double, MoveRecord)>();
                 recent.RemoveAll(x => x.At < Now - 60);
                 if (recent.Count < 5000) recent.AddRange(report.Moves.Select(m => (Now, m)));

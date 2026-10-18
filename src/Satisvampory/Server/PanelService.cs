@@ -39,15 +39,17 @@ namespace Satisvampory.Server
         internal void Attach()
         {
             _ctx.Requests.Handle<GetPanelReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Panel(s)));
-            _ctx.Requests.Handle<EditListReq, PanelMsg>((u, r, i) => With(u, r.Target, s => EditList(s, r)));
+            _ctx.Requests.Handle<EditListReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, ListText(s, r), EditList(s, r))));
             _ctx.Requests.Handle<TakeFromRowReq, TextReply>((u, q, i) => With(u, q.Target, sess => TakeFromRow(u, sess, q)));
-            _ctx.Requests.Handle<SetDepositReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetDeposit(s, r)));
+            _ctx.Requests.Handle<SetDepositReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s,
+                $"Filter saved: {r.Deposit.Priorities.Count} allowed, {r.Deposit.Bans.Count} blocked" + (r.Deposit.Private != s.Container.Deposit.Private ? (r.Deposit.Private ? ", made private" : ", no longer private") : ""),
+                SetDeposit(s, r))));
             _ctx.Requests.Handle<PickerReq, PickerReply>((u, r, i) => With(u, r.Target, s => PickerRows(s, r)));
             _ctx.Requests.Handle<FilterPickerReq, FilterPickerReply>((u, r, i) => With(u, r.Target, s => FilterPicker(s)));
             _ctx.Requests.Handle<TryItReq, TryItReply>((u, r, i) => With(u, r.Target, s => TryIt(s, r)));
-            _ctx.Requests.Handle<SetRecipesReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetRecipes(s, r)));
-            _ctx.Requests.Handle<SetLoopReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetLoop(s, r)));
-            _ctx.Requests.Handle<EmptyTrashReq, PanelMsg>((u, r, i) => With(u, r.Target, s => EmptyTrash(s)));
+            _ctx.Requests.Handle<SetRecipesReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, $"Recipes switched: {r.On.Count} on", SetRecipes(s, r))));
+            _ctx.Requests.Handle<SetLoopReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, "Loop mode changed", SetLoop(s, r))));
+            _ctx.Requests.Handle<EmptyTrashReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, "Trash emptied", EmptyTrash(s))));
         }
 
         // ---------------- session per request ----------------
@@ -228,6 +230,47 @@ namespace Satisvampory.Server
                 reply.CategoryCounts.Add(s.Catalog.Members(cat).Sum(i => stock.TryGetValue(i, out var n) ? n : 0));
             }
             return reply;
+        }
+
+        /// <summary>A player's change to this container's settings, into the Log.</summary>
+        T Changed<T>(Session s, string detail, T result)
+        {
+            if (detail.Length > 0)
+                _half.MoveLog.Change(s.Container.Plot, s.Container.Id.Value, s.Container.DisplayName, PlotLabel(s.Island, s.Container.Plot), detail,
+                    s.User.CharacterName.ToString());
+            return result;
+        }
+
+        string ListText(Session s, EditListReq r)
+        {
+            var side = r.Side == 0 ? "Input" : "Output";
+            string Entry()
+            {
+                var e = r.Entry;
+                if (e.Kind == 2) return side == "Input" ? "Pull: reverse Mass Deposit" : "Push: Mass Deposit";
+                if (e.Kind == 1) return "belt " + (s.Island.State.Graph.Belts.Values.FirstOrDefault(b => b.Id.Value.ToString("N") == e.BeltId)?.Name ?? e.Name);
+                return Guid.TryParse(e.ContainerId, out var g) ? s.World.Find(new EngineId(g))?.DisplayName ?? "a chest" : "a chest";
+            }
+            var lists = s.Island.State.Graph.For(s.Container.Id);
+            var list = r.Side == 0 ? lists.Input : lists.Output;
+            string At(int i) => i >= 0 && i < list.Count ? list[i].Kind switch
+            {
+                EntryKind.Belt => "belt " + (s.Island.State.Graph.Belts.TryGetValue(list[i].Belt, out var b) ? b.Name : "?"),
+                EntryKind.MassDeposit => "Mass Deposit",
+                _ => s.World.Find(list[i].Container)?.DisplayName ?? "a chest",
+            } : "an entry";
+            return r.Op switch
+            {
+                0 => $"{side}: added {Entry()}",
+                1 => $"{side}: removed {At(r.Index)}",
+                2 => $"{side}: moved {At(r.Index)}",
+                3 => $"{side}: order settings changed",
+                4 => $"{side}: filter on {At(r.Index)} changed",
+                5 => "put on belt " + (r.Entry.Name.Length > 0 ? r.Entry.Name : Entry()),
+                6 => "taken off a belt",
+                7 => $"{side}: removed a link set on another chest",
+                _ => "",
+            };
         }
 
         PickerReply PickerRows(Session s, PickerReq r)
@@ -548,7 +591,11 @@ namespace Satisvampory.Server
                 var have = s.World.Count(id, item);
                 var keep = prefs.NeverPullLastStack ? Math.Min(have, s.Catalog.MaxStack(item)) : 0;
                 var n = Math.Min(want - took, have - keep);
-                if (n > 0) took += s.World.Transfer(id, InvPart.Main, bag, item, n);
+                var got = n > 0 ? s.World.Transfer(id, InvPart.Main, bag, item, n) : 0;
+                took += got;
+                if (got > 0)
+                    ServerActions.LogMoves(_half, s.World, ServerActions.PlotNames(_ctx.Save, s.Island.Castles),
+                        new[] { (id, bag, item, got, default(ItemId)) }, "Take", s.User.CharacterName.ToString(), s.User.CharacterName + "'s bag");
             }
             var name = s.Catalog.NameOf(item);
             return new TextReply { Text = took == 0 ? $"No {name} to take there" + (prefs.NeverPullLastStack ? " (last stacks stay)." : ".") : $"Took {took:N0} {name}." };

@@ -43,6 +43,9 @@ namespace Satisvampory.Server
 
         internal Ticker? Ticker { get; private set; }
 
+        /// <summary>What Satisvampory moved, per castle, last 24 hours (the Log tab).</summary>
+        internal MoveLog MoveLog { get; } = new();
+
         internal unsafe void Attach()
         {
             _active = this;

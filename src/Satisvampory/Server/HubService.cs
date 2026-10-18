@@ -42,18 +42,22 @@ namespace Satisvampory.Server
         {
             var r = _ctx.Requests;
             r.Handle<GetCastleReq, CastleMsg>((u, q, i) => With(u, s => Castle(s)));
-            r.Handle<SetCastleReq, CastleMsg>((u, q, i) => With(u, s => SetCastle(s, q.Castle)));
+            r.Handle<SetCastleReq, CastleMsg>((u, q, i) => With(u, s => Changed(s, "Castle settings saved", SetCastle(s, q.Castle))));
             r.Handle<TidyReq, CastleMsg>((u, q, i) => With(u, s => Tidy(s)));
             r.Handle<GetMassDepositReq, MassDepositMsg>((u, q, i) => With(u, s => MassDeposit(s)));
-            r.Handle<SetMassDepositReq, MassDepositMsg>((u, q, i) => With(u, s => SetMassDeposit(s, q)));
-            r.Handle<SetHomePriorityReq, MassDepositMsg>((u, q, i) => With(u, s => SetHomePriority(s, q)));
+            r.Handle<SetMassDepositReq, MassDepositMsg>((u, q, i) => With(u, s => Changed(s,
+                q.SaveOverrides && q.SaveScript ? "Mass Deposit overrides and rules saved" : q.SaveScript ? "Mass Deposit rules saved" : "Mass Deposit overrides saved",
+                SetMassDeposit(s, q))));
+            r.Handle<SetHomePriorityReq, MassDepositMsg>((u, q, i) => With(u, s => Changed(s, HomeText(s, q), SetHomePriority(s, q))));
             r.Handle<IslandTryReq, TryItReply>((u, q, i) => With(u, s => IslandTry(s, q)));
             r.Handle<GetBeltsReq, BeltsMsg>((u, q, i) => With(u, s => Belts(s)));
-            r.Handle<BeltEditReq, BeltsMsg>((u, q, i) => With(u, s => EditBelts(s, q)));
+            r.Handle<BeltEditReq, BeltsMsg>((u, q, i) => With(u, s => Changed(s, BeltText(s, q), EditBelts(s, q))));
             r.Handle<GetInventoryReq, InventoryMsg>((u, q, i) => With(u, s => Inventory(s, q)));
             r.Handle<SetViewReq, ViewSaved>((u, q, i) => SetView(u, q));
             AttachLiveInventory();
-            r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => SetRule(s, q)));
+            r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => Changed(s,
+                $"{(q.Rule == 0 ? "Reserve" : "Cap")} of {q.Target}: " + (q.Value < 0 ? "back to default" : q.Value.ToString("N0")), SetRule(s, q))));
+            r.Handle<LogReq, LogReply>((u, q, i) => With(u, s => Log(s, q)));
             r.Handle<FindReq, FindReply>((u, q, i) => With(u, s => Find(s, q)));
             r.Handle<PreviewReq, PreviewReply>((u, q, i) => With(u, s => BeginPreview(s, q)));
             r.Handle<RecipeInfoReq, RecipeInfoReply>((u, q, i) => With(u, s => RecipeInfo(s, q)));
@@ -242,6 +246,8 @@ namespace Satisvampory.Server
         {
             MustEdit(s, "storage");
             var r = PlayerActions.Tidy(s.World, s.Deposit, s.Island.State.Graph);
+            ServerActions.LogMoves(_half, s.World, ServerActions.PlotNames(_ctx.Save, s.Island.Castles),
+                r.Moves.Select(m => (m.From, m.To, m.Item, m.Amount, default(ItemId))), "Tidy", s.User.CharacterName.ToString());
             var text = r.Items == 0 ? "Nothing to tidy." : $"Tidied {r.Items:N0} items ({r.Kinds} kinds) across {r.Containers(byDestination: true)} chests.";
             return Castle(s, text);
         }
@@ -813,6 +819,82 @@ namespace Satisvampory.Server
             return reply;
         }
 
+        // ---------------- Log ----------------
+
+        /// <summary>An island-wide settings change, filed under the castle it was made from.</summary>
+        T Changed<T>(Session s, string detail, T result)
+        {
+            if (detail.Length > 0)
+                _half.MoveLog.Change(s.Standing, Guid.Empty, "", Label(s.Island, s.Standing), detail, s.User.CharacterName.ToString());
+            return result;
+        }
+
+        string HomeText(Session s, SetHomePriorityReq q)
+        {
+            var chest = Guid.TryParse(q.ContainerId, out var g) ? s.World.Find(new Engine.Model.ContainerId(g))?.DisplayName ?? "a chest" : "a chest";
+            var what = q.Key.StartsWith("c:") ? "category " + q.Key.Substring(2)
+                : q.Key.StartsWith("i:") && int.TryParse(q.Key.Substring(2), out var item) ? s.Catalog.NameOf(new ItemId(item)) : q.Key;
+            return $"Priority of {what} in {chest}: {DepositOptions.ClampEntry(q.Priority)}";
+        }
+
+        string BeltText(Session s, BeltEditReq q)
+        {
+            var belt = s.Island.State.Graph.Belts.Values.FirstOrDefault(b => b.Id.Value.ToString("N") == q.BeltId)?.Name ?? q.Name;
+            return q.Op switch
+            {
+                0 => $"Belt \"{q.Name}\" created",
+                1 => $"Belt \"{belt}\" renamed to \"{q.Name}\"",
+                2 => $"Belt \"{belt}\" deleted",
+                3 or 7 => $"Belt \"{belt}\": member added" + (q.Text.Length > 0 ? $" ({q.Text})" : ""),
+                4 => $"Belt \"{belt}\": member removed",
+                5 => $"Belt \"{belt}\": members reordered",
+                6 => $"Belt \"{belt}\" duplicated",
+                10 => $"Category \"{q.Name}\" set",
+                11 => $"Category \"{q.Name}\": {q.Text} added",
+                12 => $"Category \"{q.Name}\": {q.Text} removed",
+                13 => $"Category \"{q.Name}\" restored or deleted",
+                14 => $"Category \"{q.Name}\" renamed to \"{q.Text}\"",
+                15 => $"Category \"{q.Name}\" duplicated as \"{q.Text}\"",
+                _ => "", // previews change nothing
+            };
+        }
+
+        /// <summary>
+        /// The Log tab: the castles in the reader's island now, newest first, filtered by container (either end),
+        /// item or category, player, kind and time.
+        /// </summary>
+        LogReply Log(Session s, LogReq q)
+        {
+            var castles = s.Island.Castles.Select(ProgenitorWorld.PlotOf).ToList();
+            Guid? container = Guid.TryParseExact(q.ContainerId, "N", out var cg) ? cg : null;
+            HashSet<int>? items = null;
+            var text = (q.Item ?? "").Trim();
+            if (text.Length > 0)
+            {
+                if (s.Catalog.TryResolveCategory(text.StartsWith("category ", StringComparison.OrdinalIgnoreCase) ? text.Substring(9) : text, out var cat)
+                    && !s.Catalog.TryResolveItem(text, out _))
+                    items = s.Catalog.Members(cat).Select(i => i.Guid).ToHashSet();
+                else if (TryItem(s.Catalog, text, out var one)) items = new HashSet<int> { one.Guid };
+                else items = q.ClientItems.ToHashSet();
+            }
+            var player = (q.Player ?? "").Trim();
+            bool Keep(MoveLog.Entry e) =>
+                (container == null || e.From == container || e.To == container)
+                && (items == null || (!e.IsChange && items.Contains(e.Item)))
+                && (player.Length == 0 || e.Actor.IndexOf(player, StringComparison.OrdinalIgnoreCase) >= 0)
+                && (q.Kind == 0 || (q.Kind == 1 && !e.IsChange) || (q.Kind == 2 && e.IsChange));
+            var reply = new LogReply();
+            foreach (var e in _half.MoveLog.Read(castles, q.Hours <= 0 ? 24 : q.Hours, Keep, 400))
+                reply.Rows.Add(new LogRowMsg
+                {
+                    At = new DateTimeOffset(e.Last).ToUnixTimeSeconds(), Item = e.Item, Amount = e.Amount, Moves = e.Moves,
+                    From = e.From == Guid.Empty ? "" : e.From.ToString("N"), FromName = e.FromName, FromPlot = e.FromPlot,
+                    To = e.To == Guid.Empty ? "" : e.To.ToString("N"), ToName = e.ToName, ToPlot = e.ToPlot,
+                    Why = e.Why, For = e.For, Actor = e.Actor, Detail = e.Detail,
+                });
+            return reply;
+        }
+
         internal static string TypeOf(ContainerInfo? c) => c == null ? "" : c.Kind switch
         {
             NodeKind.Heart => "Castle heart",
@@ -882,6 +964,8 @@ namespace Satisvampory.Server
             else
                 throw new RequestRefusedException($"No item or category called \"{text}\".");
 
+            ServerActions.LogMoves(_half, s.World, ServerActions.PlotNames(_ctx.Save, s.Island.Castles),
+                result.Moves.Select(m => (m.From, m.To, m.Item, m.Amount, default(ItemId))), "Pull", s.User.CharacterName.ToString(), s.User.CharacterName + "'s bag");
             if (result.Items == 0) return new TextReply { Text = "Nothing to take: none on the island, or only last stacks left." };
             if (prefs.SilentPull) return new TextReply { Text = $"Took {result.Items:N0}." };
             return new TextReply { Text = $"Took {result.Items:N0} from {result.Containers(byDestination: false)} chests." + (result.Left.Count > 0 ? $" Short by {result.Left.Values.Sum():N0}." : "") };

@@ -602,7 +602,7 @@ namespace Satisvampory.Server
                     row.Status = $"moving · {top[0].Amount:N0} {s.Catalog.NameOf(top[0].Item)}" + (top.Count > 1 ? $" and {top.Count - 1} more" : "") + " last minute";
                     row.Tone = 1;
                 }
-                else if (report.Diagnostics.TryGetValue(self, out var codes) && codes.Count > 0) { row.Status = Explain(codes[0]); row.Tone = 2; }
+                else if (report.Diagnostics.TryGetValue(self, out var codes) && codes.Count > 0) { row.Status = Explain(codes[0], s.Catalog); row.Tone = 2; }
             }
             return row;
         }
@@ -659,6 +659,11 @@ namespace Satisvampory.Server
             Engine.Model.CatalogBuilder.DisplayNameOf(new GameItem(1, (recipe ?? "").Replace("Recipe_", "Item_"), null, 1, 0, 0));
 
         static string Mode(LoopMode m) => m switch { LoopMode.EvenDistribution => "even distribution", LoopMode.Off => "off", _ => "cycle once" };
+
+        static string Explain(string code, ItemCatalog catalog) =>
+            code.StartsWith("devourer-stuck:") && int.TryParse(code.Substring(15), out var g)
+                ? $"Cannot salvage {catalog.NameOf(new ItemId(g))} and its chest will not take it back: move it out"
+                : Explain(code);
 
         static string Explain(string code) => code switch
         {

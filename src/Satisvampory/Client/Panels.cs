@@ -167,11 +167,12 @@ namespace Satisvampory.Client
             // A flat UI icon from the game (its traders' books), matching the rename pencil beside it; the caption is
             // its tooltip. The Research Scroll item icon where the Core has no sprite faces.
             IUiButton button;
-            try { button = handle.Button("Log", LogIcon()); }
+            try { button = handle.Button("Log", VanillaButtonIcon.Drawn("log")); }
             catch (Exception) { button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll)); }
             _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings.", "Log"));
             _ctx.Track(button.OnClick(() =>
             {
+                _ctx.Log.LogInfo($"Satisvampory: Log button ({site}) clicked; target={_hasTarget}, loaded={_state != null}");
                 if (!_hasTarget) return;
                 void Go() { if (_state != null) OpenLog?.Invoke(_state.ContainerId, _state.Name); }
                 if (_state != null) Go();
@@ -745,7 +746,12 @@ namespace Satisvampory.Client
             {
                 new UiTableColumn("name", "Item or category") { Hideable = false },
                 new UiTableColumn("type", "Type") { Width = 90 },
-                new UiTableColumn("rule", "Rule") { Width = 84 },
+                // Click to switch Allowed / Blocked (saved at once).
+                new UiTableColumn("rule", "Rule", UiTableColumnKind.Choice)
+                {
+                    Width = 96, Editable = true,
+                    Choices = new[] { new UiTableChoice("allow", "Allowed", LabelTone.Ok), new UiTableChoice("block", "Blocked", LabelTone.Danger) },
+                },
                 new UiTableColumn("priority", "Priority", UiTableColumnKind.Number) { Editable = true, Format = "0", Width = 76, Term = "Priority" },
                 new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 1 },
             }, new UiDataTableOptions
@@ -772,6 +778,12 @@ namespace Satisvampory.Client
             ctx.Track(_entries.OnEdit(edit =>
             {
                 var e = _list.FirstOrDefault(x => x.Key == edit.RowId);
+                if (e != null && edit.Column == "rule")
+                {
+                    e.Blocked = edit.NewChoice == "block";
+                    Commit(ok => { if (ok) edit.Resolve(); else edit.Reject("Not saved."); });
+                    return;
+                }
                 if (e == null || edit.NewValue is not { } v) { edit.Reject("Type a priority from 1 to 99."); return; }
                 if (e.Blocked) { edit.Reject("A blocked entry has no priority. Allow it first."); return; }
                 var p = (int)Math.Round(v);
@@ -925,7 +937,7 @@ namespace Satisvampory.Client
             _entries.SetRows(_list.Select(e => new UiTableRow(e.Key) { ItemPrefab = e.Item != 0 ? e.Item : e.Icon }
                 .Text("name", Name(e))
                 .Text("type", e.Item != 0 ? "Item" : "Category")
-                .Text("rule", e.Blocked ? "Blocked" : "Allowed", e.Blocked ? LabelTone.Danger : LabelTone.Ok)
+                .Choice("rule", e.Blocked ? "block" : "allow")
                 .Number("priority", e.Blocked ? null : e.Priority, e.Blocked ? "—" : null)
                 // Rule and priority change through the bar under the list (select rows) or the Priority cell.
                 .Action("remove", UiRowActionIcon.Remove, "Take it off the list", canEdit)));

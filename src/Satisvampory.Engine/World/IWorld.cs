@@ -33,6 +33,9 @@ namespace Satisvampory.Engine.World
 
         /// <summary>Queue/activity read for ingredient protection. Missing implementations fail closed.</summary>
         Stations.StationInputState StationInputs(ContainerId station) => Stations.StationInputState.Unknown;
+
+        /// <summary>Whether a devourer will salvage the item (the game's own data); true when unknown.</summary>
+        bool Salvageable(ItemId item) => true;
     }
 
     /// <summary>Write side. Every move goes through one atomic transfer.</summary>

@@ -48,6 +48,8 @@ namespace Satisvampory.Engine.World
             if (!_recipes.TryGetValue(id, out var value)) _recipes[id] = value = _live.Recipes(id);
             return value;
         }
+        public bool Salvageable(ItemId item) => _live.Salvageable(item);
+
         public StationInputState StationInputs(ContainerId id)
         {
             if (!_inputs.TryGetValue(id, out var value)) _inputs[id] = value = _live.StationInputs(id);

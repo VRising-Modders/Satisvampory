@@ -10,6 +10,10 @@ namespace Satisvampory.Engine.Tests
     /// <summary>In-memory world: slot-less inventories with a per-container item capacity.</summary>
     sealed class FakeWorld : IWorld
     {
+        /// <summary>Items a devourer will not salvage (raw materials in the game).</summary>
+        public HashSet<ItemId> NotSalvageable { get; } = new();
+        public bool Salvageable(ItemId item) => !NotSalvageable.Contains(item);
+
         readonly List<ContainerInfo> _all = new();
         readonly Dictionary<ContainerId, ContainerInfo> _byId = new();
         readonly Dictionary<(ContainerId, InvPart), Dictionary<ItemId, int>> _inv = new();

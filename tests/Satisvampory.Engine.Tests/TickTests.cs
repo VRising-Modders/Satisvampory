@@ -227,6 +227,26 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void A_devourer_gets_only_salvageable_items_and_sends_the_rest_home_or_holds_it()
+        {
+            var dev = _w.Chest(Home, "The Devourer", kind: NodeKind.Station);
+            dev.Role = StationRole.Devourer;
+            var salvage = _w.Chest(Home, "Salvage");
+            _w.NotSalvageable.Add(Plank);
+            _w.Put(salvage, Sword, 1).Put(salvage, Plank, 20);
+            _g.For(dev.Id).Input.Add(ListEntry.Of(salvage.Id, _g.NextSequence()));
+            Tick(0);
+            Assert.Equal(1, _w.Count(dev.Id, Sword));
+            Assert.Equal(0, _w.Count(dev.Id, Plank)); // never fed
+
+            // Fibre already inside with no known home (say, from before a restart): it stays, and the station says so.
+            _w.Put(dev, Plank, 5);
+            var report = Tick(1);
+            Assert.Equal(5, _w.Count(dev.Id, Plank));
+            Assert.Contains(report.Diagnostics[dev.Id], d => d.StartsWith("devourer-stuck:"));
+        }
+
+        [Fact]
         public void Furnace_without_a_full_craft_pulls_nothing()
         {
             var f = Furnace();

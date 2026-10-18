@@ -261,6 +261,8 @@ namespace Satisvampory.World
                 : new Progenitor.Stations.StationDemand(Progenitor.Stations.StationKind.None,
                     Array.Empty<Progenitor.Stations.StationQueuedCraft>(), true, "station is unavailable");
 
+        public bool Salvageable(ItemId item) => GameItems.Salvageable(item.Guid);
+
         public StationInputState StationInputs(EngineId id)
         {
             var demand = StationDemand(id);

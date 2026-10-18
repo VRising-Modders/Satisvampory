@@ -391,18 +391,23 @@ namespace Satisvampory.Engine.Lists
             foreach (var (owner, other) in _graph.Lists)
                 if (owner != station.Id && other.Output.Any(e => !e.Auto && e.Kind == EntryKind.Container && e.Container == station.Id))
                     chosen.Add(owner);
-            // What came out unchanged (the game would not salvage it) goes back where it came from, and is not fed
-            // again. If that chest will not take it, the devourer's own Output (Mass Deposit) has it.
-            foreach (var stack in _world.Contents(station.Id, InvPart.Output).ToList())
-            {
-                if (!_state.FedFrom.TryGetValue((station.Id, stack.Item), out var home)) continue;
-                _state.DevourerRefuses.Add((station.Id, stack.Item));
-                if (Budget(station.Id)) Move(station.Id, InvPart.Output, home, stack.Item, stack.Amount, "devourer returns");
-            }
+            // What it will not eat goes back to the chest it came from, and only there: still in its input (the game
+            // does not salvage it) or passed through to its output. When that chest is gone or will not take it, it
+            // stays, and the station says so: the player sorts it out (no other home, so no loops).
+            foreach (var part in new[] { InvPart.Main, InvPart.Output })
+                foreach (var stack in _world.Contents(station.Id, part).ToList())
+                {
+                    var uneaten = part == InvPart.Main ? !_world.Salvageable(stack.Item) : _state.FedFrom.ContainsKey((station.Id, stack.Item));
+                    if (!uneaten) continue;
+                    _state.DevourerRefuses.Add((station.Id, stack.Item));
+                    var back = _state.FedFrom.TryGetValue((station.Id, stack.Item), out var home) && Budget(station.Id)
+                        ? Move(station.Id, part, home, stack.Item, stack.Amount, "devourer returns") : 0;
+                    if (back < stack.Amount) _report.Diag(station.Id, $"devourer-stuck:{stack.Item.Guid}");
+                }
             foreach (var src in sources.Where(chosen.Contains))
                 foreach (var stack in _world.Contents(src, PartOf(src)).ToList())
                 {
-                    if (_state.DevourerRefuses.Contains((station.Id, stack.Item))) continue;
+                    if (_state.DevourerRefuses.Contains((station.Id, stack.Item)) || !_world.Salvageable(stack.Item)) continue;
                     if (!Budget(src)) return;
                     if (Move(src, PartOf(src), station.Id, stack.Item, stack.Amount, "salvage feed") > 0)
                     {
@@ -753,6 +758,8 @@ namespace Satisvampory.Engine.Lists
                 foreach (var stack in _world.Contents(id, PartOf(id)))
                 {
                     if (!entry.Filter.Allows(stack.Item, Catalog) || IsStableFeed(id, stack.Item)) continue;
+                    // A devourer's uneaten items only ever go back to their own chest (see FeedDevourer).
+                    if (_state.DevourerRefuses.Contains((id, stack.Item))) continue;
                     var left = stack.Amount;
                     foreach (var m in DepositPlanner.Plan(_ctx, stack.Item, left, id).Where(m => !except.Contains(m.To)))
                     {
@@ -864,7 +871,7 @@ namespace Satisvampory.Engine.Lists
                 if (returning == IsBenchProduct(from, item)) return 0;
             }
             if (part == InvPart.Main && ProtectsInputs(source) && !_world.StationInputs(from).CanReclaim
-                && !(why == "station cleanup" && source.Role != StationRole.Workstation)) return 0;
+                && !(why is "station cleanup" or "devourer returns" && source.Role != StationRole.Workstation)) return 0;
             if (target.Kind == NodeKind.Chest && !DepositScore.Takes(target, item, Catalog)) return 0;
             var moved = _world.Transfer(from, part, to, item, amount, takeBusyInputs: why == "station cleanup");
             if (moved <= 0) return 0;

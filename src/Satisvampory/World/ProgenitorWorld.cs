@@ -402,6 +402,8 @@ namespace Satisvampory.World
             if (prefab == "TM_ResearchStation_T01") return "Research Desk";
             if (prefab == "TM_ResearchStation_T02") return "Study";
             if (prefab == "TM_ResearchStation_T03") return "Athenaeum";
+            // The game calls its salvage station "The Devourer"; the prefab says only "Table".
+            if (prefab!.StartsWith("TM_SalvageStation", StringComparison.Ordinal)) return "The Devourer";
             // "TM_SpecialStation_PrisonCell" -> "Prison Cell", "TM_UnitStation_NetherGate" -> "Nether Gate".
             var parts = prefab!.Split('_', StringSplitOptions.RemoveEmptyEntries)
                 .Where(w => !NoiseWords.Contains(w) && !(w.Length <= 3 && (w[0] == 'T' || w[0] == 't') && w.Skip(1).All(char.IsDigit)))

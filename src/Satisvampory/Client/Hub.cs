@@ -332,6 +332,31 @@ namespace Satisvampory.Client
 
         static string CapText(int cap) => cap < 0 ? "Cap none" : $"Cap {cap:N0}";
 
+        // The game's own tooltip colours: grey labels, white numbers, green/yellow/red like its "3/3" lines,
+        // amber for stock the reserve holds back.
+        const string Grey = "#9AA4AD", Green = "#7FC45A", Yellow = "#E2C84A", Red = "#E05A4A", Amber = "#D9A441";
+
+        static string Paint(string hex, string text) => $"<color={hex}>{text}</color>";
+
+        /// <summary>
+        /// "Total 13 · Reserve 10 · Available 3 · Cap none", coloured only where it matters: Available green (enough for
+        /// a craft), yellow (some) or red (none); Reserve amber while it holds stock back; Cap red once reached.
+        /// <paramref name="available"/> null leaves Available out (the product).
+        /// </summary>
+        static string Numbers(long total, int reserve, long? available, int cap, int need)
+        {
+            string Label(string word, string value) => Paint(Grey, word + " ") + value;
+            var parts = new List<string> { Label("Total", $"{total:N0}") };
+            var held = reserve > 0 && total > 0;
+            parts.Add(held ? Paint(Amber, $"Reserve {reserve:N0}") : Label("Reserve", $"{reserve:N0}"));
+            if (available is { } av)
+                parts.Add(Paint(av <= 0 ? Red : av >= Math.Max(1, need) ? Green : Yellow, $"Available {av:N0}"));
+            if (cap < 0) parts.Add(Paint(Grey, "Cap none"));
+            else if (total >= cap) parts.Add(Paint(Red, $"Cap {cap:N0} reached"));
+            else parts.Add(Label("Cap", $"{cap:N0}"));
+            return string.Join(Paint(Grey, " · "), parts);
+        }
+
         /// <summary>
         /// The game's recipe tooltip at a station or in the crafting tab, advanced only: small gray lines with the
         /// product's total, reserve and cap, and per requirement its total, reserve, available and cap. Total is
@@ -377,7 +402,7 @@ namespace Satisvampory.Client
                     var first = 0;
                     if (t.ProductGuid != 0)
                     {
-                        body.SetRows(new List<VanillaRow> { new VanillaRow($"Total {a.Island[0]:N0} · Reserve {a.Reserve[0]:N0} · {CapText(a.Cap[0])}", LabelTone.Normal) });
+                        body.SetRows(new List<VanillaRow> { new VanillaRow(Numbers(a.Island[0], a.Reserve[0], null, a.Cap[0], 0), LabelTone.Normal) });
                         first = 1;
                     }
                     var lines = new List<VanillaRow>();
@@ -386,7 +411,8 @@ namespace Satisvampory.Client
                     {
                         var reach = a.Reachable[i] >= 0 ? a.Reachable[i] : a.Island[i];
                         var available = Math.Max(0, reach - a.Reserve[i]);
-                        var numbers = $"Total {a.Island[i]:N0} · Reserve {a.Reserve[i]:N0} · Available {available:N0} · {CapText(a.Cap[i])}";
+                        var need = i - first < t.Requirements.Count ? t.Requirements[i - first].Amount : 1;
+                        var numbers = Numbers(a.Island[i], a.Reserve[i], available, a.Cap[i], need);
                         var line = i - first;
                         if (perLine != null && line < perLine.Length)
                             perLine[line].SetRows(new List<VanillaRow> { new VanillaRow(Indent + numbers, LabelTone.Normal) });
@@ -444,7 +470,7 @@ namespace Satisvampory.Client
                     {
                         var list = new List<string>();
                         if (c.Total > 0) list.Add($"In storage: {c.Total:N0} ({c.Chests} chest{(c.Chests == 1 ? "" : "s")})");
-                        if (advanced) list.Add($"Total {c.Total:N0} · Reserve {c.Reserve:N0} · Available {Math.Max(0, c.Total - c.Reserve):N0} · {CapText(c.Cap)}");
+                        if (advanced) list.Add(Numbers(c.Total, c.Reserve, Math.Max(0, c.Total - c.Reserve), c.Cap, 1));
                         else if (HoldHint() is { } hint) list.Add(hint.Text);
                         lines = list.ToArray();
                     }

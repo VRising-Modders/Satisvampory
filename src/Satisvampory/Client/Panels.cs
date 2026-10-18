@@ -73,6 +73,16 @@ namespace Satisvampory.Client
 
         IUiButton? _heartLog;
 
+        /// <summary>The heart's title-button row (Progenitor #122, anchor 10), or null on a Core without it.</summary>
+        static IVanillaAttachHandle? TitleButtons(SatisContext ctx)
+        {
+            if (!Enum.IsDefined(typeof(VanillaPanelAnchor), 10)) return null;
+            var h = UiApi.AttachToVanilla(VanillaUiSite.CastleHeartPanel, (VanillaPanelAnchor)10, ctx.Owner, ctx.Guid + ".heart");
+            if (h.Enabled) return h;
+            h.Dispose();
+            return null;
+        }
+
         /// <summary>
         /// The heart has no tab row and no rename pencil: Input on its left edge; one column at its right edge with
         /// Output, Settings (this castle's page in the Satisvampory window) and the Log.
@@ -85,12 +95,20 @@ namespace Satisvampory.Client
             var output = handle.Button("Output");
             _ctx.Track(output.Tooltip("Output: only items you send out of the heart", "Output"));
             _ctx.Track(output.OnClick(() => Open(_output)));
-            var settings = handle.Button("Settings");
+            // Settings and Log as icons in the heart's own button row (Progenitor #122); older Cores: this column.
+            var icons = handle;
+            try
+            {
+                var row = TitleButtons(_ctx);
+                if (row != null) { _ctx.Track(row); icons = row; }
+            }
+            catch (Exception) { }
+            var settings = icons == handle ? handle.Button("Settings") : icons.Button("Settings", VanillaButtonIcon.Drawn("settings"));
             _ctx.Track(settings.Tooltip("This castle's Satisvampory settings.", "Settings"));
             _ctx.Track(settings.OnClick(() => OpenHub?.Invoke(Hub.CastleTab)));
             IUiButton log;
-            try { log = handle.Button("Log", VanillaButtonIcon.Drawn("log")); }
-            catch (Exception) { log = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll)); }
+            try { log = icons.Button("Log", VanillaButtonIcon.Drawn("log")); }
+            catch (Exception) { log = icons.Button("Log", VanillaButtonIcon.Item(ResearchScroll)); }
             _heartLog = log;
             log.Visible = _logShown;
             _ctx.Track(log.Tooltip("What moved in and out of this heart, and who changed its settings.", "Log"));
@@ -324,10 +342,25 @@ namespace Satisvampory.Client
             catch (Exception) { var a = _afterReopen; _afterReopen = null; if (a != null) { RestoreHeld(); a(); } }
         }
 
+        static void ReopenCore(SatisContext ctx, object window, Action<bool> done)
+        {
+            try { ReopenOrRemote(ctx, window, done); }
+            catch (Exception e) when (e is MissingMethodException or TypeLoadException) { ReopenHere(ctx, window, done); }
+        }
+
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        static void ReopenCore(SatisContext ctx, object window, Action<bool> done) =>
+        static void ReopenHere(SatisContext ctx, object window, Action<bool> done) =>
             ctx.Inventory.ReopenLast((Progenitor.Inventory.ContainerWindowInfo)window,
                 r => done(r == Progenitor.Inventory.ContainerReopenResult.Opened));
+
+        // Walked away during the flow: the same chest comes back remotely in the station layout (Progenitor #120).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void ReopenOrRemote(SatisContext ctx, object window, Action<bool> done) =>
+            ctx.Inventory.ReopenLast((Progenitor.Inventory.ContainerWindowInfo)window, new Progenitor.Inventory.ContainerReopenOptions
+            {
+                RemoteIfAway = true,
+                Done = f => done(f.Result is Progenitor.Inventory.ContainerReopenResult.Opened or Progenitor.Inventory.ContainerReopenResult.RemoteOpened),
+            });
 
         /// <summary>Opens the hub on a tab (set by the client half).</summary>
         internal Action<int>? OpenHub { get; set; }
@@ -678,10 +711,6 @@ namespace Satisvampory.Client
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         static object? LastWindow(SatisContext ctx) => ctx.Inventory.LastWindow;
 
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        static void Reopen(SatisContext ctx, object window) =>
-            ctx.Inventory.ReopenLast((Progenitor.Inventory.ContainerWindowInfo)window);
-
         /// <summary>
         /// Up and down only where moving means something: not on an exception (no order) nor on a link set on the
         /// other end (ordered there). A disabled arrow carries no tooltip.
@@ -710,36 +739,58 @@ namespace Satisvampory.Client
                     ctx.Hud.Notify("That was not a container or station Satisvampory can use.", kind: UiNoticeKind.Warning, seconds: 5);
                     return;
                 }
+                var except = ShiftHeld(result);
                 Owner.Send<EditListReq, PanelMsg>(new EditListReq
                 {
                     Target = Owner.Target(),
                     Side = _side,
                     Op = 0,
-                    Entry = new RowMsg { Kind = 0, PickIndex = result.NetworkIdIndex, PickGeneration = result.NetworkIdGeneration, PickType = result.NetworkId2 },
+                    Entry = new RowMsg { Kind = except ? 3 : 0, PickIndex = result.NetworkIdIndex, PickGeneration = result.NetworkIdGeneration, PickType = result.NetworkId2 },
                 }, reply =>
                 {
                     Owner.Apply(reply);
                     var rows = _side == 0 ? reply.Input : reply.Output;
-                    var added = rows.LastOrDefault();
+                    var added = rows.LastOrDefault(r => except ? r.Kind == 3 : r.Kind != 3 && r.LinkOwner.Length == 0);
                     if (added != null) MarkAdded(added.ContainerId);
-                    var what = added == null ? "it" : $"{added.Name} · {added.Where}";
-                    ctx.Hud.Notify($"Added {what} to {(_side == 0 ? "Input" : "Output")} of {reply.Name} · {reply.Where}.", kind: UiNoticeKind.Success, seconds: 4);
+                    var name = added == null ? "it" : except ? added.Name.Replace("Except ", "") : added.Name;
+                    var what = added == null ? "it" : $"{name} · {added.Where}";
+                    var list = _side == 0 ? "Input" : "Output";
+                    ctx.Hud.Notify(except ? $"{list} of {reply.Name} never {(_side == 0 ? "pulls from" : "sends to")} {what}."
+                        : $"Added {what} to {list} of {reply.Name} · {reply.Where}.", kind: UiNoticeKind.Success, seconds: 4);
                 });
             }, () =>
             {
-                // Back in the chest window as it was, then the list as it is now (what the picks added).
+                // Back in the chest window as it was (remotely when the player walked off), on this list's tab with
+                // what the picks added; on its own when the window cannot come back.
                 Owner.HoldTarget = false;
-                if (window != null)
-                    try { Reopen(ctx, window); } catch (Exception) { }
-                Owner.Load(() => Show());
-            }, new UiWorldPickOptions
+                Owner.AfterReopen(window, () => Owner.ShowListTab(_side, () => { }));
+            }, WithExceptHint(new UiWorldPickOptions
             {
                 CloseGameWindows = true, // the open container and character panels would hide the world
                 // Pick several in one go; Esc ends it and brings the list back.
                 Repeat = true,
                 Prompt = _side == 0 ? "Interact with containers or stations to pull from. Esc when done." : "Interact with containers or stations to send to. Esc when done.",
-            });
+            }));
         }
+
+        static bool ShiftHeld(UiWorldPickResult result)
+        {
+            try { return Shift(result); }
+            catch (Exception) { return false; }
+        }
+
+        // Progenitor #120 (PICKMOD1): the modifiers held at the press.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static bool Shift(UiWorldPickResult result) => result.Shift;
+
+        static UiWorldPickOptions WithExceptHint(UiWorldPickOptions options)
+        {
+            try { SetHint(options); } catch (Exception) { }
+            return options;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void SetHint(UiWorldPickOptions options) => options.ModifierHint = "Shift+{interact}: except";
 
     }
 

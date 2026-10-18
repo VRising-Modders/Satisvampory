@@ -133,7 +133,8 @@ namespace Satisvampory.Server
                 case 0:
                 {
                     var entry = r.Entry;
-                    if (entry.Kind == 0 && string.IsNullOrEmpty(entry.ContainerId) && entry.PickType != 0)
+                    // A container picked in the world (an exception too, with Shift).
+                    if (entry.Kind is 0 or 3 && string.IsNullOrEmpty(entry.ContainerId) && entry.PickType != 0)
                     {
                         var picked = TargetResolver.Resolve(_ctx, entry.PickIndex, entry.PickGeneration, entry.PickType, out var why)
                             ?? throw new RequestRefusedException(why);

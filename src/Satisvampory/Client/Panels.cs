@@ -514,17 +514,14 @@ namespace Satisvampory.Client
                 var rows = _side == 0 ? s.Input : s.Output;
                 // Exceptions last (their order means nothing); the row id stays the list index the server knows.
                 var shown = rows.Select((r, i) => (r, i)).OrderBy(x => x.r.Kind == 3 ? 1 : 0).ThenBy(x => x.i).ToList();
-                _list.SetRows(shown.Select(x => (r: x.r, i: x.i, except: x.r.Kind == 3)).Select(x => new UiTableRow(x.i.ToString()) { BuildingPrefab = x.r.BuildingPrefab }
+                _list.SetRows(shown.Select(x => (r: x.r, i: x.i, except: x.r.Kind == 3)).Select(x => Arrows(new UiTableRow(x.i.ToString()) { BuildingPrefab = x.r.BuildingPrefab }
                     .Text("name", x.except ? x.r.Name.Replace("Except ", "") : x.r.Auto ? x.r.Name + " (automatic)" : x.r.Name)
                     .Text("rule", x.except ? "Never" : _side == 0 ? "Pull from" : "Send to", x.except ? LabelTone.Danger : LabelTone.Ok)
                     .Text("details", string.Join(" · ", new[] { x.except ? (_side == 0 ? "never pulled from" : "never sent to") : x.r.Type, x.r.Where, x.r.Status }.Where(t => !string.IsNullOrEmpty(t))))
                     .Action("find", UiRowActionIcon.Locate,
-                        x.r.ContainerId.Length > 0 ? "Find this chest or station" : x.r.Kind == 1 ? "Open this belt in Belts" : "Mass Deposit has no place to find",
+                        x.r.ContainerId.Length > 0 ? "Find this chest or station" : x.r.Kind == 1 ? "Open this belt in Belts" : "",
                         x.r.ContainerId.Length > 0 || x.r.Kind == 1)
-                    // A link set on the other end is ordered there, and an exception has no order: no arrows.
-                    .Action("up", UiRowActionIcon.Up, "Earlier in the list", s.CanEdit && !x.except && x.r.LinkOwner.Length == 0 && x.i > 0)
-                    .Action("down", UiRowActionIcon.Down, "Later in the list",
-                        s.CanEdit && !x.except && x.r.LinkOwner.Length == 0 && x.i < rows.Count - 1 && rows[x.i + 1].LinkOwner.Length == 0 && rows[x.i + 1].Kind != 3)
+                    , x, rows, s.CanEdit)
                     .Action("remove", UiRowActionIcon.Remove, x.except ? "Remove this exception" : "Remove", s.CanEdit)));
                 var others = _side == 0 ? s.InputFromOthers : s.OutputFromOthers;
                 _others.Text = others.Count == 0 ? "" : (_side == 0 ? "Also pulled in by other lists:\n  " : "Also taken by other lists:\n  ") + string.Join("\n  ", others.Take(12));
@@ -546,6 +543,19 @@ namespace Satisvampory.Client
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         static void Reopen(SatisContext ctx, object window) =>
             ctx.Inventory.ReopenLast((Progenitor.Inventory.ContainerWindowInfo)window);
+
+        /// <summary>
+        /// Up and down only where moving means something: not on an exception (no order) nor on a link set on the
+        /// other end (ordered there). A disabled arrow carries no tooltip.
+        /// </summary>
+        static UiTableRow Arrows(UiTableRow row, (RowMsg r, int i, bool except) x, List<RowMsg> rows, bool canEdit)
+        {
+            if (x.except || x.r.LinkOwner.Length > 0) return row;
+            var up = canEdit && x.i > 0;
+            var down = canEdit && x.i < rows.Count - 1 && rows[x.i + 1].LinkOwner.Length == 0 && rows[x.i + 1].Kind != 3;
+            return row.Action("up", UiRowActionIcon.Up, up ? "Earlier in the list" : "", up)
+                .Action("down", UiRowActionIcon.Down, down ? "Later in the list" : "", down);
+        }
 
         void PickInWorld()
         {

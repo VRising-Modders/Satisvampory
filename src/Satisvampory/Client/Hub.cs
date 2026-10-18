@@ -117,13 +117,13 @@ namespace Satisvampory.Client
             Track(_logHours.OnChanged(_ => RunLog()));
             _logTable = _tabs.Add(LogTab, p.DataTable("log.rows", new[]
             {
-                new UiTableColumn("time", "Time") { Width = 90, Sortable = false },
+                new UiTableColumn("time", "Time") { Width = 80, Sortable = false },
                 new UiTableColumn("what", "What") { Hideable = false, Sortable = false },
-                new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Width = 110, Format = "#,0", Sortable = false },
-                new UiTableColumn("from", "From") { Width = 260, Sortable = false },
-                new UiTableColumn("to", "To") { Width = 260, Sortable = false },
-                new UiTableColumn("why", "Why") { Width = 230, Sortable = false },
-                new UiTableColumn("player", "Player") { Width = 150, Sortable = false },
+                new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Width = 90, Format = "#,0", Sortable = false },
+                new UiTableColumn("from", "From") { Width = 230, Sortable = false },
+                new UiTableColumn("to", "To") { Width = 230, Sortable = false },
+                new UiTableColumn("why", "Why") { Width = 210, Sortable = false },
+                new UiTableColumn("player", "Player") { Width = 130, Sortable = false },
                 new UiTableColumn("actions", "", UiTableColumnKind.Actions) { ActionSlots = 2 },
             }, new UiDataTableOptions
             {
@@ -190,20 +190,22 @@ namespace Satisvampory.Client
                 if (seq != _logSeq) return;
                 _logRows = reply.Rows;
                 string Name(int guid) => ClientItems.NameOf(_ctx, guid) ?? "Item";
-                string End(string name, string plot) => name.Length == 0 ? "" : plot.Length > 0 ? $"{name} ({plot})" : name;
+                string End(string name, string plot) => name.Length == 0 ? plot : plot.Length > 0 ? $"{name} ({plot})" : name;
                 _logTable.SetRows(reply.Rows.Select((r, i) =>
                 {
                     var change = r.Detail.Length > 0;
                     var time = DateTimeOffset.FromUnixTimeSeconds(r.At).ToLocalTime().ToString("HH:mm");
                     var why = r.For != 0 ? $"{r.Why}, for {Name(r.For)}" : r.Why;
                     if (r.Moves > 1) why += $" (×{r.Moves} moves)";
-                    return new UiTableRow(i.ToString()) { ItemPrefab = change ? 0 : r.Item }
+                    // A change about an item (a reserve, a cap) shows the item with its icon, and what changed under Why.
+                    var aboutItem = change && r.Item != 0;
+                    return new UiTableRow(i.ToString()) { ItemPrefab = r.Item }
                         .Text("time", time)
-                        .Text("what", change ? r.Detail : Name(r.Item), change ? LabelTone.Muted : LabelTone.Normal)
+                        .Text("what", change && !aboutItem ? r.Detail : Name(r.Item), change && !aboutItem ? LabelTone.Muted : LabelTone.Normal)
                         .Number("amount", change ? null : r.Amount, change ? "" : null)
                         .Text("from", End(r.FromName, r.FromPlot))
                         .Text("to", End(r.ToName, r.ToPlot))
-                        .Text("why", why)
+                        .Text("why", aboutItem ? r.Detail : change ? "Settings" : why)
                         .Text("player", r.Actor)
                         .Action("from", UiRowActionIcon.Locate, "Find " + (change ? "this chest or station" : "where it came from"), r.From.Length > 0)
                         .Action("to", UiRowActionIcon.Chest, "Find where it went", r.To.Length > 0);

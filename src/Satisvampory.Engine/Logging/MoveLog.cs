@@ -93,13 +93,14 @@ namespace Satisvampory.Engine.Logging
         }
 
         /// <summary>A player's settings change on one castle: a container's (Filter, Input, Output...) or the island's (belts, categories).</summary>
-        public void Change(PlotId castle, Guid container, string containerName, string plotLabel, string detail, string actor)
+        /// <param name="item">The item the change is about (a reserve, a cap), for its name and icon; 0 for none.</param>
+        public void Change(PlotId castle, Guid container, string containerName, string plotLabel, string detail, string actor, int item = 0)
         {
             if (!Enabled) return;
             var now = _now();
             File(castle, new Entry
             {
-                Minute = now.Ticks / TimeSpan.TicksPerMinute, Last = now, Moves = 1,
+                Minute = now.Ticks / TimeSpan.TicksPerMinute, Last = now, Moves = 1, Item = item,
                 From = container, FromName = containerName, FromPlot = plotLabel, Why = "Settings", Detail = detail, Actor = actor,
             });
         }

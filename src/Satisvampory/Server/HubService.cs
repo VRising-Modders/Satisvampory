@@ -56,8 +56,7 @@ namespace Satisvampory.Server
             r.Handle<GetInventoryReq, InventoryMsg>((u, q, i) => With(u, s => Inventory(s, q)));
             r.Handle<SetViewReq, ViewSaved>((u, q, i) => SetView(u, q));
             AttachLiveInventory();
-            r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => Changed(s,
-                $"{(q.Rule == 0 ? "Reserve" : "Cap")} of {q.Target}: " + (q.Value < 0 ? "back to default" : q.Value.ToString("N0")), SetRule(s, q))));
+            r.Handle<SetRuleReq, InventoryMsg>((u, q, i) => With(u, s => RuleChanged(s, q, SetRule(s, q))));
             r.Handle<LogReq, LogReply>((u, q, i) => With(u, s => Log(s, q)));
             r.Handle<FindReq, FindReply>((u, q, i) => With(u, s => Find(s, q)));
             r.Handle<PreviewReq, PreviewReply>((u, q, i) => With(u, s => BeginPreview(s, q)));
@@ -824,11 +823,27 @@ namespace Satisvampory.Server
         // ---------------- Log ----------------
 
         /// <summary>An island-wide settings change, filed under the castle it was made from.</summary>
-        T Changed<T>(Session s, string detail, T result)
+        T Changed<T>(Session s, string detail, T result, int item = 0)
         {
             if (detail.Length > 0)
-                _half.MoveLog.Change(s.Standing, Guid.Empty, "", Label(s.Island, s.Standing), detail, s.User.CharacterName.ToString());
+                _half.MoveLog.Change(s.Standing, Guid.Empty, "", Label(s.Island, s.Standing), detail, s.User.CharacterName.ToString(), item);
             return result;
+        }
+
+        /// <summary>A reserve or cap change, named: the item (with its icon) or the category, and what it is now.</summary>
+        T RuleChanged<T>(Session s, SetRuleReq q, T result)
+        {
+            var what = q.Rule == 0 ? "Reserve" : "Cap";
+            var now = q.Value < 0 ? "back to the default" : $"set to {q.Value:N0}";
+            var text = (q.Target ?? "").Trim();
+            if (text.StartsWith("category ", StringComparison.OrdinalIgnoreCase) || s.Catalog.TryResolveCategory(text, out _) && !TryItem(s.Catalog, text, out _))
+            {
+                var cat = text.StartsWith("category ", StringComparison.OrdinalIgnoreCase) ? text.Substring(9) : text;
+                return Changed(s, $"{what} of category {cat} {now}", result);
+            }
+            return TryItem(s.Catalog, text, out var item)
+                ? Changed(s, $"{what} {now}", result, item.Guid)
+                : Changed(s, $"{what} of {text} {now}", result);
         }
 
         string HomeText(Session s, SetHomePriorityReq q)
@@ -883,7 +898,7 @@ namespace Satisvampory.Server
             var player = (q.Player ?? "").Trim();
             bool Keep(MoveLog.Entry e) =>
                 (container == null || e.From == container || e.To == container)
-                && (items == null || (!e.IsChange && items.Contains(e.Item)))
+                && (items == null || items.Contains(e.Item)) // a reserve or cap change carries its item too
                 && (player.Length == 0 || e.Actor.IndexOf(player, StringComparison.OrdinalIgnoreCase) >= 0)
                 && (q.Kind == 0 || (q.Kind == 1 && !e.IsChange) || (q.Kind == 2 && e.IsChange));
             var reply = new LogReply();

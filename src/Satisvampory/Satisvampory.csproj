@@ -15,6 +15,35 @@
   <ItemGroup>
     <Compile Include="..\Satisvampory.Engine\**\*.cs" Exclude="..\Satisvampory.Engine\obj\**;..\Satisvampory.Engine\bin\**" Link="Engine\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+  <!--
+    Every build numbers itself: 2.0.N, N = commits on this branch (+1 while there are uncommitted changes),
+    so the footer's version tells builds apart and maps back to a commit. A release sets Version itself.
+  -->
+  <Target Name="SatisvamporyBuildNumber" BeforeTargets="AddGeneratedFile;GetAssemblyVersion;GenerateAssemblyInfo" Condition="'$(ReleaseVersion)' == ''">
+    <Exec Command="git rev-list --count HEAD" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="SatisCommits" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="SatisDirty" />
+    </Exec>
+    <PropertyGroup>
+      <SatisCommits Condition="'$(SatisCommits)' == ''">0</SatisCommits>
+      <SatisBuild>$(SatisCommits)</SatisBuild>
+      <SatisBuild Condition="'$(SatisDirty)' != ''">$([MSBuild]::Add($(SatisCommits), 1))</SatisBuild>
+      <Version>2.0.$(SatisBuild)</Version>
+      <AssemblyVersion>2.0.$(SatisBuild).0</AssemblyVersion>
+      <FileVersion>2.0.$(SatisBuild).0</FileVersion>
+      <InformationalVersion>2.0.$(SatisBuild)</InformationalVersion>
+      <BepInExPluginVersion>2.0.$(SatisBuild)</BepInExPluginVersion>
+    </PropertyGroup>
+    <!-- The plugin-info file is only rewritten when it is missing: drop it so the new number lands. -->
+    <Delete Files="$(IntermediateOutputPath)MyPluginInfo.cs" />
+  </Target>
+
+  <PropertyGroup Condition="'$(ReleaseVersion)' != ''">
+    <Version>$(ReleaseVersion)</Version>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Progenitor's Mods page shows this as the mod's About text. -->
     <EmbeddedResource Include="README.md" LogicalName="Satisvampory.README.md" />

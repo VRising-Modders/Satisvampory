@@ -132,8 +132,8 @@ namespace Satisvampory.Client
             {
                 if (!int.TryParse(id, out var i) || i < 0 || i >= _logRows.Count) return;
                 var r = _logRows[i];
-                if (action == "from" && r.From.Length > 0) FindContainer(r.From, r.FromName);
-                else if (action == "to" && r.To.Length > 0) FindContainer(r.To, r.ToName);
+                if (action == "from" && r.From.Length > 0) FindContainer(r.From, r.FromName, LogTab);
+                else if (action == "to" && r.To.Length > 0) FindContainer(r.To, r.ToName, LogTab);
             }));
         }
 
@@ -444,6 +444,13 @@ namespace Satisvampory.Client
             TabTip(tab);
         }
 
+        void ShowFindBack()
+        {
+            if (_findBack == null) return;
+            _findBack.Visible = _findBackTab >= 0;
+            _findBack.Text = _findBackTab == LogTab ? "Back to Log" : "Back";
+        }
+
         void TabTip(int tab)
         {
             (string? id, IUiHandle? control) = tab switch
@@ -514,7 +521,7 @@ namespace Satisvampory.Client
                 _ctx.Track(p);
                 p.Footer = VersionFooter;
                 _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts", "Log" }, new UiTabsOptions());
-                _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); }));
+                _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); if (t != FindTab && _findBackTab >= 0) { _findBackTab = -1; ShowFindBack(); } }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
                 BuildBelts(p);
@@ -1358,6 +1365,16 @@ namespace Satisvampory.Client
             }, new UiDataTableOptions { VisibleRows = 10, FillHeight = true, ColumnChooser = false, MultiSelect = false, TotalRow = false, EmptyText = "Enter a search above." }));
             Track(_findMatches.OnSelectionChanged(ids => SelectFindMatch(ids.FirstOrDefault())));
             Track(FindControl(p.Button("Back to matches"), true).OnClick(() => { _findMatches.SetSelected(Array.Empty<string>()); ShowFindStage(false); }));
+            // Back where Find was opened from (a Log row), when it was.
+            _findBack = _tabs.Add(FindTab, p.Button("Back"));
+            Track(_findBack.OnClick(() =>
+            {
+                var tab = _findBackTab;
+                _findBackTab = -1;
+                ShowFindBack();
+                if (tab >= 0) Open(tab);
+            }));
+            ShowFindBack();
             _findTable = FindControl(p.DataTable("find", new[]
             {
                 new UiTableColumn("chest", "Chest or station") { Hideable = false },
@@ -1452,10 +1469,18 @@ namespace Satisvampory.Client
         }
 
         /// <summary>Find on one chest or station: searched by name over the clan's plots, its location chosen.</summary>
-        internal void FindContainer(string containerId, string chestName)
+        internal void FindContainer(string containerId, string chestName) => FindContainer(containerId, chestName, -1);
+
+        /// <summary>The hub tab Find was opened from (the Log), for its Back button; -1 for none.</summary>
+        int _findBackTab = -1;
+        IUiButton _findBack = null!;
+
+        void FindContainer(string containerId, string chestName, int backTab)
         {
             _findChest = containerId;
+            _findBackTab = backTab;
             OpenTab(FindTab);
+            ShowFindBack();
             Progenitor.Dev.MainThread.PostDelayed(0.15, () =>
             {
                 if (_panel == null || !_panel.Visible) return;
@@ -1700,7 +1725,9 @@ namespace Satisvampory.Client
                 // A plain chest opens in the game's own window on the right; the list stays for stations and
                 // whenever the game cannot (another game window open, an older Progenitor, PvP rules).
                 _previewContents.Visible = true;
-                if (reply.Chest) TryOpenChestWindow(containerId);
+                // Not when another window called for the preview (the Add list on a chest): the game has one container
+                // window, and opening this chest in it would close the one the player is working in.
+                if (reply.Chest && _previewReturn == null) TryOpenChestWindow(containerId);
                 _previewHint.Text = "Right-drag to rotate. Escape returns. Ends after 5 seconds unless you keep it open.";
                 _previewKeep.Visible = true;
                 _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }

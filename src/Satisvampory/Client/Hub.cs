@@ -571,7 +571,8 @@ namespace Satisvampory.Client
                 if (_logShown) captions.Add("Log");
                 _builtWithLog = _logShown;
                 _tabs = p.Tabs("tabs", captions.ToArray(), new UiTabsOptions());
-                _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); if (t != FindTab && _findBackTab >= 0) { _findBackTab = -1; ShowFindBack(); } }));
+                // Showing a tab shows all of its controls; the Back button only belongs there when Find came from another tab.
+            _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); if (t != FindTab) _findBackTab = -1; ShowFindBack(); }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
                 BuildBelts(p);
@@ -1398,13 +1399,13 @@ namespace Satisvampory.Client
             Track(scope.OnChanged(value =>
             {
                 _findClan = value == "clan";
-                if (!_findScopeForced) savedScope.Value = value;
+                if (!_findScopeForced) { savedScope.Value = value; Satisvampory.Config.PlayerConfig.Persist(savedScope); }
                 RunFind();
             }));
             var matching = FindControl(p.CompactDropdown("Match", new[] { "partial", "exact" }, savedMatch.Value, new[] { "Partial name", "Full name" }));
-            Track(matching.OnChanged(value => { _findPartial = value == "partial"; savedMatch.Value = value; RunFind(); }));
+            Track(matching.OnChanged(value => { _findPartial = value == "partial"; savedMatch.Value = value; Satisvampory.Config.PlayerConfig.Persist(savedMatch); RunFind(); }));
             var kind = FindControl(p.CompactDropdown("Show", new[] { "0", "1", "2", "3" }, savedShow.Value, new[] { "All results", "Containers only", "Items only", "Recipes only" }));
-            Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); savedShow.Value = value; RunFind(); }));
+            Track(kind.OnChanged(value => { int.TryParse(value, out _findKind); savedShow.Value = value; Satisvampory.Config.PlayerConfig.Persist(savedShow); RunFind(); }));
             p.EndInline();
             _findResult = FindControl(p.Label("Search, choose a match, then choose its location."));
             _findMatches = FindControl(p.DataTable("find.matches", new[]

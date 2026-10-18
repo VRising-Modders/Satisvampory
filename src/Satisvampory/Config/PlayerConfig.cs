@@ -47,10 +47,10 @@ namespace Satisvampory.Config
             c.Flag(ctx, 16, "AdvancedTooltipNumbers", d.AdvancedTooltipNumbers, "Advanced tooltip numbers", "Item and recipe tooltips always show total, reserve, available and cap. Off: hold Alt to show them.");
             c.Flag(ctx, 13, "ShowTermHints", d.ShowTermHints, "Show term hints (ⓘ)", "Small markers that explain Belt, Category and the rest.");
             var redistribution = ctx.Bind(Section, "ShowRedistribution", false, "Show the game redistribution tab beside Production, Input and Output.");
-            redistribution.SettingChanged += (_, _) => c.Changed?.Invoke();
+            redistribution.SettingChanged += (_, _) => { Persist(redistribution); c.Changed?.Invoke(); };
             c.Rows.Add((redistribution, "Show vanilla redistribution", "Show the game redistribution tab. Existing game routes remain under your control."));
             var autoPin = ctx.Bind(Section, "AutoPinFind", true, "Automatically pin the chest or station selected in Find.");
-            autoPin.SettingChanged += (_, _) => c.Changed?.Invoke();
+            autoPin.SettingChanged += (_, _) => { Persist(autoPin); c.Changed?.Invoke(); };
             c.Rows.Add((autoPin, "Auto-pin Find selections", "Selecting a chest or station in Find pins its location for one minute or until you get close. Replaces the previous Find pin."));
             return c;
         }
@@ -58,6 +58,16 @@ namespace Satisvampory.Config
         public bool ShowRedistribution => Rows.Find(r => r.Entry.Definition.Key == "ShowRedistribution").Entry?.Value ?? false;
         public bool AdvancedTooltipNumbers => Rows.Find(r => r.Entry.Definition.Key == "AdvancedTooltipNumbers").Entry?.Value ?? false;
         public bool AutoPinFind => Rows.Find(r => r.Entry.Definition.Key == "AutoPinFind").Entry?.Value ?? true;
+
+        /// <summary>
+        /// Write a player's own setting to disk now. The file also holds the server's synced settings, so while
+        /// connected Progenitor keeps it from autosaving; an explicit save is safe (the server's values are parked).
+        /// </summary>
+        internal static void Persist(BepInEx.Configuration.ConfigEntryBase entry)
+        {
+            try { entry.ConfigFile.Save(); }
+            catch (Exception) { } // saved at the next change or on quit
+        }
 
         public uint Bits()
         {
@@ -93,7 +103,7 @@ namespace Satisvampory.Config
         void Flag(PluginContext ctx, int bit, string key, bool value, string label, string help)
         {
             var e = ctx.Bind(Section, key, value, help);
-            e.SettingChanged += (_, _) => Changed?.Invoke();
+            e.SettingChanged += (_, _) => { Persist(e); Changed?.Invoke(); };
             _flags.Add((e, bit));
             Rows.Add((e, label, help));
         }

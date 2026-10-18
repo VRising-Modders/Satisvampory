@@ -163,7 +163,7 @@ namespace Satisvampory.Client
             IUiButton button;
             try { button = handle.Button("Log", LogIcon()); }
             catch (Exception) { button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll)); }
-            _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings (last 24 hours).", "Log"));
+            _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings.", "Log"));
             _ctx.Track(button.OnClick(() =>
             {
                 if (!_hasTarget) return;

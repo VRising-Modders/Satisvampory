@@ -109,6 +109,7 @@ namespace Satisvampory.Server
             {
                 var on = _server.Snapshot().AllowMoveLog;
                 MoveLog.Enabled = on;
+                MoveLog.KeepHours = _server.Snapshot().LogHours;
                 try { hands.Watch(on); }
                 catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: hand moves not logged (Progenitor too old?): " + e.Message); }
             }

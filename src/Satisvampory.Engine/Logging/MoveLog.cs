@@ -7,7 +7,7 @@ using Satisvampory.Engine.Model;
 namespace Satisvampory.Engine.Logging
 {
     /// <summary>
-    /// What Satisvampory moved, kept per castle for 24 hours (server memory only). Each entry is written once,
+    /// What Satisvampory moved, kept per castle for <see cref="KeepHours"/> (saved with the world). Each entry is written once,
     /// filed under the castle at each end, and carries the names and plot labels as they were then, so a castle
     /// leaving the clan, a rename or a destroyed chest never makes old entries wrong or needs them redone. The
     /// island's log is read by collecting the entries of the castles in it now; who may read is decided then.
@@ -40,7 +40,9 @@ namespace Satisvampory.Engine.Logging
         }
 
         const int PerCastle = 5000;
-        static readonly TimeSpan Keep = TimeSpan.FromHours(24);
+        /// <summary>How long entries are kept (the server's "Log keeps" setting).</summary>
+        public double KeepHours { get; set; } = 24;
+        TimeSpan Keep => TimeSpan.FromHours(Math.Max(1, KeepHours));
 
         readonly Dictionary<PlotId, List<Entry>> _byCastle = new();
         readonly Dictionary<(long, int, Guid, Guid, string, int, string), Entry> _open = new();
@@ -136,7 +138,7 @@ namespace Satisvampory.Engine.Logging
             return d;
         }
 
-        /// <summary>A castle's entries of the last 24 hours, oldest first, for saving.</summary>
+        /// <summary>A castle's entries still kept, oldest first, for saving.</summary>
         public List<Entry> CastleEntries(PlotId castle)
         {
             var cutoff = _now() - Keep;

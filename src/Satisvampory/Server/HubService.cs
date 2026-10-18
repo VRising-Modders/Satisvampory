@@ -887,7 +887,7 @@ namespace Satisvampory.Server
                 && (player.Length == 0 || e.Actor.IndexOf(player, StringComparison.OrdinalIgnoreCase) >= 0)
                 && (q.Kind == 0 || (q.Kind == 1 && !e.IsChange) || (q.Kind == 2 && e.IsChange));
             var reply = new LogReply();
-            foreach (var e in _half.MoveLog.Read(castles, q.Hours <= 0 ? 24 : q.Hours, Keep, 400))
+            foreach (var e in _half.MoveLog.Read(castles, q.Hours <= 0 ? _half.MoveLog.KeepHours : q.Hours, Keep, 400))
                 reply.Rows.Add(new LogRowMsg
                 {
                     At = new DateTimeOffset(e.Last).ToUnixTimeSeconds(), Item = e.Item, Amount = e.Amount, Moves = e.Moves,

@@ -106,7 +106,9 @@ namespace Satisvampory.Client
             _logItem = _tabs.Add(LogTab, p.Input("Item or category", ""));
             _logPlayer = _tabs.Add(LogTab, p.Input("Player", ""));
             _logKind = _tabs.Add(LogTab, p.CompactDropdown("Show", new[] { "0", "1", "2" }, "0", new[] { "Moves and changes", "Moves", "Setting changes" }));
-            _logHours = _tabs.Add(LogTab, p.CompactDropdown("Last", new[] { "1", "6", "24" }, "24", new[] { "Hour", "6 hours", "24 hours" }));
+            // "Everything kept" (whatever the server keeps), or a shorter span; a span past what is kept shows everything kept.
+            _logHours = _tabs.Add(LogTab, p.CompactDropdown("Last", new[] { "0", "1", "6", "24", "72", "168" }, "0",
+                new[] { "Everything kept", "Hour", "6 hours", "Day", "3 days", "Week" }));
             Track(_tabs.Add(LogTab, p.Button("Refresh")).OnClick(RunLog));
             p.EndInline();
             Track(_logItem.OnSubmitted(_ => RunLog()));
@@ -126,7 +128,7 @@ namespace Satisvampory.Client
             }, new UiDataTableOptions
             {
                 VisibleRows = 14, MinRows = 8, Selectable = false, ColumnChooser = false, TotalRow = false, Sort = Array.Empty<UiTableSortKey>(),
-                EmptyText = "Nothing logged for this filter yet. Moves and setting changes stay for 24 hours.",
+                EmptyText = "Nothing logged for this filter yet.",
             }));
             Track(_logTable.OnRowAction((id, action) =>
             {
@@ -182,7 +184,7 @@ namespace Satisvampory.Client
                 ClientItems = text.Length > 0 ? ClientItems.Matching(_ctx, text, true, 30) : new List<int>(),
                 Player = _logPlayer.Value.Trim(),
                 Kind = int.TryParse(_logKind.Value, out var k) ? k : 0,
-                Hours = int.TryParse(_logHours.Value, out var h) ? h : 24,
+                Hours = int.TryParse(_logHours.Value, out var h) ? h : 0,
             }, reply =>
             {
                 if (seq != _logSeq) return;

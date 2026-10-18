@@ -423,8 +423,8 @@ namespace Satisvampory.Net
         [Field(4)] public string Player = "";
         /// <summary>0 moves and changes, 1 moves only, 2 changes only.</summary>
         [Field(5)] public int Kind;
-        /// <summary>1 to 24.</summary>
-        [Field(6)] public int Hours = 24;
+        /// <summary>Hours back; 0 for all the log keeps.</summary>
+        [Field(6)] public int Hours;
     }
 
     [ModMessage("sv.log.row")]

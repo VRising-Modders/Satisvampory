@@ -44,7 +44,10 @@ namespace Satisvampory.Server
 
         internal Ticker? Ticker { get; private set; }
 
-        /// <summary>What Satisvampory moved, per castle, last 24 hours (the Log tab).</summary>
+        /// <summary>Password chests (Progenitor's open gate); null on a Core without it.</summary>
+        internal ChestLocks? Locks { get; private set; }
+
+        /// <summary>What Satisvampory moved, per castle (the Log tab).</summary>
         internal MoveLog MoveLog { get; } = new();
 
         const string LogKey = "log/";
@@ -94,6 +97,8 @@ namespace Satisvampory.Server
             new HubService(_ctx, this).Attach();
             new ServantService(_ctx, this).Attach();
             new MaterialService(_ctx, this).Attach();
+            try { var locks = new ChestLocks(_ctx); locks.Attach(); Locks = locks; }
+            catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: chest passwords off (Progenitor too old?): " + e.Message); }
             // The Log lives with the world save, one key per castle: it survives reloads and restarts.
             _ctx.Track(_ctx.Save.WhenReady(store =>
             {

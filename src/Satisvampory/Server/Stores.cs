@@ -66,7 +66,11 @@ namespace Satisvampory.Server
             return "owner/" + castle.Owner.PlatformId;
         }
 
-        static string ContainerKey(EngineId id) => "container/" + id.Value.ToString("N");
+        internal static string ContainerKey(EngineId id) => "container/" + id.Value.ToString("N");
+
+        /// <summary>One container's own record, read straight from the store (the open gate needs nothing else).</summary>
+        internal static ContainerDto? Container(IModStore store, System.Guid id) =>
+            store.Get<ContainerRecord>("container/" + id.ToString("N"))?.Container;
 
         /// <summary>
         /// Load the island-wide settings under <paramref name="settingsKey"/> and every listed
@@ -118,7 +122,7 @@ namespace Satisvampory.Server
         static bool IsDefault(ContainerDto d) =>
             !d.KeepEmpty && d.Input.Count == 0 && d.Output.Count == 0 && d.PullOrder == "ListOrder" && d.SendOrder == "FillInOrder"
             && d.Takes == "Anything" && d.BasePriority == 0 && d.ItemPriority.Count == 0 && d.CategoryPriority.Count == 0
-            && d.BannedItems.Count == 0 && d.BannedCategories.Count == 0 && d.Special == "None" && !d.Private;
+            && d.BannedItems.Count == 0 && d.BannedCategories.Count == 0 && d.Special == "None" && !d.Private && string.IsNullOrEmpty(d.PasswordHash);
     }
 
     /// <summary>One container's saved record.</summary>

@@ -175,6 +175,7 @@ namespace Satisvampory.Engine.Edits
             to.Takes = from.Takes;
             to.Special = from.Special;
             to.Private = from.Private;
+            to.PasswordHash = from.PasswordHash;
             to.ItemPriority.Clear();
             foreach (var kv in from.ItemPriority) to.ItemPriority[kv.Key] = kv.Value;
             to.CategoryPriority.Clear();

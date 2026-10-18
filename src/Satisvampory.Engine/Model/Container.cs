@@ -100,6 +100,9 @@ namespace Satisvampory.Engine.Model
         /// </summary>
         public bool Private { get; set; }
 
+        /// <summary>A private chest's password as a salted hash (<see cref="Security.Passwords"/>); empty for none.</summary>
+        public string PasswordHash { get; set; } = string.Empty;
+
         int _base;
 
         public int BasePriority

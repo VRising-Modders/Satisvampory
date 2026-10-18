@@ -51,6 +51,7 @@ namespace Satisvampory.Engine.Persistence
         public List<string> BannedCategories { get; set; } = new();
         public string Special { get; set; } = nameof(SpecialKind.None);
         public bool Private { get; set; }
+        public string PasswordHash { get; set; } = string.Empty;
     }
 
     public sealed class BeltDto
@@ -240,6 +241,7 @@ namespace Satisvampory.Engine.Persistence
                     dto.BannedCategories = d.BannedCategories.ToList();
                     dto.Special = d.Special.ToString();
                     dto.Private = d.Private;
+                    dto.PasswordHash = d.PasswordHash;
                 }
                 save.Containers[Id(id)] = dto;
             }
@@ -314,6 +316,7 @@ namespace Satisvampory.Engine.Persistence
                 foreach (var c in dto.BannedCategories ?? new()) d.BannedCategories.Add(c);
                 d.Special = Enum.TryParse<SpecialKind>(dto.Special, out var sk) ? sk : SpecialKind.None;
                 d.Private = dto.Private;
+                d.PasswordHash = dto.PasswordHash ?? string.Empty;
                 if (save.Version < 12) ToEntryPriorities(d);
                 state.Deposit[id] = d;
             }

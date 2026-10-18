@@ -93,6 +93,8 @@ namespace Satisvampory.Net
         [Field(7)] public List<string> BeltIds = new();
         /// <summary>Out of every shared island use; its Input and Output do not run.</summary>
         [Field(8)] public bool Private;
+        /// <summary>A password is set (asked while the chest is private). The password itself never leaves the server.</summary>
+        [Field(9)] public bool HasPassword;
     }
 
     /// <summary>Everything one container's panels show.</summary>
@@ -152,6 +154,16 @@ namespace Satisvampory.Net
     public sealed class EmptyTrashReq
     {
         [Field(1)] public TargetMsg Target = new();
+    }
+
+    /// <summary>Set, change or remove a private chest's password. Current is needed when one is set.</summary>
+    [ModMessage("sv.lock.set")]
+    public sealed class SetPasswordReq
+    {
+        [Field(1)] public TargetMsg Target = new();
+        [Field(2)] public string Current = "";
+        /// <summary>Empty: remove the password.</summary>
+        [Field(3)] public string New = "";
     }
 
     [ModMessage("sv.loop.set")]

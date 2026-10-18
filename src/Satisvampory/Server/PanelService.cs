@@ -49,6 +49,8 @@ namespace Satisvampory.Server
             _ctx.Requests.Handle<TryItReq, TryItReply>((u, r, i) => With(u, r.Target, s => TryIt(s, r)));
             _ctx.Requests.Handle<SetRecipesReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, $"Recipes switched: {r.On.Count} on", SetRecipes(s, r))));
             _ctx.Requests.Handle<SetLoopReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, "Loop mode changed", SetLoop(s, r))));
+            _ctx.Requests.Handle<SetPasswordReq, PanelMsg>((u, r, i) => With(u, r.Target, s => SetPassword(s, r)),
+                new Progenitor.Networking.RequestOptions { Burst = 3, PerSecond = 1 });
             _ctx.Requests.Handle<EmptyTrashReq, PanelMsg>((u, r, i) => With(u, r.Target, s => Changed(s, "Trash emptied", EmptyTrash(s))));
         }
 
@@ -231,6 +233,32 @@ namespace Satisvampory.Server
                 reply.CategoryIcons.Add(IconOf(s.Catalog, cat, stock));
             }
             return reply;
+        }
+
+        /// <summary>
+        /// A private chest's password: set, changed or removed. Changing or removing needs the current one; the text is
+        /// hashed here and never stored, logged or sent back.
+        /// </summary>
+        PanelMsg SetPassword(Session s, SetPasswordReq r)
+        {
+            if (s.Container.Kind != NodeKind.Chest) throw new RequestRefusedException("Only chests take a password.");
+            var had = s.Container.Deposit.PasswordHash;
+            if (!string.IsNullOrEmpty(had) && !Engine.Security.Passwords.Verify(r.Current ?? "", had))
+                throw new RequestRefusedException("The current password is not right.");
+            var next = r.New ?? "";
+            if (next.Length > Engine.Security.Passwords.MaxLength)
+                throw new RequestRefusedException($"Use at most {Engine.Security.Passwords.MaxLength} characters.");
+            var hash = next.Length == 0 ? "" : Engine.Security.Passwords.Hash(next);
+            Must(s.Edits.SetDepositOptions(s.Role, s.Container.Id, d =>
+            {
+                d.PasswordHash = hash;
+                if (hash.Length > 0) d.Private = true; // a password only works on a private chest
+            }));
+            Save(s);
+            _half.Locks?.Forget(s.Container.Id.Value);
+            _half.MoveLog.Change(s.Container.Plot, s.Container.Id.Value, s.Container.DisplayName, PlotLabel(s.Island, s.Container.Plot),
+                hash.Length == 0 ? "Password removed" : string.IsNullOrEmpty(had) ? "Password set" : "Password changed", s.User.CharacterName.ToString());
+            return Panel(s);
         }
 
         /// <summary>A player's change to this container's settings, into the Log.</summary>
@@ -466,6 +494,7 @@ namespace Satisvampory.Server
             msg.Deposit.BasePriority = d.BasePriority;
             msg.Deposit.Special = (int)d.Special;
             msg.Deposit.Private = d.Private;
+            msg.Deposit.HasPassword = !string.IsNullOrEmpty(d.PasswordHash);
             foreach (var (item, adj) in d.ItemPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item), Adjust = adj });
             foreach (var (cat, adj) in d.CategoryPriority) msg.Deposit.Priorities.Add(new PriorityMsg { Category = cat, Label = "Category " + cat, Adjust = adj, Icon = IconOf(s.Catalog, cat, null) });
             foreach (var item in d.BannedItems) msg.Deposit.Bans.Add(new PriorityMsg { Item = item.Guid, Label = s.Catalog.NameOf(item) });

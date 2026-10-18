@@ -450,6 +450,7 @@ namespace Satisvampory.World
             to.BasePriority = from.BasePriority;
             to.Special = from.Special;
             to.Private = from.Private;
+            to.PasswordHash = from.PasswordHash;
             foreach (var kv in from.ItemPriority) to.ItemPriority[kv.Key] = kv.Value;
             foreach (var kv in from.CategoryPriority) to.CategoryPriority[kv.Key] = kv.Value;
             to.BannedItems.UnionWith(from.BannedItems);

@@ -606,6 +606,10 @@ namespace Satisvampory.Client
         IUiButton _batchApply = null!;
         IUiToggle _private = null!;
         IUiLabel _privateNote = null!;
+        IUiLabel _pwStatus = null!, _pwHint = null!;
+        IUiInput _pwCurrent = null!, _pwNew = null!;
+        IUiButton _pwSet = null!, _pwRemove = null!;
+        bool _hasPassword;
         IUiButton _empty = null!;
         float _emptyArmedAt = -10;
         readonly List<Entry> _list = new();
@@ -702,6 +706,24 @@ namespace Satisvampory.Client
             ctx.Track(_private.OnChanged(_ => { if (_redrawing) return; ShowPrivate(); Commit(); }));
             _privateNote = panel.Label("Out of every shared castle and clan inventory: no deposits, belts, crafting or Find. Input and Output are off.");
 
+            // A password on a private chest: everyone who opens it is asked (they can tick Remember).
+            _pwStatus = panel.Label("");
+            _pwCurrent = panel.Input("Current password", "");
+            _pwNew = panel.Input("New password", "");
+            Mask(_pwCurrent);
+            Mask(_pwNew);
+            panel.BeginInline();
+            _pwSet = panel.Button("Set password");
+            _pwRemove = panel.Button("Remove password");
+            panel.EndInline();
+            _pwHint = panel.Label("A game lock, not real security: don't reuse a password you use anywhere else.");
+            ctx.Track(_pwSet.OnClick(() =>
+            {
+                if (_pwNew.Value.Length == 0) { ctx.Hud.Notify("Type the new password first.", kind: UiNoticeKind.Warning, seconds: 4); return; }
+                SendPassword(_pwNew.Value);
+            }));
+            ctx.Track(_pwRemove.OnClick(() => SendPassword("")));
+
             _empty = panel.Button("Empty trash");
             ctx.Track(_empty.OnClick(() =>
             {
@@ -738,6 +760,7 @@ namespace Satisvampory.Client
                 _list.Add(new Entry { Item = b.Item, Category = b.Item != 0 ? "" : b.Category, Label = b.Label, Icon = b.Icon, Blocked = true });
             _selected.RemoveWhere(k => _list.All(e => e.Key != k));
             _special = d.Special;
+            _hasPassword = d.HasPassword;
             _header.Text = $"{s.Name} · {s.Where}" + (s.CanEdit ? "" : " · " + s.ReadOnlyReason) + (s.Notice.Length > 0 ? "\n" + s.Notice : "");
             _redrawing = true;
             try
@@ -752,7 +775,45 @@ namespace Satisvampory.Client
             DrawEntries();
         }
 
-        void ShowPrivate() => _privateNote.Visible = _private.Value;
+        void ShowPrivate()
+        {
+            var on = _private.Value;
+            _privateNote.Visible = on;
+            var edit = on && CanEdit;
+            _pwStatus.Visible = on;
+            _pwStatus.Text = _hasPassword ? "Password: set. Everyone who opens this chest is asked for it." : "No password: anyone who may open the chest can.";
+            _pwCurrent.Visible = edit && _hasPassword;
+            _pwNew.Visible = _pwSet.Visible = _pwHint.Visible = edit;
+            _pwSet.Text = _hasPassword ? "Change password" : "Set password";
+            _pwRemove.Visible = edit && _hasPassword;
+        }
+
+        /// <summary>Set, change (<paramref name="next"/>) or remove (empty) the password; the boxes clear either way.</summary>
+        void SendPassword(string next)
+        {
+            var req = new SetPasswordReq { Target = Owner.Target(), Current = _pwCurrent.Value, New = next };
+            _pwCurrent.Value = "";
+            _pwNew.Value = "";
+            Owner.Ctx.Requests.Send<SetPasswordReq, PanelMsg>(req, r =>
+            {
+                if (r.Ok && r.Reply != null)
+                {
+                    Owner.Apply(r.Reply);
+                    Owner.Ctx.Hud.Notify(next.Length == 0 ? "Password removed." : "Password saved.", kind: UiNoticeKind.Success, seconds: 3);
+                }
+                else Owner.Ctx.Hud.Notify(r.Reason.Length > 0 ? r.Reason : "Password not saved: " + r.Status, kind: UiNoticeKind.Warning, seconds: 5);
+            });
+        }
+
+        /// <summary>Hidden typing (Progenitor #107); an older Core shows the text.</summary>
+        static void Mask(IUiInput input)
+        {
+            try { MaskCore(input); }
+            catch (Exception) { }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void MaskCore(IUiInput input) => input.Masked = true;
 
         void ShowBatch() =>
             _batchRule.Visible = _batchPriority.Visible = _batchApply.Visible = _selected.Count > 0 && CanEdit;

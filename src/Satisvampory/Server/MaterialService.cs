@@ -73,8 +73,15 @@ namespace Satisvampory.Server
             };
         }
 
-        public IReadOnlyCollection<MaterialOperation> Operations { get; } =
-            new[] { MaterialOperation.Build, MaterialOperation.Craft, MaterialOperation.Repair, MaterialOperation.Upgrade, MaterialOperation.CharacterCraft };
+        /// <summary>
+        /// Progenitor's refinement-station recipe view (display only: the tooltip's have/need counts). Named
+        /// by value so this builds and runs on a Core without it; only offered when the Core defines it.
+        /// </summary>
+        static readonly MaterialOperation RefineView = (MaterialOperation)7;
+
+        public IReadOnlyCollection<MaterialOperation> Operations { get; } = Enum.IsDefined(typeof(MaterialOperation), RefineView)
+            ? new[] { MaterialOperation.Build, MaterialOperation.Craft, MaterialOperation.Repair, MaterialOperation.Upgrade, MaterialOperation.CharacterCraft, RefineView }
+            : new[] { MaterialOperation.Build, MaterialOperation.Craft, MaterialOperation.Repair, MaterialOperation.Upgrade, MaterialOperation.CharacterCraft };
 
         public long Revision(in MaterialContext context)
         {
@@ -151,7 +158,8 @@ namespace Satisvampory.Server
                 island.Answers[item] = answer = _half.MaterialPolicy.Sources(use, serverAllows: true, playerAllows: true, island.Deposit, island.Rules, new ItemId(item));
             if (answer is not { } a) return null;
             var station = context.Station;
-            var benchCraft = context.Operation == MaterialOperation.Craft && !station.IsNone;
+            // A station's own Inputs decide what it can draw on: crafting there, and the refinery's recipe view.
+            var benchCraft = (context.Operation == MaterialOperation.Craft || context.Operation == RefineView) && !station.IsNone;
             var spend = benchCraft
                 ? Engine.World.MaterialPolicy.ForInput(island.Graph, new Engine.Model.ContainerId(station.Value), a.SpendOrder, new ItemId(item), island.Deposit.Catalog)
                 : a.SpendOrder;

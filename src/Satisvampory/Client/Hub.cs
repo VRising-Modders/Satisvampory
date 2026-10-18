@@ -1445,8 +1445,9 @@ namespace Satisvampory.Client
             if (_chestWindow != window) return;
             if (window.State == Progenitor.Inventory.ContainerPreviewState.Open)
             {
-                // Hold the view until the player closes the window. The list stays for now: the camera preview
-                // hides the game's window (reported to Progenitor); hide it once the window shows beside the view.
+                // The game's window shows the contents beside the view (Progenitor 2026.10.93+); hold the view
+                // until the player closes it.
+                _previewContents.Visible = false;
                 KeepPreview();
                 return;
             }

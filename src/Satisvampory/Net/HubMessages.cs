@@ -346,6 +346,8 @@ namespace Satisvampory.Net
         [Field(7)] public List<int> Items = new();
         [Field(8)] public List<int> Amounts = new();
         [Field(9)] public string Name = "";
+        /// <summary>A plain chest (not a station): the game's own window can show it remotely.</summary>
+        [Field(10)] public bool Chest;
     }
 
     /// <summary>Island numbers for a hovered recipe: its product and each requirement.</summary>

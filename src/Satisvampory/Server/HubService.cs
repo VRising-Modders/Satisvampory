@@ -853,7 +853,8 @@ namespace Satisvampory.Server
                 { active.Lease.Dispose(); _previews.Remove(s.UserEntity); }
             }, _ctx.Owner);
             var reply = new PreviewReply { Token = token, X = point.X, Y = point.Y, Z = point.Z,
-                Yaw = world.FacingOf(id) + 180, FloorHeight = _ctx.Castles.BuildingFloorHeight(entity), Name = world.Find(id)!.DisplayName };
+                Yaw = world.FacingOf(id) + 180, FloorHeight = _ctx.Castles.BuildingFloorHeight(entity), Name = world.Find(id)!.DisplayName,
+                Chest = world.Find(id)!.Kind == NodeKind.Chest };
             var held = world.Contents(id).AsEnumerable();
             if (world.Find(id)!.Kind == NodeKind.Station) held = held.Concat(world.Contents(id, InvPart.Output));
             foreach (var g in held.GroupBy(x => x.Item).OrderByDescending(g => g.Sum(x => x.Amount)))

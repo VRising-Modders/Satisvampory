@@ -1410,8 +1410,59 @@ namespace Satisvampory.Client
             _previewKeep.Visible = false;
         }
 
+        Progenitor.Inventory.IContainerPreview? _chestWindow;
+
+        void TryOpenChestWindow(string containerId)
+        {
+            CloseChestWindow();
+            if (!Guid.TryParseExact(containerId, "N", out var guid)) return;
+            try { OpenChestWindow(guid); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: chest window unavailable (Progenitor too old?): " + e.Message); }
+        }
+
+        // Its own method: on a Core without the API only this call fails (and is caught).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        void OpenChestWindow(Guid guid)
+        {
+            var window = _chestWindow = _ctx.Inventory.Preview.Open(new Progenitor.Inventory.ContainerId(guid),
+                new Progenitor.Inventory.ContainerPreviewOptions { KeepOpen = true });
+            window.Closed += closed =>
+            {
+                if (_chestWindow != window) return;
+                _chestWindow = null;
+                // The player closed the chest window: the whole preview ends. Anything else: the list is back.
+                if (closed.Reason is Progenitor.Inventory.ContainerPreviewCloseReason.Escape or Progenitor.Inventory.ContainerPreviewCloseReason.WindowClosed)
+                {
+                    ++_previewSequence; _preview?.Dispose(); EndFindPreview();
+                }
+                else if (_previewPanel != null && _previewPanel.Visible) _previewContents.Visible = true;
+            };
+            WatchChestWindow(window);
+        }
+
+        void WatchChestWindow(Progenitor.Inventory.IContainerPreview window)
+        {
+            if (_chestWindow != window) return;
+            if (window.State == Progenitor.Inventory.ContainerPreviewState.Open)
+            {
+                // The game's window shows the contents; hold the view until the player closes it.
+                _previewContents.Visible = false;
+                KeepPreview();
+                return;
+            }
+            Progenitor.Dev.MainThread.PostDelayed(0.2, () => WatchChestWindow(window), _ctx.Owner);
+        }
+
+        void CloseChestWindow()
+        {
+            var w = _chestWindow;
+            _chestWindow = null;
+            w?.Dispose();
+        }
+
         void EndFindPreview()
         {
+            CloseChestWindow();
             var token = _previewToken; _previewToken = "";
             if (token.Length > 0) Send<EndPreviewReq, ViewSaved>(new EndPreviewReq { Token = token }, _ => { });
             if (_previewPanel != null) UiApi.Hide(_previewPanel);
@@ -1471,6 +1522,10 @@ namespace Satisvampory.Client
                     _previewPanel.EndInline();
                 }
                 _previewTitle.Text = reply.Name;
+                // A plain chest opens in the game's own window on the right; the list stays for stations and
+                // whenever the game cannot (another game window open, an older Progenitor, PvP rules).
+                _previewContents.Visible = true;
+                if (reply.Chest) TryOpenChestWindow(containerId);
                 _previewHint.Text = "Right-drag to rotate. Escape returns. Ends after 5 seconds unless you keep it open.";
                 _previewKeep.Visible = true;
                 _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }

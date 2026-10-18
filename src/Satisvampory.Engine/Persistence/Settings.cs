@@ -58,6 +58,8 @@ namespace Satisvampory.Engine.Persistence
         public bool HeartTopUpIslandOnLogin { get; set; }
         public bool HeartTopUpOutsideIsland { get; set; }
         public bool AllowRepeatHunts { get; set; }
+        /// <summary>The Log: what moved and who changed what, 24 hours, saved with the world. Off: nothing recorded, no Log in any window.</summary>
+        public bool AllowMoveLog { get; set; } = true;
         public bool RepeatHuntsOnlyWhileClanOnline { get; set; }
         public int RepeatHuntSuccessCap { get; set; } = 99;
         public int MovesPerPlot { get; set; } = 12;

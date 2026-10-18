@@ -103,9 +103,18 @@ namespace Satisvampory.Server
             }));
             Progenitor.Dev.MainThread.PostDelayed(60, SaveLogLoop, _ctx.Owner);
             _ctx.Track(new OnDispose(SaveLog));
-            // Hand moves into the Log (Progenitor #108); an older Core logs none.
-            try { new HandMoves(_ctx, this).Attach(); }
-            catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: hand moves not logged (Progenitor too old?): " + e.Message); }
+            // Hand moves into the Log (Progenitor #108); an older Core logs none. Watched only while the log is on.
+            var hands = new HandMoves(_ctx, this);
+            void LogSwitch()
+            {
+                var on = _server.Snapshot().AllowMoveLog;
+                MoveLog.Enabled = on;
+                try { hands.Watch(on); }
+                catch (System.Exception e) { _ctx.Log.LogInfo("Satisvampory: hand moves not logged (Progenitor too old?): " + e.Message); }
+            }
+            LogSwitch();
+            _server.Changed += LogSwitch;
+            _ctx.Track(new OnDispose(() => _server.Changed -= LogSwitch));
             Progenitor.Dev.MainThread.PostDelayed(20, () => AdminActions.AutoImportOnFirstBoot(_ctx, this), _ctx.Owner);
             _ctx.Log.LogInfo("Satisvampory 2.0: server part loaded.");
         }

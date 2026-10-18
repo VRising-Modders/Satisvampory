@@ -13,11 +13,13 @@ namespace Satisvampory
     {
         readonly SatisContext _ctx;
         readonly PlayerConfig _player;
+        readonly ServerConfig _server;
         readonly Keys _keys;
         readonly AdminPanel _admin;
 
-        internal ClientHalf(SatisContext ctx, PlayerConfig player, Keys keys, AdminPanel admin)
+        internal ClientHalf(SatisContext ctx, PlayerConfig player, Keys keys, AdminPanel admin, ServerConfig server)
         {
+            _server = server;
             _ctx = ctx;
             _player = player;
             _keys = keys;
@@ -45,6 +47,16 @@ namespace Satisvampory
             panels.OpenHub = hub.OpenTab;
             panels.PreviewContainer = hub.PreviewContainer;
             panels.FindContainer = hub.FindContainer;
+            // The server's Log setting (synced): off hides the Log tab and every Log button.
+            void LogSetting()
+            {
+                var on = _server.Snapshot().AllowMoveLog;
+                hub.LogShown = on;
+                panels.LogShown = on;
+            }
+            LogSetting();
+            _server.Changed += LogSetting;
+            _ctx.Track(new OnDispose(() => _server.Changed -= LogSetting));
             panels.OpenLog = hub.OpenLog;
             _ctx.Track(new OnDispose(() => _admin.OpenHub = null));
             _ctx.Track(new OnDispose(() => _stopped = true));

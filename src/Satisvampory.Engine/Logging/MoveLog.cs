@@ -50,11 +50,14 @@ namespace Satisvampory.Engine.Logging
         /// <param name="clock">UTC now; tests pass their own.</param>
         public MoveLog(Func<DateTime>? clock = null) => _now = clock ?? (() => DateTime.UtcNow);
 
+        /// <summary>Off (the server setting): nothing is recorded.</summary>
+        public bool Enabled { get; set; } = true;
+
         /// <summary>One move. <paramref name="fromPlot"/> or <paramref name="toPlot"/> is null for a player's or servant's bag.</summary>
         public void Add(PlotId? fromPlot, PlotId? toPlot, int item, int amount, Guid from, string fromName, string fromPlotLabel,
             Guid to, string toName, string toPlotLabel, string why, int forItem = 0, string actor = "")
         {
-            if (amount <= 0 || (fromPlot == null && toPlot == null)) return;
+            if (!Enabled || amount <= 0 || (fromPlot == null && toPlot == null)) return;
             var now = _now();
             var minute = now.Ticks / TimeSpan.TicksPerMinute;
             if (minute != _openMinute) { _open.Clear(); _openMinute = minute; }
@@ -90,6 +93,7 @@ namespace Satisvampory.Engine.Logging
         /// <summary>A player's settings change on one castle: a container's (Filter, Input, Output...) or the island's (belts, categories).</summary>
         public void Change(PlotId castle, Guid container, string containerName, string plotLabel, string detail, string actor)
         {
+            if (!Enabled) return;
             var now = _now();
             File(castle, new Entry
             {

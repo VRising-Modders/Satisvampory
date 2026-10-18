@@ -255,6 +255,7 @@ namespace Satisvampory.Server
         internal static void LogMoves(ServerHalf half, ProgenitorWorld world, Func<PlotId, string> plotName,
             IEnumerable<(ContainerId From, ContainerId To, ItemId Item, int Amount, ItemId For)> moves, string why, string actor = "", string bagName = "")
         {
+            if (!half.MoveLog.Enabled) return;
             foreach (var m in moves)
             {
                 var f = world.Find(m.From);

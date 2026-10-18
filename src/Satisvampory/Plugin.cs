@@ -33,7 +33,7 @@ namespace Satisvampory
             SettingsPage.Build(ctx, server, player, keys, admin);
 
             if (ctx.IsServer) new ServerHalf(ctx, server).Attach();
-            else new ClientHalf(ctx, player, keys, admin).Attach();
+            else new ClientHalf(ctx, player, keys, admin, server).Attach();
         }
     }
 

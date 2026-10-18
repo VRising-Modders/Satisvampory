@@ -28,9 +28,22 @@ namespace Satisvampory.Server
             _half = half;
         }
 
+        IDisposable? _watch;
+        bool _unavailable;
+
+        /// <summary>Watch hand moves while the log is on; stop (no cost at all) while it is off.</summary>
+        internal void Watch(bool on)
+        {
+            if (_unavailable) return;
+            if (!on) { _watch?.Dispose(); _watch = null; return; }
+            if (_watch != null) return;
+            try { _watch = Subscribe(); _ctx.Track(_watch); }
+            catch (Exception) { _unavailable = true; throw; }
+        }
+
         // Its own method: on a Core without OnPlayerMove (Progenitor #108) only this call fails (and is caught).
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        internal void Attach() => _ctx.Track(_ctx.Inventory.OnPlayerMove(OnMove));
+        IDisposable Subscribe() => _ctx.Inventory.OnPlayerMove(OnMove);
 
         void OnMove(PlayerInventoryMove m)
         {

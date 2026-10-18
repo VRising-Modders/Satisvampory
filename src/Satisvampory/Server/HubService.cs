@@ -867,6 +867,7 @@ namespace Satisvampory.Server
         /// </summary>
         LogReply Log(Session s, LogReq q)
         {
+            if (!_half.MoveLog.Enabled) throw new RequestRefusedException("The log is turned off on this server.");
             var castles = s.Island.Castles.Select(ProgenitorWorld.PlotOf).ToList();
             Guid? container = Guid.TryParseExact(q.ContainerId, "N", out var cg) ? cg : null;
             HashSet<int>? items = null;

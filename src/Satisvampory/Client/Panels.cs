@@ -120,10 +120,26 @@ namespace Satisvampory.Client
 
         const int ResearchScroll = 2065714452;
 
+        readonly List<IVanillaAttachHandle> _logButtons = new();
+        bool _logShown = true;
+
+        /// <summary>The server keeps a log: the Log buttons show.</summary>
+        internal bool LogShown
+        {
+            get => _logShown;
+            set
+            {
+                _logShown = value;
+                foreach (var h in _logButtons) h.Visible = value;
+            }
+        }
+
         void LogButton(VanillaUiSite site, VanillaPanelAnchor anchor)
         {
             var handle = UiApi.AttachToVanilla(site, anchor, _ctx.Owner, _ctx.Guid + ".log");
             _ctx.Track(handle);
+            _logButtons.Add(handle);
+            handle.Visible = _logShown;
             // The game's Research Scroll icon (a parchment) as the face; the caption is its tooltip.
             var button = handle.Button("Log", VanillaButtonIcon.Item(ResearchScroll));
             _ctx.Track(button.Tooltip("What moved in and out of this, and who changed its settings (last 24 hours).", "Log"));

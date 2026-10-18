@@ -137,9 +137,29 @@ namespace Satisvampory.Client
             }));
         }
 
+        bool _logShown = true, _builtWithLog = true;
+
+        /// <summary>The server keeps a log: the Log tab is there. Changing it rebuilds the hub on its next open.</summary>
+        internal bool LogShown
+        {
+            get => _logShown;
+            set
+            {
+                if (_logShown == value) return;
+                _logShown = value;
+                if (_panel != null && _builtWithLog != value)
+                {
+                    UiApi.Hide(_panel);
+                    _panel.Dispose();
+                    _panel = null;
+                }
+            }
+        }
+
         /// <summary>The Log tab on one chest or station (the small Log button on its window).</summary>
         internal void OpenLog(string containerId, string name)
         {
+            if (!_logShown) return;
             _logContainer = containerId;
             _logContainerName = name;
             _ = Panel;
@@ -498,7 +518,7 @@ namespace Satisvampory.Client
                 case BeltsTab: Send<GetBeltsReq, BeltsMsg>(new GetBeltsReq(), DrawBelts); break;
                 case InventoryTab: LoadInventory(); break;
                 case FindTab: ShowFindStage(_findAtLocations); break;
-                case LogTab: RunLog(); break;
+                case LogTab: if (_logShown) RunLog(); break;
                 case HuntLogTab:
                     Send<GetHuntLogReq, HuntLogReply>(new GetHuntLogReq(), r =>
                         _huntLog.Text = (r.Lines.Count == 0 ? "No hunts in the last 72 hours." : ClientItems.Missions(_ctx, string.Join("\n", r.Lines.Take(40))))
@@ -546,7 +566,11 @@ namespace Satisvampory.Client
                 p.CaptureMode = UiCaptureMode.WhileShown;
                 _ctx.Track(p);
                 p.Footer = VersionFooter;
-                _tabs = p.Tabs("tabs", new[] { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts", "Log" }, new UiTabsOptions());
+                // The Log tab only while the server keeps a log (it is the last tab, so the others keep their numbers).
+                var captions = new List<string> { "Castle", "Deposit", "Belts", "Inventory", "Find", "Hunts" };
+                if (_logShown) captions.Add("Log");
+                _builtWithLog = _logShown;
+                _tabs = p.Tabs("tabs", captions.ToArray(), new UiTabsOptions());
                 _ctx.Track(_tabs.OnChanged(t => { Refresh(t); TabTip(t); if (t != FindTab && _findBackTab >= 0) { _findBackTab = -1; ShowFindBack(); } }));
                 BuildCastle(p);
                 BuildMassDeposit(p);
@@ -554,7 +578,7 @@ namespace Satisvampory.Client
                 BuildInventory(p);
                 BuildFind(p);
                 _huntLog = _tabs.Add(HuntLogTab, p.Label(""));
-                BuildLog(p);
+                if (_logShown) BuildLog(p);
                 // A new panel draws at once; only Open shows the hub, so a redraw from a reply (Tidy) stays hidden.
                 UiApi.Hide(p);
                 return p;

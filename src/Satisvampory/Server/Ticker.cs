@@ -488,6 +488,7 @@ namespace Satisvampory.Server
                         _ctx.Log.LogInfo($"Satisvampory: station cleanup waiting on {world.Find(id)?.DisplayName ?? id.ToString()} [{id}]: "
                             + (report.Diagnostics.TryGetValue(id, out var why) ? string.Join(", ", why.Where(w => w.StartsWith("cleanup-")).Distinct().Take(6)) : "not reached"));
                 }
+                Mark("cleanup");
                 _listIslandTicks++;
                 foreach (var codes in report.Diagnostics.Values)
                     foreach (var code in codes) _diagSinceLog[code] = (_diagSinceLog.TryGetValue(code, out var dn) ? dn : 0) + 1;
@@ -521,12 +522,14 @@ namespace Satisvampory.Server
                     }
                     else if (!ls.Stalled && was) _stalled.Remove((key, loopKey));
                 }
+                Mark("loops");
                 if (report.Moves.Count > 0)
                 {
                     var names = ServerActions.PlotNames(_ctx.Save, members);
                     foreach (var g in report.Moves.GroupBy(m => m.Why))
                         ServerActions.LogMoves(_half, world, names, g.Select(m => (m.From, m.To, m.Item, m.Amount, m.For)), MoveLog.Why(g.Key));
                 }
+                Mark("movelog");
                 if (!_recent.TryGetValue(key, out var recent)) _recent[key] = recent = new List<(double, MoveRecord)>();
                 recent.RemoveAll(x => x.At < Now - 60);
                 if (recent.Count < 5000) recent.AddRange(report.Moves.Select(m => (Now, m)));

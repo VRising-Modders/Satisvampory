@@ -242,6 +242,8 @@ namespace Satisvampory.Client
             _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
             // Needs Progenitor's recipe tooltip site (#89); an older Core leaves it off.
+            try { RegisterPreviewKeep(); }
+            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: Space to keep a preview open off: " + e.Message); }
             try { RegisterAltHold(); }
             catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: hold Alt for tooltip numbers off (Progenitor too old?): " + e.Message); }
             try { AttachRecipeTooltip(); }
@@ -289,6 +291,14 @@ namespace Satisvampory.Client
 
         bool _altHeld;
         IVanillaAttachHandle? _recipeTip, _itemTip;
+
+        /// <summary>Keeps an Object preview open (Space by default; the player can rebind it).</summary>
+        internal const string PreviewKeepId = "PreviewKeepOpen";
+
+        void RegisterPreviewKeep() =>
+            _ctx.Keybinds.Register(PreviewKeepId, new KeyChord(UiKey.Space), "Keep an object preview open",
+                () => { if (_previewPanel != null && _previewPanel.Visible && _previewKeep.Visible) KeepPreview(); },
+                allowWhileCaptured: true);
 
         // Its own method: on a Core without lone-modifier holds (Progenitor #102) only this call fails (and is caught).
         [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -1755,7 +1765,7 @@ namespace Satisvampory.Client
             if (_preview == null || !_preview.Active || _previewToken.Length == 0) return;
             if (!_preview.Hold()) return;
             Send<EndPreviewReq, ViewSaved>(new EndPreviewReq { Token = _previewToken, Hold = true }, _ => { });
-            _previewHint.Text = "Right-drag to rotate. Kept open: Return or Escape closes it.";
+            _previewHint.Text = "Right-drag to rotate. Kept open.";
             _previewKeep.Visible = false;
         }
 
@@ -1859,17 +1869,18 @@ namespace Satisvampory.Client
                     _previewPanel.Dock(UiDock.Left);
                     _previewPanel.CaptureMode = UiCaptureMode.WhileShown;
                     _ctx.Track(_previewPanel);
-                    _previewHint = _previewPanel.Label("");
                     _previewTitle = _previewPanel.Label("");
+                    _previewHint = _previewPanel.Label("");
                     _previewContents = _previewPanel.DataTable("preview.contents", new[]
                     {
                         new UiTableColumn("item", "Holds") { Hideable = false },
                         new UiTableColumn("amount", "Amount", UiTableColumnKind.Number) { Format = "#,0", Width = 160 },
                     }, new UiDataTableOptions { VisibleRows = 8, Selectable = false, TotalRow = false, ColumnChooser = false, EmptyText = "Empty." });
                     _previewPanel.BeginInline();
-                    _previewKeep = _previewPanel.Button("Keep open");
+                    // Keep open and Return centered as a pair; Return alone stays centered once the view is kept.
+                    _previewKeep = _previewPanel.Button("Keep open").KeyHint(PreviewKeepId).Centered();
                     Track(_previewKeep.OnClick(KeepPreview));
-                    Track(_previewPanel.Button("Return").KeyHint("Esc").OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
+                    Track(_previewPanel.Button("Return").KeyHint("Esc").Centered().OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                     _previewPanel.EndInline();
                 }
                 _previewTitle.Text = reply.Name;
@@ -1887,7 +1898,7 @@ namespace Satisvampory.Client
                     _previewContents.Visible = false;
                     DockPreview(true);
                 }
-                _previewHint.Text = "Right-drag to rotate. Escape returns. Ends after 5 seconds unless you keep it open.";
+                _previewHint.Text = "Right-drag to rotate. Ends in 5 s unless kept open.";
                 _previewKeep.Visible = true;
                 _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }
                     .Text("item", ClientItems.NameOf(_ctx, item) ?? "Item " + item)

@@ -242,8 +242,6 @@ namespace Satisvampory.Client
             _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
             // Needs Progenitor's recipe tooltip site (#89); an older Core leaves it off.
-            // Space to keep a preview open waits for Progenitor's panel-scoped binds: as a gameplay bind it clashes with
-            // the game's Respawn and Progenitor asks the player to resolve it.
             try { RegisterAltHold(); }
             catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: hold Alt for tooltip numbers off (Progenitor too old?): " + e.Message); }
             try { AttachRecipeTooltip(); }
@@ -295,10 +293,10 @@ namespace Satisvampory.Client
         /// <summary>Keeps an Object preview open (Space by default; the player can rebind it).</summary>
         internal const string PreviewKeepId = "PreviewKeepOpen";
 
-        void RegisterPreviewKeep() =>
-            _ctx.Keybinds.Register(PreviewKeepId, new KeyChord(UiKey.Space), "Keep an object preview open",
-                () => { if (_previewPanel != null && _previewPanel.Visible && _previewKeep.Visible) KeepPreview(); },
-                allowWhileCaptured: true);
+        [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        void RegisterPreviewKeep(IUiPanel panel) =>
+            _ctx.Keybinds.RegisterWhileShown(panel, PreviewKeepId, new KeyChord(UiKey.Space), "Keep an object preview open",
+                () => { if (_previewKeep.Visible) KeepPreview(); }, "Object preview");
 
         // Its own method: on a Core without lone-modifier holds (Progenitor #102) only this call fails (and is caught).
         [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -1879,6 +1877,10 @@ namespace Satisvampory.Client
                     _previewPanel.BeginInline();
                     // Keep open and Return centered as a pair; Return alone stays centered once the view is kept.
                     _previewKeep = _previewPanel.Button("Keep open").Centered();
+                    // Space keeps it open, live only while this panel shows (Progenitor #166): no clash with the
+                    // game's Respawn. Older Cores: the button alone.
+                    try { RegisterPreviewKeep(_previewPanel); _previewKeep.KeyHint(PreviewKeepId); }
+                    catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: Space to keep a preview open off (Progenitor too old?): " + e.Message); }
                     Track(_previewKeep.OnClick(KeepPreview));
                     Track(_previewPanel.Button("Return").KeyHint("Esc").Centered().OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                     _previewPanel.EndInline();

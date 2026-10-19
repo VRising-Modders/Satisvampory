@@ -242,8 +242,8 @@ namespace Satisvampory.Client
             _ctx.Track(storage.Tooltip("Stash, the island inventory, and Find.", "Storage"));
             AttachTooltip();
             // Needs Progenitor's recipe tooltip site (#89); an older Core leaves it off.
-            try { RegisterPreviewKeep(); }
-            catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: Space to keep a preview open off: " + e.Message); }
+            // Space to keep a preview open waits for Progenitor's panel-scoped binds: as a gameplay bind it clashes with
+            // the game's Respawn and Progenitor asks the player to resolve it.
             try { RegisterAltHold(); }
             catch (Exception e) { _ctx.Log.LogInfo("Satisvampory: hold Alt for tooltip numbers off (Progenitor too old?): " + e.Message); }
             try { AttachRecipeTooltip(); }
@@ -1878,7 +1878,7 @@ namespace Satisvampory.Client
                     }, new UiDataTableOptions { VisibleRows = 8, Selectable = false, TotalRow = false, ColumnChooser = false, EmptyText = "Empty." });
                     _previewPanel.BeginInline();
                     // Keep open and Return centered as a pair; Return alone stays centered once the view is kept.
-                    _previewKeep = _previewPanel.Button("Keep open").KeyHint(PreviewKeepId).Centered();
+                    _previewKeep = _previewPanel.Button("Keep open").Centered();
                     Track(_previewKeep.OnClick(KeepPreview));
                     Track(_previewPanel.Button("Return").KeyHint("Esc").Centered().OnClick(() => { ++_previewSequence; _preview?.Dispose(); EndFindPreview(); }));
                     _previewPanel.EndInline();

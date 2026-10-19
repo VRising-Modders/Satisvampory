@@ -34,7 +34,7 @@ namespace Satisvampory.Server
 
         // The cheap path for caps and categories: a player's settings key (their home castle's clan or owner), and per
         // key the island-wide rules and the catalog with its edits. No container records are read for these; they are
-        // kept until any island or castle setting is saved (Stores.Revision).
+        // kept until that key's island state is saved again (Stores.KeyRevision).
         readonly System.Collections.Generic.Dictionary<ulong, (double At, string? Key)> _keys = new();
         readonly System.Collections.Generic.Dictionary<string, (long Revision, Engine.Lists.CastleRules Rules, ItemCatalog Catalog)> _rules = new();
 
@@ -87,7 +87,8 @@ namespace Satisvampory.Server
                 _keys[platformId] = k = (now, key);
             }
             if (k.Key == null) return null;
-            var revision = Stores.Revision;
+            // Only a save of this key's island state changes its rules or categories (other islands' saves do not).
+            var revision = Stores.KeyRevision(k.Key);
             if (!_rules.TryGetValue(k.Key, out var r) || r.Revision != revision)
             {
                 if (_rules.Count > 256) _rules.Clear();

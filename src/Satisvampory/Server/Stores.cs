@@ -96,9 +96,17 @@ namespace Satisvampory.Server
         /// Save the island-wide part under <paramref name="settingsKey"/> and each container's part
         /// under its own id. Containers whose record became empty are removed.
         /// </summary>
+        /// <summary>Moves on every save of one settings key's island state (rules, categories, lists).</summary>
+        public static long KeyRevision(string settingsKey)
+        {
+            lock (_keyRevisions) return _keyRevisions.TryGetValue(settingsKey, out var r) ? r : 0;
+        }
+        static readonly Dictionary<string, long> _keyRevisions = new();
+
         public static void Save(IModStore store, string settingsKey, IslandState state)
         {
             System.Threading.Interlocked.Increment(ref _revision);
+            lock (_keyRevisions) _keyRevisions[settingsKey] = (_keyRevisions.TryGetValue(settingsKey, out var r) ? r : 0) + 1;
             var save = SaveCodec.Capture(state, state.Graph.Sequence);
             var containers = save.Containers;
             var recipes = save.TableRecipesOn;

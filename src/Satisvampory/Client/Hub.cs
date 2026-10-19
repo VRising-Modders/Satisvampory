@@ -1873,13 +1873,20 @@ namespace Satisvampory.Client
                     _previewPanel.EndInline();
                 }
                 _previewTitle.Text = reply.Name;
-                DockPreview(false); // a strip only once the game's chest window is open
+                DockPreview(false);
                 // A plain chest opens in the game's own window on the right; the list stays for stations and
                 // whenever the game cannot (another game window open, an older Progenitor, PvP rules).
                 _previewContents.Visible = true;
                 // The chest opens in the game's own window, also from the Add list: the caller puts the player's own
                 // chest window back afterwards (Progenitor #110).
                 if (reply.Chest) TryOpenChestWindow(containerId);
+                // While the game's chest window opens, start as the strip it ends as: the full list flashed first. The
+                // list comes back only when the window closes without the player (see OpenChestWindow).
+                if (_chestWindow != null)
+                {
+                    _previewContents.Visible = false;
+                    DockPreview(true);
+                }
                 _previewHint.Text = "Right-drag to rotate. Escape returns. Ends after 5 seconds unless you keep it open.";
                 _previewKeep.Visible = true;
                 _previewContents.SetRows(reply.Items.Select((item, i) => new UiTableRow(i.ToString()) { ItemPrefab = item }

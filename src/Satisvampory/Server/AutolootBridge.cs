@@ -32,6 +32,12 @@ namespace Satisvampory.Server
         readonly System.Collections.Generic.Dictionary<string, (double At, System.Collections.Generic.Dictionary<int, long> Totals)> _totals = new();
         readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
+        // The cheap path for caps and categories: a player's settings key (their home castle's clan or owner), and per
+        // key the island-wide rules and the catalog with its edits. No container records are read for these; they are
+        // kept until any island or castle setting is saved (Stores.Revision).
+        readonly System.Collections.Generic.Dictionary<ulong, (double At, string? Key)> _keys = new();
+        readonly System.Collections.Generic.Dictionary<string, (long Revision, Engine.Lists.CastleRules Rules, ItemCatalog Catalog)> _rules = new();
+
         readonly SatisContext _ctx;
         readonly ServerHalf _half;
 
@@ -57,6 +63,41 @@ namespace Satisvampory.Server
             }));
         }
 
+        ItemCatalog CatalogOf(ulong platformId)
+        {
+            var settings = Settings(platformId);
+            if (settings != null) return settings.Value.Catalog;
+            _half.Catalog.Refresh(_ctx);
+            return _half.Catalog.Current;
+        }
+
+        /// <summary>The rules and catalog of the player's island settings, without its containers; null without a castle.</summary>
+        (Engine.Lists.CastleRules Rules, ItemCatalog Catalog)? Settings(ulong platformId)
+        {
+            var now = _clock.Elapsed.TotalSeconds;
+            if (!_keys.TryGetValue(platformId, out var k) || now - k.At >= ReuseSeconds)
+            {
+                if (_keys.Count > 256) _keys.Clear();
+                string? key = null;
+                if (_ctx.Players.TryGetByAccount(platformId, out var p) && p != null)
+                {
+                    var home = _ctx.Castles.ForUser(new Entity { Index = p.Session.UserIndex, Version = p.Session.UserVersion });
+                    if (home.Enabled) key = Stores.SettingsKey(new PluginContextLike(_ctx), home);
+                }
+                _keys[platformId] = k = (now, key);
+            }
+            if (k.Key == null) return null;
+            var revision = Stores.Revision;
+            if (!_rules.TryGetValue(k.Key, out var r) || r.Revision != revision)
+            {
+                if (_rules.Count > 256) _rules.Clear();
+                var state = Stores.Load(_ctx.Save, k.Key, Array.Empty<Engine.Model.ContainerId>());
+                _half.Catalog.Refresh(_ctx);
+                _rules[k.Key] = r = (revision, state.Rules, _half.Catalog.Current.WithEdits(state.Categories));
+            }
+            return (r.Rules, r.Catalog);
+        }
+
         (ServerActions.Island? Island, ItemCatalog Catalog) Home(ulong platformId)
         {
             var now = _clock.Elapsed.TotalSeconds;
@@ -77,12 +118,14 @@ namespace Satisvampory.Server
         /// </summary>
         long[]? Storage(ulong platformId, int item)
         {
-            var (island, catalog) = Home(platformId);
-            if (island == null) return null;
+            var settings = Settings(platformId);
+            if (settings == null) return null;
             var id = new ItemId(item);
-            // No cap, nothing to count: most items never cost a walk over the chests.
-            var cap = island.State.Rules.Cap(id, catalog);
+            // No cap, nothing to count: most items never cost the island lookup or a walk over the chests.
+            var cap = settings.Value.Rules.Cap(id, settings.Value.Catalog);
             if (cap == null) return new long[] { 0, -1 };
+            var (island, _) = Home(platformId);
+            if (island == null) return null;
             var now = _clock.Elapsed.TotalSeconds;
             if (!_totals.TryGetValue(island.OwnerKey, out var hit) || now - hit.At >= ReuseSeconds)
             {
@@ -97,11 +140,11 @@ namespace Satisvampory.Server
             return new[] { hit.Totals.TryGetValue(item, out var total) ? total : 0, (long)cap.Value };
         }
 
-        string[] Categories(ulong platformId) => Home(platformId).Catalog.CategoryNames.ToArray();
+        string[] Categories(ulong platformId) => CatalogOf(platformId).CategoryNames.ToArray();
 
         int[] Members(ulong platformId, string category)
         {
-            var catalog = Home(platformId).Catalog;
+            var catalog = CatalogOf(platformId);
             return catalog.TryResolveCategory(category, out var key) ? catalog.Members(key).Select(i => i.Guid).ToArray() : Array.Empty<int>();
         }
     }

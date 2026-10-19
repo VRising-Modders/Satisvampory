@@ -64,6 +64,19 @@ namespace Satisvampory.Server
                 new Func<ulong, string, int[]>(Members),
             };
             AppDomain.CurrentDomain.SetData(Key, api);
+            // Testing only: "platformId:itemGuid" logs that player's island total for the item a few seconds after load,
+            // the same walk Storage() makes, so a cap test can be set against the bridge's own number.
+            var probe = _ctx.Bind("Testing", "AutolootProbe", "",
+                "Testing only. \"platformId:itemGuid\": log that player's home-island stored total of the item after load. Empty: off.").Value;
+            var parts = (probe ?? "").Split(':');
+            if (parts.Length == 2 && ulong.TryParse(parts[0].Trim(), out var who) && int.TryParse(parts[1].Trim(), out var what))
+                Progenitor.Dev.MainThread.PostDelayed(5, () =>
+                {
+                    var (island, _) = Home(who);
+                    _ctx.Log.LogInfo(island == null
+                        ? $"Satisvampory: autoloot probe {who}:{what}: no home island (player offline or no castle)"
+                        : $"Satisvampory: autoloot probe {who}:{what}: island {island.OwnerKey} ({island.Castles.Count} castles) stores {(Walk(island).TryGetValue(what, out var t) ? t : 0):N0}");
+                }, _ctx.Owner);
             _ctx.Track(new OnDispose(() =>
             {
                 if (ReferenceEquals(AppDomain.CurrentDomain.GetData(Key), api)) AppDomain.CurrentDomain.SetData(Key, null);
@@ -161,6 +174,13 @@ namespace Satisvampory.Server
             if (island == null) return null;
             var now = _clock.Elapsed.TotalSeconds;
             if (!_totals.TryGetValue(island.OwnerKey, out var hit) || now - hit.At >= ReuseSeconds)
+                _totals[island.OwnerKey] = hit = (now, Walk(island));
+            return new[] { hit.Totals.TryGetValue(item, out var total) ? total : 0, (long)cap.Value };
+        }
+
+        /// <summary>Every item's stored total in the island's chests.</summary>
+        System.Collections.Generic.Dictionary<int, long> Walk(ServerActions.Island island)
+        {
             {
                 var totals = new System.Collections.Generic.Dictionary<int, long>();
                 var world = new ProgenitorWorld(_ctx.Inventory, _ctx.Stations, island.Castles,
@@ -168,9 +188,8 @@ namespace Satisvampory.Server
                 foreach (var c in IslandScope.Chests(world, island.Scope))
                     foreach (var stack in world.Contents(c.Id))
                         if (stack.Amount > 0) totals[stack.Item.Guid] = (totals.TryGetValue(stack.Item.Guid, out var n) ? n : 0) + stack.Amount;
-                _totals[island.OwnerKey] = hit = (now, totals);
+                return totals;
             }
-            return new[] { hit.Totals.TryGetValue(item, out var total) ? total : 0, (long)cap.Value };
         }
 
         string[] Categories(ulong platformId) => CatalogOf(platformId).CategoryNames.ToArray();

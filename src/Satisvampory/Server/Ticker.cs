@@ -502,10 +502,14 @@ namespace Satisvampory.Server
                     _listIslandTicks = 0;
                     _skippedSinceLog = 0;
                     _skippedMsSinceLog = 0;
+                    // Only the slowest island: a line per island ran to thousands of characters, and a long log line stalled
+                    // the frame for over a second with a player connected.
                     if (_islandMs.Count > 0)
-                        _ctx.Log.LogInfo("Satisvampory: island ticks (longest/average ms, ticks): " + string.Join(", ", _islandMs
-                            .OrderByDescending(kv => kv.Value.Max)
-                            .Select(kv => $"{kv.Key.Substring(kv.Key.LastIndexOf('/') + 1)} {kv.Value.Max:0}/{kv.Value.Sum / kv.Value.Count:0} x{kv.Value.Count}")));
+                    {
+                        var worst = _islandMs.OrderByDescending(kv => kv.Value.Max).First();
+                        if (worst.Value.Max > SlowIslandMs)
+                            _ctx.Log.LogInfo($"Satisvampory: slowest island this minute {worst.Key} {worst.Value.Max:0} ms (average {worst.Value.Sum / worst.Value.Count:0}, {worst.Value.Count} ticks)");
+                    }
                     _islandMs.Clear();
                     _maxTickMsSinceLog = 0;
                     _movedSinceLog = 0;

@@ -27,6 +27,13 @@ namespace Satisvampory.Server
         /// <summary>A player's island and catalog are reused this long: a burst of drops asks many times in one tick.</summary>
         const double ReuseSeconds = 10;
 
+        /// <summary>A player's home castle and clan rarely change: their settings key is reused this long.</summary>
+        const double KeySeconds = 60;
+
+        // Where bridge time goes, logged once a minute while it is asked: calls, then key, settings and answer ms.
+        int _calls;
+        double _keyMs, _settingsMs, _answerMs, _lastLog;
+
         readonly System.Collections.Generic.Dictionary<ulong, (double At, ServerActions.Island? Island, ItemCatalog Catalog)> _homes = new();
         // Every item's stored total per island (its settings owner, so clan members share one walk over the chests).
         readonly System.Collections.Generic.Dictionary<string, (double At, System.Collections.Generic.Dictionary<int, long> Totals)> _totals = new();
@@ -75,7 +82,8 @@ namespace Satisvampory.Server
         (Engine.Lists.CastleRules Rules, ItemCatalog Catalog)? Settings(ulong platformId)
         {
             var now = _clock.Elapsed.TotalSeconds;
-            if (!_keys.TryGetValue(platformId, out var k) || now - k.At >= ReuseSeconds)
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (!_keys.TryGetValue(platformId, out var k) || now - k.At >= KeySeconds)
             {
                 if (_keys.Count > 256) _keys.Clear();
                 string? key = null;
@@ -86,6 +94,8 @@ namespace Satisvampory.Server
                 }
                 _keys[platformId] = k = (now, key);
             }
+            var t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+            _keyMs += Ms(t0, t1);
             if (k.Key == null) return null;
             // Only a save of this key's island state changes its rules or categories (other islands' saves do not).
             var revision = Stores.KeyRevision(k.Key);
@@ -96,7 +106,22 @@ namespace Satisvampory.Server
                 _half.Catalog.Refresh(_ctx);
                 _rules[k.Key] = r = (revision, state.Rules, _half.Catalog.Current.WithEdits(state.Categories));
             }
+            _settingsMs += Ms(t1, System.Diagnostics.Stopwatch.GetTimestamp());
             return (r.Rules, r.Catalog);
+        }
+
+        static double Ms(long from, long to) => (to - from) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+        void Count(long started)
+        {
+            _calls++;
+            _answerMs += Ms(started, System.Diagnostics.Stopwatch.GetTimestamp());
+            var now = _clock.Elapsed.TotalSeconds;
+            if (now - _lastLog < 60) return;
+            _ctx.Log.LogInfo($"Satisvampory: autoloot bridge: {_calls} calls, {_answerMs:0.00} ms in all (player key {_keyMs:0.00}, island settings {_settingsMs:0.00})");
+            _lastLog = now;
+            _calls = 0;
+            _keyMs = _settingsMs = _answerMs = 0;
         }
 
         (ServerActions.Island? Island, ItemCatalog Catalog) Home(ulong platformId)
@@ -118,6 +143,13 @@ namespace Satisvampory.Server
         /// item's total kept for <see cref="ReuseSeconds"/>, so each further item costs a lookup.
         /// </summary>
         long[]? Storage(ulong platformId, int item)
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { return StorageCore(platformId, item); }
+            finally { Count(started); }
+        }
+
+        long[]? StorageCore(ulong platformId, int item)
         {
             var settings = Settings(platformId);
             if (settings == null) return null;

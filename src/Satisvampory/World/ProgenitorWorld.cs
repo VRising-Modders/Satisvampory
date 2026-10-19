@@ -338,7 +338,7 @@ namespace Satisvampory.World
                 && !StationDemand(from).IsKnown) return 0;
             var slots = fromPart == InvPart.Main && _nodes.TryGetValue(from, out var n) ? n.SourceSlots : InventorySlotFilter.All;
             var r = _inv.Transfer(a, b, item.Guid, amount, slots);
-            if (r.Done == 0) NoteFailure($"transfer {item.Guid} x{amount}: {r.Outcome} {r.Reason}");
+            if (r.Done == 0) NoteFailure($"{r.Outcome} {r.Reason}".Trim());
             return r.Ok ? r.Done : 0;
         }
 
@@ -346,17 +346,28 @@ namespace Satisvampory.World
             && node.Info.Kind == NodeKind.Station && node.GameStation
             && (_stations == null || _stations.RedistributionOwnership(node.Entity).SuspendAutomation);
 
-        /// <summary>A few failed moves per minute go to the log so a list that never moves can be explained.</summary>
+        /// <summary>The rare "link filter dropped" line; failed moves are only counted (see <see cref="TakeFailures"/>).</summary>
         public static System.Action<string>? FailureLog { get; set; }
-        static int _failures;
-        static System.DateTime _failureWindow;
 
-        static void NoteFailure(string text)
+        // Failed moves by reason, for the conveyor's minute log line: a log line per failure stalled the frame for tens of
+        // milliseconds each with a player connected.
+        static readonly System.Collections.Generic.Dictionary<string, int> _failures = new();
+
+        static void NoteFailure(string reason)
         {
-            if (FailureLog == null) return;
-            var now = System.DateTime.UtcNow;
-            if (now - _failureWindow > System.TimeSpan.FromMinutes(1)) { _failureWindow = now; _failures = 0; }
-            if (++_failures <= 3) FailureLog("Satisvampory: " + text);
+            lock (_failures) _failures[reason] = (_failures.TryGetValue(reason, out var n) ? n : 0) + 1;
+        }
+
+        /// <summary>"12 (target full x10, gone x2)" since the last call, or empty; clears the counts.</summary>
+        public static string TakeFailures()
+        {
+            lock (_failures)
+            {
+                if (_failures.Count == 0) return "";
+                var text = $"{_failures.Values.Sum()} ({string.Join(", ", _failures.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key} x{kv.Value}"))})";
+                _failures.Clear();
+                return text;
+            }
         }
 
         /// <summary>Creates items in a container (admin Give to storage). Returns how many went in.</summary>

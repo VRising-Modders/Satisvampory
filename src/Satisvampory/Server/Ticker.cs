@@ -497,7 +497,8 @@ namespace Satisvampory.Server
                 if (Now - _lastMoveLog >= 60 && _listIslandTicks > 0)
                 {
                     _ctx.Log.LogInfo($"Satisvampory: lists moved {_movedSinceLog:N0} items in {_moveRecordsSinceLog} moves in the last {Now - _lastMoveLog:0} s ({_listIslandTicks} island ticks with lists, {_skippedSinceLog} idle ticks skipped at {(_skippedSinceLog == 0 ? 0 : _skippedMsSinceLog / _skippedSinceLog):0.0} ms each, slowest frame slice {_maxTickMsSinceLog:0} ms)"
-                        + (_diagSinceLog.Count == 0 ? "" : "; waiting: " + string.Join(", ", _diagSinceLog.Select(kv => $"{kv.Key} x{kv.Value}"))));
+                        + (_diagSinceLog.Count == 0 ? "" : "; waiting: " + string.Join(", ", _diagSinceLog.Select(kv => $"{kv.Key} x{kv.Value}")))
+                        + (ProgenitorWorld.TakeFailures() is { Length: > 0 } failed ? "; failed moves: " + failed : ""));
                     _diagSinceLog.Clear();
                     _listIslandTicks = 0;
                     _skippedSinceLog = 0;

@@ -85,8 +85,12 @@ namespace Satisvampory.Engine.Tests
         public IReadOnlyList<Stations.Recipe> Recipes(ContainerId station) =>
             StationRecipes.TryGetValue(station, out var r) ? r : new List<Stations.Recipe>();
 
+        /// <summary>How many times the tick asked for a transfer.</summary>
+        public int TransferCalls;
+
         public int Transfer(ContainerId from, InvPart fromPart, ContainerId to, ItemId item, int amount, bool takeBusyInputs = false)
         {
+            TransferCalls++;
             var n = Math.Min(Math.Min(amount, Count(from, item, fromPart)), FreeSpace(to, item));
             if (n <= 0) return 0;
             Inv(from, fromPart)[item] -= n;

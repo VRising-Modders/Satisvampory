@@ -54,6 +54,32 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
+        public void A_refused_move_waits_until_an_inventory_changes_or_a_minute_passes()
+        {
+            var a = _w.Chest(Home, "in");
+            var b = _w.Chest(Away, "out");
+            _w.Put(a, IronOre, 50);
+            _w.Refuse(b, IronOre);
+            _g.For(a.Id).Output.Add(ListEntry.Of(b.Id));
+
+            Tick(0);
+            var asked = _w.TransferCalls;
+            Assert.True(asked > 0);
+
+            var again = Tick(1);
+            Assert.Equal(asked, _w.TransferCalls);
+            Assert.Contains("refused", again.Diagnostics[b.Id]);
+
+            _w.Put(b, Plank, 1); // the target changed: ask again
+            Tick(2);
+            Assert.True(_w.TransferCalls > asked);
+
+            var afterChange = _w.TransferCalls;
+            Tick(70); // nothing changed, but a minute passed
+            Assert.True(_w.TransferCalls > afterChange);
+        }
+
+        [Fact]
         public void Furnace_pulls_whole_crafts_only_and_honors_reserve()
         {
             _rules.DefaultReserve = 10;

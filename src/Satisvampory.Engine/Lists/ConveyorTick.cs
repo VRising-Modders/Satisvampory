@@ -41,11 +41,11 @@ namespace Satisvampory.Engine.Lists
         public HashSet<(ContainerId Devourer, ItemId Item)> DevourerRefuses { get; } = new();
 
         /// <summary>
-        /// Moves the game refused (the target full, or not taking the item), with both inventories as they were and when.
-        /// The same move is not tried again until either inventory changes or a minute passes: a full chest was asked
-        /// thousands of times a minute.
+        /// Targets the game refused an item into (full, or not taking it), with the target's inventory as it was and when.
+        /// No source tries that item there again until the target's inventory changes or a minute passes: full chests
+        /// were asked thousands of times a minute, once by each chest that holds the item.
         /// </summary>
-        public Dictionary<(ContainerId From, ContainerId To, ItemId Item), (long Contents, double At)> RefusedMoves { get; } = new();
+        public Dictionary<(ContainerId To, ItemId Item), (long Contents, double At)> RefusedMoves { get; } = new();
 
         /// <summary>Where station feeding starts next tick, so a time-limited island feeds every station in turn.</summary>
         public int StationCursor { get; set; }
@@ -898,14 +898,12 @@ namespace Satisvampory.Engine.Lists
         /// <summary>A refused move is tried again after this long even when nothing seems to have changed.</summary>
         const double RefusedRetrySeconds = 60;
 
-        /// <summary>Both inventories a move touches, as one number: the source part and every part of the target.</summary>
-        long MoveContents(ContainerId from, InvPart part, ContainerId to)
+        /// <summary>A target's inventory as one number.</summary>
+        long TargetContents(ContainerId to)
         {
             unchecked
             {
                 long h = 17;
-                foreach (var s in _world.Contents(from, part)) h = h * 31 + s.Item.Guid * 7919L + s.Amount;
-                h = h * 31 + 1;
                 foreach (var s in _world.Contents(to)) h = h * 31 + s.Item.Guid * 7919L + s.Amount;
                 return h;
             }
@@ -934,9 +932,9 @@ namespace Satisvampory.Engine.Lists
             if (part == InvPart.Main && ProtectsInputs(source) && !_world.StationInputs(from).CanReclaim
                 && !(why is "station cleanup" or "devourer returns" && source.Role != StationRole.Workstation)) return 0;
             if (target.Kind == NodeKind.Chest && !DepositScore.Takes(target, item, Catalog)) return 0;
-            // The game refused this same move and nothing has changed on either side since: do not ask again.
-            var key = (from, to, item);
-            var contents = MoveContents(from, part, to);
+            // The game refused this item into this target and the target has not changed since: do not ask again.
+            var key = (to, item);
+            var contents = TargetContents(to);
             if (_state.RefusedMoves.TryGetValue(key, out var refused) && refused.Contents == contents && _now - refused.At < RefusedRetrySeconds)
             {
                 _report.Diag(to, "refused");

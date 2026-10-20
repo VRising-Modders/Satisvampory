@@ -54,7 +54,7 @@ namespace Satisvampory.Engine.Tests
         }
 
         [Fact]
-        public void A_refused_move_waits_until_an_inventory_changes_or_a_minute_passes()
+        public void A_refused_target_waits_until_it_changes_or_a_minute_passes()
         {
             var a = _w.Chest(Home, "in");
             var b = _w.Chest(Away, "out");
@@ -66,6 +66,10 @@ namespace Satisvampory.Engine.Tests
             var asked = _w.TransferCalls;
             Assert.True(asked > 0);
 
+            // Another chest holding the item does not ask the same full target either.
+            var c = _w.Chest(Home, "also");
+            _w.Put(c, IronOre, 5);
+            _g.For(c.Id).Output.Add(ListEntry.Of(b.Id));
             var again = Tick(1);
             Assert.Equal(asked, _w.TransferCalls);
             Assert.Contains("refused", again.Diagnostics[b.Id]);
